@@ -99,91 +99,109 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Delivering To Hub Picker */}
-          <div className="relative hidden md:flex items-center">
-            <button
-              id="delivery-hub-picker"
-              type="button"
-              onClick={() => setShowLocationModal(!showLocationModal)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] transition-colors text-left border border-[#e2e8f0]/60 cursor-pointer"
-            >
-              <Navigation className="w-4 h-4 text-[#006b2c] shrink-0" />
-              <div className="flex flex-col text-left">
-                <span className="text-[11px] text-[#3e4a3d] leading-tight">Delivering to</span>
-                <span className="text-[12px] text-[#0b1c30] font-semibold truncate max-w-[190px] leading-tight flex items-center gap-1">
-                  {currentLocation}
-                  <ChevronDown className="w-3 h-3 text-[#565e74]" />
+          {/* Delivering To Hub Picker (visible on storefront and dashboard) */}
+          {currentView !== 'login' && currentView !== 'register' && (
+            <div className="relative hidden md:flex items-center">
+              <button
+                id="delivery-hub-picker"
+                type="button"
+                onClick={() => setShowLocationModal(!showLocationModal)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] transition-colors text-left border border-[#e2e8f0]/60 cursor-pointer"
+              >
+                <Navigation className="w-4 h-4 text-[#006b2c] shrink-0" />
+                <div className="flex flex-col text-left">
+                  <span className="text-[11px] text-[#3e4a3d] leading-tight">Delivering to</span>
+                  <span className="text-[12px] text-[#0b1c30] font-semibold truncate max-w-[190px] leading-tight flex items-center gap-1">
+                    {currentLocation}
+                    <ChevronDown className="w-3 h-3 text-[#565e74]" />
+                  </span>
+                </div>
+              </button>
+
+              {showLocationModal && (
+                <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#e2e8f0] p-3 z-50">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#e2e8f0]">
+                    <span className="text-[12px] font-bold text-[#0b1c30]">Select Delivery Hub</span>
+                    <button
+                      onClick={() => setShowLocationModal(false)}
+                      className="text-[#565e74] hover:text-[#0b1c30] cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 mt-2">
+                    {locations.map((loc) => (
+                      <button
+                        key={loc.name}
+                        onClick={() => handleSelectLocation(loc.name)}
+                        className={`w-full text-left p-2 rounded-lg text-[12px] transition-colors flex items-start gap-2 cursor-pointer ${
+                          currentLocation === loc.name
+                            ? 'bg-[#eff4ff] text-[#006b2c] font-semibold'
+                            : 'hover:bg-[#f8fafc] text-[#0b1c30]'
+                        }`}
+                      >
+                        <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#006b2c]" />
+                        <div>
+                          <div>{loc.name}</div>
+                          <div className="text-[10px] text-[#565e74]">{loc.address}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search Box / Tagline */}
+          <div className="flex-1 max-w-xl mx-1 sm:mx-3">
+            {currentView === 'login' || currentView === 'register' ? (
+              <div className="text-center hidden md:block">
+                <span className="text-[12px] font-medium text-[#565e74]">
+                  Farm-fresh grocery harvest · 30-min neighborhood express delivery
                 </span>
               </div>
-            </button>
-
-            {showLocationModal && (
-              <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#e2e8f0] p-3 z-50">
-                <div className="flex items-center justify-between pb-2 border-b border-[#e2e8f0]">
-                  <span className="text-[12px] font-bold text-[#0b1c30]">Select Delivery Hub</span>
+            ) : (
+              <div className="relative flex items-center w-full">
+                <Search className="absolute left-3 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
+                <input
+                  id="global-search-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Search fresh vegetables, organic milk, fruits, artisanal bakery..."
+                  className="w-full pl-9 pr-8 py-2 rounded-lg bg-white font-body text-[13px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] shadow-xs border border-[#e2e8f0]"
+                />
+                {searchQuery && (
                   <button
-                    onClick={() => setShowLocationModal(false)}
-                    className="text-[#565e74] hover:text-[#0b1c30] cursor-pointer"
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    className="absolute right-2.5 text-[#6e7b6c] hover:text-[#0b1c30] cursor-pointer"
+                    title="Clear search"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                </div>
-                <div className="space-y-1.5 mt-2">
-                  {locations.map((loc) => (
-                    <button
-                      key={loc.name}
-                      onClick={() => handleSelectLocation(loc.name)}
-                      className={`w-full text-left p-2 rounded-lg text-[12px] transition-colors flex items-start gap-2 cursor-pointer ${
-                        currentLocation === loc.name
-                          ? 'bg-[#eff4ff] text-[#006b2c] font-semibold'
-                          : 'hover:bg-[#f8fafc] text-[#0b1c30]'
-                      }`}
-                    >
-                      <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#006b2c]" />
-                      <div>
-                        <div>{loc.name}</div>
-                        <div className="text-[10px] text-[#565e74]">{loc.address}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Search Box */}
-          <div className="flex-1 max-w-xl mx-1 sm:mx-3">
-            <div className="relative flex items-center w-full">
-              <Search className="absolute left-3 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
-              <input
-                id="global-search-input"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search fresh vegetables, organic milk, fruits, artisanal bakery..."
-                className="w-full pl-9 pr-8 py-2 rounded-lg bg-white font-body text-[13px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] shadow-xs border border-[#e2e8f0]"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => onSearchChange('')}
-                  className="absolute right-2.5 text-[#6e7b6c] hover:text-[#0b1c30] cursor-pointer"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Right Action Controls */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Toggle between Storefront & Admin Portal */}
+            {/* Toggle between Storefront/Login & Admin Portal */}
             <button
               id="toggle-admin-portal-btn"
               type="button"
               data-path="dashboard-overview"
-              onClick={() => onToggleView(currentView === 'admin' ? 'storefront' : 'admin')}
+              onClick={() =>
+                onToggleView(
+                  currentView === 'admin'
+                    ? currentUser
+                      ? 'storefront'
+                      : 'login'
+                    : 'admin'
+                )
+              }
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all border cursor-pointer ${
                 currentView === 'admin'
                   ? 'bg-[#006b2c] text-white border-[#006b2c]'
@@ -193,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
               {currentView === 'admin' ? (
                 <>
                   <Store className="w-4 h-4" />
-                  <span>Retail Storefront</span>
+                  <span>{currentUser ? 'Retail Storefront' : 'Customer Login'}</span>
                 </>
               ) : (
                 <>
@@ -203,24 +221,26 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Cart Button */}
-            <button
-              id="header-cart-btn"
-              type="button"
-              onClick={onOpenCart}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] transition-colors text-[12px] font-semibold shadow-xs cursor-pointer"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline">Cart</span>
-              <span
-                id="header-cart-count"
-                className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold"
+            {/* Cart Button (Only on storefront and dashboard) */}
+            {currentView !== 'login' && currentView !== 'register' && (
+              <button
+                id="header-cart-btn"
+                type="button"
+                onClick={onOpenCart}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] transition-colors text-[12px] font-semibold shadow-xs cursor-pointer"
               >
-                {cartCount}
-              </span>
-            </button>
+                <ShoppingCart className="w-4 h-4" />
+                <span className="hidden sm:inline">Cart</span>
+                <span
+                  id="header-cart-count"
+                  className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold"
+                >
+                  {cartCount}
+                </span>
+              </button>
+            )}
 
-            {/* Customer Account / Sign In */}
+            {/* Customer Account / Sign In / Register */}
             {currentUser ? (
               <div className="relative">
                 <button
@@ -288,7 +308,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onClick={() => {
                           setShowUserMenu(false);
                           logout();
-                          onToggleView('storefront');
+                          onToggleView('login');
                         }}
                         className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2] flex items-center gap-2.5 transition-colors cursor-pointer"
                       >
@@ -299,6 +319,15 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 )}
               </div>
+            ) : currentView === 'login' ? (
+              <button
+                type="button"
+                id="header-goto-reg-btn"
+                onClick={() => onToggleView('register')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] text-[12px] font-semibold transition-all shadow-2xs cursor-pointer"
+              >
+                <span>Register</span>
+              </button>
             ) : (
               <button
                 type="button"

@@ -19,14 +19,14 @@ import {
 
 interface LoginPageProps {
   onNavigateToRegister: () => void;
-  onNavigateToDashboard: () => void;
-  onNavigateToStorefront: () => void;
+  onLoginSuccess: () => void;
+  onNavigateToAdmin?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onNavigateToRegister,
-  onNavigateToDashboard,
-  onNavigateToStorefront,
+  onLoginSuccess,
+  onNavigateToAdmin,
 }) => {
   const { login, requestReset } = useAuth();
 
@@ -60,7 +60,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     try {
       const result = await login(identifier, password);
       if (result.success) {
-        onNavigateToDashboard();
+        onLoginSuccess();
       } else {
         setErrorMessage(result.error || 'Invalid credentials. Please try again.');
       }
@@ -93,20 +93,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-12">
-      {/* Return to Storefront breadcrumb */}
+      {/* Top Banner Navigation */}
       <div className="w-full max-w-md mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onNavigateToStorefront}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors group cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>Back to Grocery Catalog</span>
-        </button>
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#006b2c] bg-[#eff4ff] px-3 py-1 rounded-full border border-[#cbd5e1]/50">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
+          <span>Customer Access Portal</span>
+        </div>
 
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-[#eff4ff] px-2.5 py-1 rounded-full border border-[#cbd5e1]/40">
-          Customer Portal
-        </span>
+        {onNavigateToAdmin && (
+          <button
+            type="button"
+            onClick={onNavigateToAdmin}
+            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors cursor-pointer"
+          >
+            <span>Ops &amp; Admin Portal →</span>
+          </button>
+        )}
       </div>
 
       {/* Main Login Card */}
@@ -248,7 +250,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </div>
             ) : (
               <>
-                <span>Log In to Dashboard</span>
+                <span>Log In &amp; Continue to Store</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

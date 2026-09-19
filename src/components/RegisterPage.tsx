@@ -19,14 +19,14 @@ import {
 
 interface RegisterPageProps {
   onNavigateToLogin: () => void;
-  onNavigateToDashboard: () => void;
-  onNavigateToStorefront: () => void;
+  onRegisterSuccess: () => void;
+  onNavigateToAdmin?: () => void;
 }
 
 export const RegisterPage: React.FC<RegisterPageProps> = ({
   onNavigateToLogin,
-  onNavigateToDashboard,
-  onNavigateToStorefront,
+  onRegisterSuccess,
+  onNavigateToAdmin,
 }) => {
   const { register } = useAuth();
 
@@ -85,7 +85,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
       });
 
       if (res.success) {
-        onNavigateToDashboard();
+        onRegisterSuccess();
       } else {
         setErrorMessage(res.error || 'Failed to create customer account. Please try again.');
       }
@@ -98,15 +98,15 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
 
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-10">
-      {/* Return to Storefront breadcrumb */}
+      {/* Top Banner Navigation */}
       <div className="w-full max-w-lg mb-4 flex items-center justify-between">
         <button
           type="button"
-          onClick={onNavigateToStorefront}
+          onClick={onNavigateToLogin}
           className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors group cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>Back to Grocery Catalog</span>
+          <span>Back to Sign In</span>
         </button>
 
         <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-[#eff4ff] px-2.5 py-1 rounded-full border border-[#cbd5e1]/40">
@@ -372,7 +372,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               </div>
             ) : (
               <>
-                <span>Complete Registration &amp; Open Dashboard</span>
+                <span>Complete Registration &amp; Start Shopping</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

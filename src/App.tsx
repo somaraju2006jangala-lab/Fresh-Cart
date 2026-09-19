@@ -18,9 +18,10 @@ import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
 
 function FreshCartStore() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, isLoading, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [currentView, setCurrentView] = useState<ViewType>('storefront');
+  // Default to login when unauthenticated; storefront when authenticated
+  const [currentView, setCurrentView] = useState<ViewType>('login');
 
   // Initial cart with items matching the design:
   const [cart, setCart] = useState<CartItem[]>([
@@ -48,32 +49,62 @@ function FreshCartStore() {
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(INITIAL_INVENTORY_LOGS);
 
-  // Synchronize URL Hash routing with currentView
+  // Synchronize URL Hash routing with currentView and enforce route protection
   useEffect(() => {
+    if (isLoading) return;
+
     const handleHashChange = () => {
       const hash = window.location.hash.toLowerCase();
-      if (hash === '#/login' || hash === '#login') {
-        setCurrentView('login');
-      } else if (hash === '#/register' || hash === '#register') {
-        setCurrentView('register');
-      } else if (hash === '#/dashboard' || hash === '#dashboard') {
-        setCurrentView('dashboard');
-      } else if (hash === '#/admin' || hash === '#admin') {
-        setCurrentView('admin');
-      } else if (hash === '' || hash === '#/' || hash === '#storefront') {
-        setCurrentView('storefront');
+
+      if (!currentUser) {
+        // UNAUTHENTICATED USERS:
+        // Only 'login', 'register', and 'admin' are permitted.
+        // The main storefront and customer dashboard are strictly protected.
+        if (hash === '#/admin' || hash === '#admin') {
+          setCurrentView('admin');
+        } else if (hash === '#/register' || hash === '#register') {
+          setCurrentView('register');
+        } else {
+          // Default to login page on initial site visit or any protected page attempt
+          setCurrentView('login');
+          if (hash !== '#/login' && hash !== '#login') {
+            window.location.hash = '#/login';
+          }
+        }
+      } else {
+        // AUTHENTICATED CUSTOMERS:
+        if (hash === '#/admin' || hash === '#admin') {
+          setCurrentView('admin');
+        } else if (hash === '#/dashboard' || hash === '#dashboard') {
+          setCurrentView('dashboard');
+        } else if (hash === '#/login' || hash === '#/register' || hash === '#login' || hash === '#register') {
+          // Already logged in: redirect to storefront
+          setCurrentView('storefront');
+          window.location.hash = '#/storefront';
+        } else {
+          // Default authenticated view is storefront homepage
+          setCurrentView('storefront');
+        }
       }
     };
 
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [currentUser, isLoading]);
 
   const navigateToView = (view: ViewType) => {
+    // Route guard: if trying to open storefront or dashboard without auth, redirect to login
+    if (!currentUser && (view === 'storefront' || view === 'dashboard')) {
+      setCurrentView('login');
+      window.location.hash = '#/login';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setCurrentView(view);
     if (view === 'storefront') {
-      window.location.hash = '';
+      window.location.hash = '#/storefront';
     } else {
       window.location.hash = `#/${view}`;
     }
@@ -148,7 +179,7 @@ function FreshCartStore() {
     );
   };
 
-  // Simulate real-time MongoDB CDC pulse (e.g., online customer order decrements inventory)
+  // Simulate real-time MongoDB CDC pulse
   const handleSimulateCdcPulse = () => {
     const candidate = products.find((p) => p.stock > 1);
     if (!candidate) return;
@@ -182,6 +213,17 @@ function FreshCartStore() {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]">
+        <div className="flex flex-col items-center gap-3">
+          <span className="w-8 h-8 border-3 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
+          <span className="text-[13px] font-semibold text-[#565e74]">Loading FreshCart...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8f9ff] text-[#0b1c30]">
       {/* Universal Header with View Navigation & Customer Authentication */}
@@ -207,7 +249,7 @@ function FreshCartStore() {
           <AdminPortal
             products={products}
             inventoryLogs={inventoryLogs}
-            onBackToStorefront={() => navigateToView('storefront')}
+            onBackToStorefront={() => navigateToView(currentUser ? 'storefront' : 'login')}
             onUpdateProductStock={handleUpdateProductStock}
             onUpdateProductPrice={handleUpdateProductPrice}
             onSimulateCdcPulse={handleSimulateCdcPulse}
@@ -215,14 +257,14 @@ function FreshCartStore() {
         ) : currentView === 'login' ? (
           <LoginPage
             onNavigateToRegister={() => navigateToView('register')}
-            onNavigateToDashboard={() => navigateToView('dashboard')}
-            onNavigateToStorefront={() => navigateToView('storefront')}
+            onLoginSuccess={() => navigateToView('storefront')}
+            onNavigateToAdmin={() => navigateToView('admin')}
           />
         ) : currentView === 'register' ? (
           <RegisterPage
             onNavigateToLogin={() => navigateToView('login')}
-            onNavigateToDashboard={() => navigateToView('dashboard')}
-            onNavigateToStorefront={() => navigateToView('storefront')}
+            onRegisterSuccess={() => navigateToView('storefront')}
+            onNavigateToAdmin={() => navigateToView('admin')}
           />
         ) : currentView === 'dashboard' ? (
           currentUser ? (
@@ -234,17 +276,18 @@ function FreshCartStore() {
               onBackToStorefront={() => navigateToView('storefront')}
               onLogout={() => {
                 logout();
-                navigateToView('storefront');
+                navigateToView('login');
               }}
             />
           ) : (
             <LoginPage
               onNavigateToRegister={() => navigateToView('register')}
-              onNavigateToDashboard={() => navigateToView('dashboard')}
-              onNavigateToStorefront={() => navigateToView('storefront')}
+              onLoginSuccess={() => navigateToView('storefront')}
+              onNavigateToAdmin={() => navigateToView('admin')}
             />
           )
-        ) : (
+        ) : currentUser ? (
+          /* Main Grocery Storefront (Protected: only visible when successfully logged in) */
           <div className="flex flex-col w-full">
             {/* Hero Section */}
             <HeroSection
@@ -358,45 +401,58 @@ function FreshCartStore() {
                 setSelectedCategory(cat);
                 navigateToView('storefront');
               }}
-              onOpenLogin={() => navigateToView('login')}
+              onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
               onOpenDashboard={() => navigateToView('dashboard')}
             />
           </div>
+        ) : (
+          /* Fallback if unauthenticated and somehow on storefront view */
+          <LoginPage
+            onNavigateToRegister={() => navigateToView('register')}
+            onLoginSuccess={() => navigateToView('storefront')}
+            onNavigateToAdmin={() => navigateToView('admin')}
+          />
         )}
       </main>
 
-      {/* Floating Cart Drawer Toggle & Panel */}
-      <CartDrawer
-        items={cart}
-        isOpen={isCartOpen}
-        onToggle={() => setIsCartOpen(!isCartOpen)}
-        onUpdateQty={handleUpdateCartQty}
-        onRemoveItem={handleRemoveCartItem}
-        onOpenCheckout={() => {
-          setIsCartOpen(false);
-          setIsCheckoutOpen(true);
-        }}
-        appliedCoupon={appliedCoupon}
-        onApplyCoupon={(code) => setAppliedCoupon(code)}
-        onRemoveCoupon={() => setAppliedCoupon(null)}
-      />
+      {/* Floating Cart Drawer Toggle & Panel (Only available when logged in) */}
+      {currentUser && (
+        <CartDrawer
+          items={cart}
+          isOpen={isCartOpen}
+          onToggle={() => setIsCartOpen(!isCartOpen)}
+          onUpdateQty={handleUpdateCartQty}
+          onRemoveItem={handleRemoveCartItem}
+          onOpenCheckout={() => {
+            setIsCartOpen(false);
+            setIsCheckoutOpen(true);
+          }}
+          appliedCoupon={appliedCoupon}
+          onApplyCoupon={(code) => setAppliedCoupon(code)}
+          onRemoveCoupon={() => setAppliedCoupon(null)}
+        />
+      )}
 
       {/* Product Quick View Modal */}
-      <ProductModal
-        product={activeModalProduct}
-        onClose={() => setActiveModalProduct(null)}
-        onAddToCart={handleAddToCart}
-      />
+      {currentUser && (
+        <ProductModal
+          product={activeModalProduct}
+          onClose={() => setActiveModalProduct(null)}
+          onAddToCart={handleAddToCart}
+        />
+      )}
 
       {/* Express Checkout Modal */}
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        items={cart}
-        appliedCoupon={appliedCoupon}
-        onClearCart={handleClearCart}
-        onNavigateToDashboard={() => navigateToView('dashboard')}
-      />
+      {currentUser && (
+        <CheckoutModal
+          isOpen={isCheckoutOpen}
+          onClose={() => setIsCheckoutOpen(false)}
+          items={cart}
+          appliedCoupon={appliedCoupon}
+          onClearCart={handleClearCart}
+          onNavigateToDashboard={() => navigateToView('dashboard')}
+        />
+      )}
     </div>
   );
 }
