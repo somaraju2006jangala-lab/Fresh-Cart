@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { ViewType } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   BRAND_LOGO_URL,
-  USER_AVATAR_URL,
   AISLE_CATEGORIES,
 } from '../data/products';
 import {
@@ -13,11 +14,14 @@ import {
   X,
   MapPin,
   ChevronDown,
+  User,
+  LogOut,
+  Truck,
 } from 'lucide-react';
 
 interface HeaderProps {
-  currentView: 'storefront' | 'admin';
-  onToggleView: (view: 'storefront' | 'admin') => void;
+  currentView: ViewType;
+  onToggleView: (view: ViewType) => void;
   cartCount: number;
   onOpenCart: () => void;
   searchQuery: string;
@@ -36,9 +40,10 @@ export const Header: React.FC<HeaderProps> = ({
   selectedCategory,
   onSelectCategory,
 }) => {
+  const { currentUser, logout } = useAuth();
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentLocation, setCurrentLocation] = useState('Downtown Supercenter · 30m');
-  const [isLocationSaving, setIsLocationSaving] = useState(false);
 
   const locations = [
     { name: 'Downtown Supercenter · 30m', address: '452 Grand Ave, Floor 1' },
@@ -47,12 +52,25 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   const handleSelectLocation = (loc: string) => {
-    setIsLocationSaving(true);
-    setTimeout(() => {
-      setCurrentLocation(loc);
-      setIsLocationSaving(false);
-      setShowLocationModal(false);
-    }, 250);
+    setCurrentLocation(loc);
+    setShowLocationModal(false);
+  };
+
+  const getViewBadgeLabel = () => {
+    switch (currentView) {
+      case 'storefront':
+        return 'Retail Storefront';
+      case 'admin':
+        return 'Ops Portal';
+      case 'dashboard':
+        return 'Customer Portal';
+      case 'login':
+        return 'Sign In';
+      case 'register':
+        return 'New Account';
+      default:
+        return 'Retail Storefront';
+    }
   };
 
   return (
@@ -64,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => onToggleView('storefront')}
-              className="flex items-center gap-2 text-left focus:outline-hidden group"
+              className="flex items-center gap-2 text-left focus:outline-hidden group cursor-pointer"
               id="brand-logo-btn"
             >
               <img
@@ -77,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
             <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full bg-[#e5eeff] text-[#565e74] text-[11px] font-semibold tracking-wide">
-              {currentView === 'storefront' ? 'Retail Storefront' : 'Ops Portal'}
+              {getViewBadgeLabel()}
             </span>
           </div>
 
@@ -87,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
               id="delivery-hub-picker"
               type="button"
               onClick={() => setShowLocationModal(!showLocationModal)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] transition-colors text-left border border-[#e2e8f0]/60"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] transition-colors text-left border border-[#e2e8f0]/60 cursor-pointer"
             >
               <Navigation className="w-4 h-4 text-[#006b2c] shrink-0" />
               <div className="flex flex-col text-left">
@@ -105,7 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-[12px] font-bold text-[#0b1c30]">Select Delivery Hub</span>
                   <button
                     onClick={() => setShowLocationModal(false)}
-                    className="text-[#565e74] hover:text-[#0b1c30]"
+                    className="text-[#565e74] hover:text-[#0b1c30] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -115,7 +133,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       key={loc.name}
                       onClick={() => handleSelectLocation(loc.name)}
-                      className={`w-full text-left p-2 rounded-lg text-[12px] transition-colors flex items-start gap-2 ${
+                      className={`w-full text-left p-2 rounded-lg text-[12px] transition-colors flex items-start gap-2 cursor-pointer ${
                         currentLocation === loc.name
                           ? 'bg-[#eff4ff] text-[#006b2c] font-semibold'
                           : 'hover:bg-[#f8fafc] text-[#0b1c30]'
@@ -149,7 +167,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => onSearchChange('')}
-                  className="absolute right-2.5 text-[#6e7b6c] hover:text-[#0b1c30]"
+                  className="absolute right-2.5 text-[#6e7b6c] hover:text-[#0b1c30] cursor-pointer"
                   title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -165,8 +183,8 @@ export const Header: React.FC<HeaderProps> = ({
               id="toggle-admin-portal-btn"
               type="button"
               data-path="dashboard-overview"
-              onClick={() => onToggleView(currentView === 'storefront' ? 'admin' : 'storefront')}
-              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all border ${
+              onClick={() => onToggleView(currentView === 'admin' ? 'storefront' : 'admin')}
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all border cursor-pointer ${
                 currentView === 'admin'
                   ? 'bg-[#006b2c] text-white border-[#006b2c]'
                   : 'bg-[#dae2fd] text-[#131b2e] border-transparent hover:bg-[#cbdbf5]'
@@ -190,7 +208,7 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-cart-btn"
               type="button"
               onClick={onOpenCart}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] transition-colors text-[12px] font-semibold shadow-xs"
+              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] transition-colors text-[12px] font-semibold shadow-xs cursor-pointer"
             >
               <ShoppingCart className="w-4 h-4" />
               <span className="hidden sm:inline">Cart</span>
@@ -202,15 +220,96 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
 
-            {/* Profile Avatar */}
-            <div className="flex items-center gap-1 pl-1">
-              <img
-                src={USER_AVATAR_URL}
-                alt="Sarah L. Store Manager"
-                className="w-8 h-8 rounded-full object-cover ring-2 ring-[#006b2c]/30"
-                title="Sarah L. (Store Operations Manager)"
-              />
-            </div>
+            {/* Customer Account / Sign In */}
+            {currentUser ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  id="customer-profile-menu-btn"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-[#eff4ff] transition-colors border border-transparent hover:border-[#cbd5e1]/60 cursor-pointer"
+                >
+                  <img
+                    src={
+                      currentUser.avatarUrl ||
+                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUser.name)}&backgroundColor=006b2c`
+                    }
+                    alt={currentUser.name}
+                    className="w-8 h-8 rounded-full object-cover ring-2 ring-[#006b2c]/40"
+                  />
+                  <div className="hidden lg:flex flex-col text-left">
+                    <span className="text-[12px] font-bold text-[#0b1c30] leading-tight max-w-[110px] truncate">
+                      {currentUser.name}
+                    </span>
+                    <span className="text-[10px] text-[#006b2c] font-semibold leading-tight">
+                      My Dashboard
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#565e74]" />
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#e2e8f0] p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-2 border-b border-[#e2e8f0] mb-1">
+                      <p className="text-[13px] font-bold text-[#0b1c30] truncate">{currentUser.name}</p>
+                      <p className="text-[11px] text-[#565e74] truncate">{currentUser.email}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      id="menu-dashboard-link"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onToggleView('dashboard');
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#0b1c30] hover:bg-[#eff4ff] hover:text-[#006b2c] flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <User className="w-4 h-4 text-[#006b2c]" />
+                      <span>Customer Dashboard</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="menu-orders-link"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onToggleView('dashboard');
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#0b1c30] hover:bg-[#eff4ff] hover:text-[#006b2c] flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Truck className="w-4 h-4 text-[#006b2c]" />
+                      <span>My Orders &amp; Tracking</span>
+                    </button>
+
+                    <div className="border-t border-[#e2e8f0] mt-1 pt-1">
+                      <button
+                        type="button"
+                        id="header-logout-btn"
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          logout();
+                          onToggleView('storefront');
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2] flex items-center gap-2.5 transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Log Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                id="header-login-btn"
+                onClick={() => onToggleView('login')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#006b2c] hover:bg-[#eff4ff] border border-[#cbd5e1] text-[12px] font-semibold transition-all shadow-2xs cursor-pointer"
+              >
+                <User className="w-4 h-4 text-[#006b2c]" />
+                <span>Sign In</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -221,7 +320,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectCategory('all')}
-                className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap font-medium ${
+                className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap font-medium cursor-pointer ${
                   selectedCategory === 'all'
                     ? 'bg-[#00873a] text-white font-semibold shadow-xs'
                     : 'text-[#3e4a3d] hover:bg-[#dce9ff] hover:text-[#0b1c30]'
@@ -234,7 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
                   key={cat.id}
                   type="button"
                   onClick={() => onSelectCategory(cat.id)}
-                  className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap font-medium ${
+                  className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap font-medium cursor-pointer ${
                     selectedCategory === cat.id
                       ? 'bg-[#00873a] text-white font-semibold shadow-xs'
                       : 'text-[#3e4a3d] hover:bg-[#dce9ff] hover:text-[#0b1c30]'
@@ -250,3 +349,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

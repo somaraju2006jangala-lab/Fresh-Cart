@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Product, CartItem, InventoryLog } from './types';
+import React, { useState, useEffect } from 'react';
+import { Product, CartItem, InventoryLog, ViewType } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
@@ -9,15 +10,19 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ProductModal } from './components/ProductModal';
 import { AdminPortal } from './components/AdminPortal';
+import { LoginPage } from './components/LoginPage';
+import { RegisterPage } from './components/RegisterPage';
+import { CustomerDashboard } from './components/CustomerDashboard';
 import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
 
-export default function App() {
+function FreshCartStore() {
+  const { currentUser, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [currentView, setCurrentView] = useState<'storefront' | 'admin'>('storefront');
+  const [currentView, setCurrentView] = useState<ViewType>('storefront');
 
-  // Initial cart with 3 items matching the design mockup:
+  // Initial cart with items matching the design:
   const [cart, setCart] = useState<CartItem[]>([
     {
       product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples ($2.49)
@@ -28,7 +33,7 @@ export default function App() {
       quantity: 1,
     },
     {
-      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados ($4.99) or Bananas ($1.89)
+      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados ($4.99)
       quantity: 1,
     },
   ]);
@@ -42,6 +47,38 @@ export default function App() {
   const [stockFilter, setStockFilter] = useState<'all' | 'organic' | 'quickPrep'>('all');
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(INITIAL_INVENTORY_LOGS);
+
+  // Synchronize URL Hash routing with currentView
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash === '#/login' || hash === '#login') {
+        setCurrentView('login');
+      } else if (hash === '#/register' || hash === '#register') {
+        setCurrentView('register');
+      } else if (hash === '#/dashboard' || hash === '#dashboard') {
+        setCurrentView('dashboard');
+      } else if (hash === '#/admin' || hash === '#admin') {
+        setCurrentView('admin');
+      } else if (hash === '' || hash === '#/' || hash === '#storefront') {
+        setCurrentView('storefront');
+      }
+    };
+
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigateToView = (view: ViewType) => {
+    setCurrentView(view);
+    if (view === 'storefront') {
+      window.location.hash = '';
+    } else {
+      window.location.hash = `#/${view}`;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Cart Handlers
   const handleAddToCart = (product: Product, quantity: number) => {
@@ -147,16 +184,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8f9ff] text-[#0b1c30]">
-      {/* Header */}
+      {/* Universal Header with View Navigation & Customer Authentication */}
       <Header
         currentView={currentView}
-        onToggleView={setCurrentView}
+        onToggleView={(view) => navigateToView(view)}
         cartCount={cartCount}
         onOpenCart={() => setIsCartOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={(cat) => {
+          setSelectedCategory(cat);
+          if (currentView !== 'storefront') {
+            navigateToView('storefront');
+          }
+        }}
       />
 
       {/* Main Content Area */}
@@ -165,11 +207,43 @@ export default function App() {
           <AdminPortal
             products={products}
             inventoryLogs={inventoryLogs}
-            onBackToStorefront={() => setCurrentView('storefront')}
+            onBackToStorefront={() => navigateToView('storefront')}
             onUpdateProductStock={handleUpdateProductStock}
             onUpdateProductPrice={handleUpdateProductPrice}
             onSimulateCdcPulse={handleSimulateCdcPulse}
           />
+        ) : currentView === 'login' ? (
+          <LoginPage
+            onNavigateToRegister={() => navigateToView('register')}
+            onNavigateToDashboard={() => navigateToView('dashboard')}
+            onNavigateToStorefront={() => navigateToView('storefront')}
+          />
+        ) : currentView === 'register' ? (
+          <RegisterPage
+            onNavigateToLogin={() => navigateToView('login')}
+            onNavigateToDashboard={() => navigateToView('dashboard')}
+            onNavigateToStorefront={() => navigateToView('storefront')}
+          />
+        ) : currentView === 'dashboard' ? (
+          currentUser ? (
+            <CustomerDashboard
+              cart={cart}
+              onOpenCart={() => setIsCartOpen(true)}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              onAddToCart={handleAddToCart}
+              onBackToStorefront={() => navigateToView('storefront')}
+              onLogout={() => {
+                logout();
+                navigateToView('storefront');
+              }}
+            />
+          ) : (
+            <LoginPage
+              onNavigateToRegister={() => navigateToView('register')}
+              onNavigateToDashboard={() => navigateToView('dashboard')}
+              onNavigateToStorefront={() => navigateToView('storefront')}
+            />
+          )
         ) : (
           <div className="flex flex-col w-full">
             {/* Hero Section */}
@@ -205,7 +279,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setStockFilter('all')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all ${
+                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
                       stockFilter === 'all'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -216,7 +290,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setStockFilter('organic')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all ${
+                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
                       stockFilter === 'organic'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -227,7 +301,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setStockFilter('quickPrep')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all ${
+                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
                       stockFilter === 'quickPrep'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -255,7 +329,7 @@ export default function App() {
                       setSelectedCategory('all');
                       setStockFilter('all');
                     }}
-                    className="mt-4 px-4 py-2 bg-[#006b2c] text-white text-[12px] font-semibold rounded-lg hover:bg-[#00873a] transition-colors"
+                    className="mt-4 px-4 py-2 bg-[#006b2c] text-white text-[12px] font-semibold rounded-lg hover:bg-[#00873a] transition-colors cursor-pointer"
                   >
                     Reset All Filters
                   </button>
@@ -279,8 +353,13 @@ export default function App() {
 
             {/* Footer */}
             <Footer
-              onOpenAdmin={() => setCurrentView('admin')}
-              onSelectCategory={setSelectedCategory}
+              onOpenAdmin={() => navigateToView('admin')}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                navigateToView('storefront');
+              }}
+              onOpenLogin={() => navigateToView('login')}
+              onOpenDashboard={() => navigateToView('dashboard')}
             />
           </div>
         )}
@@ -316,7 +395,16 @@ export default function App() {
         items={cart}
         appliedCoupon={appliedCoupon}
         onClearCart={handleClearCart}
+        onNavigateToDashboard={() => navigateToView('dashboard')}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <FreshCartStore />
+    </AuthProvider>
   );
 }

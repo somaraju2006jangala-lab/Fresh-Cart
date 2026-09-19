@@ -5,11 +5,15 @@ import { Lock, Leaf, ShieldCheck } from 'lucide-react';
 interface FooterProps {
   onOpenAdmin: () => void;
   onSelectCategory: (cat: string) => void;
+  onOpenLogin?: () => void;
+  onOpenDashboard?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onOpenAdmin,
   onSelectCategory,
+  onOpenLogin,
+  onOpenDashboard,
 }) => {
   return (
     <footer className="w-full bg-[#eff4ff] mt-10 border-t border-[#e2e8f0]">
@@ -80,13 +84,35 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Col 3: Customer Care */}
           <div>
             <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              Customer Care
+              Customer Care &amp; Account
             </h4>
             <ul className="space-y-2 text-[13px] text-[#565e74]">
               <li>
-                <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
-                  Track Live Delivery
-                </span>
+                <button
+                  type="button"
+                  onClick={onOpenDashboard || onOpenLogin}
+                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left font-medium"
+                >
+                  Customer Account &amp; Dashboard
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={onOpenDashboard || onOpenLogin}
+                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left font-medium"
+                >
+                  Track Live Delivery &amp; Orders
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={onOpenLogin}
+                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
+                >
+                  Sign In / Register
+                </button>
               </li>
               <li>
                 <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
@@ -96,11 +122,6 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
                   Returns &amp; Store Credits
-                </span>
-              </li>
-              <li>
-                <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
-                  Contact Store Specialist
                 </span>
               </li>
             </ul>

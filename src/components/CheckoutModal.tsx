@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { CartItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { CartItem, CustomerOrder } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   X,
   CheckCircle,
@@ -9,6 +10,7 @@ import {
   Truck,
   ShieldCheck,
   Zap,
+  UserCheck,
 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -17,6 +19,7 @@ interface CheckoutModalProps {
   items: CartItem[];
   appliedCoupon: string | null;
   onClearCart: () => void;
+  onNavigateToDashboard?: () => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -25,13 +28,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   items,
   appliedCoupon,
   onClearCart,
+  onNavigateToDashboard,
 }) => {
+  const { currentUser, addOrder } = useAuth();
   const [step, setStep] = useState<'details' | 'success'>('details');
-  const [address, setAddress] = useState('742 Evergreen Terrace, Apt 4B');
+  const [address, setAddress] = useState(
+    currentUser?.address || '742 Evergreen Terrace, Apt 4B'
+  );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'apple_pay' | 'cash'>('apple_pay');
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.address) {
+      setAddress(currentUser.address);
+    }
+  }, [currentUser]);
 
   if (!isOpen) return null;
 
@@ -49,6 +62,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setIsSubmitting(false);
       const generatedOrder = `FC-${Math.floor(100000 + Math.random() * 900000)}`;
       setOrderNumber(generatedOrder);
+
+      // Save order to customer account history
+      const newCustomerOrder: CustomerOrder = {
+        id: generatedOrder,
+        customerId: currentUser?.id,
+        customerName: currentUser?.name || 'Guest Customer',
+        deliveryAddress: address,
+        deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
+        estimatedDeliveryTime: 'Arriving in ~22 minutes',
+        items: [...items],
+        subtotal,
+        discount,
+        total,
+        couponCode: appliedCoupon || undefined,
+        status: 'Picking at Pod #104',
+        createdAt: new Date().toISOString(),
+        paymentMethod:
+          paymentMethod === 'apple_pay'
+            ? '⚡ Express Pay'
+            : paymentMethod === 'card'
+            ? 'Credit Card'
+            : 'Cash on Delivery',
+      };
+      addOrder(newCustomerOrder);
+
       setStep('success');
       onClearCart();
     }, 800);
@@ -277,13 +315,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleDone}
-              className="w-full py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors"
-            >
-              Continue Shopping
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {onNavigateToDashboard && (
+                <button
+                  type="button"
+                  id="checkout-goto-dashboard-btn"
+                  onClick={() => {
+                    handleDone();
+                    onNavigateToDashboard();
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-[#eff4ff] text-[#006b2c] border border-[#d3e4fe] text-[13px] font-semibold hover:bg-[#dce9ff] transition-colors cursor-pointer"
+                >
+                  View in Customer Dashboard
+                </button>
+              )}
+              <button
+                type="button"
+                id="checkout-continue-shopping-btn"
+                onClick={handleDone}
+                className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors cursor-pointer"
+              >
+                Continue Shopping
+              </button>
+            </div>
           </div>
         )}
       </div>

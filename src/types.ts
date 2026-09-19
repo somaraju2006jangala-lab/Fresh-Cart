@@ -59,3 +59,36 @@ export interface Order {
   status: 'Pending' | 'Picking at Pod #104' | 'Cold-Chain En Route' | 'Delivered';
   createdAt: string;
 }
+
+export interface CustomerAddress {
+  id: string;
+  label: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  isDefault?: boolean;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  savedAddresses: CustomerAddress[];
+  passwordHash: string;
+  passwordSalt: string;
+  createdAt: string;
+  avatarUrl?: string;
+  loyaltyTier?: string;
+}
+
+export interface CustomerOrder extends Order {
+  customerId?: string;
+  estimatedDeliveryTime?: string;
+  paymentMethod?: string;
+}
+
+export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard';
+
