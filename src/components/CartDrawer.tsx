@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem } from '../types';
+import { formatINR } from '../utils/currency';
 import {
   ShoppingCart,
   ChevronUp,
@@ -40,7 +41,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [couponInput, setCouponInput] = useState('');
   const [couponError, setCouponError] = useState('');
 
-  const freeDeliveryThreshold = 25.0;
+  const freeDeliveryThreshold = 499.0;
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -96,7 +97,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 id="cart-drawer-toggle-subtotal"
                 className="text-[16px] font-bold text-white leading-tight font-display tabular-nums"
               >
-                ${total.toFixed(2)}
+                {formatINR(total)}
               </div>
             </div>
             <ChevronUp className="w-5 h-5 text-[#bec6e0]" />
@@ -124,7 +125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <button
               type="button"
               onClick={onToggle}
-              className="w-8 h-8 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] flex items-center justify-center text-[#565e74] hover:text-[#0b1c30] transition-colors"
+              className="w-8 h-8 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] flex items-center justify-center text-[#565e74] hover:text-[#0b1c30] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -134,7 +135,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           <div className="bg-[#eff4ff] p-3 rounded-xl my-3 space-y-1.5 border border-[#e2e8f0]/60">
             <div className="flex items-center justify-between text-[11px] font-medium">
               <span className="text-[#3e4a3d]">
-                Free Express Delivery Goal ($25.00)
+                Free Express Delivery Goal ({formatINR(freeDeliveryThreshold)})
               </span>
               <span
                 id="progress-text"
@@ -144,7 +145,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               >
                 {deliveryDiff <= 0
                   ? 'FREE Express Delivery Unlocked!'
-                  : `Add $${deliveryDiff.toFixed(2)} more for FREE delivery`}
+                  : `Add ${formatINR(deliveryDiff)} more for FREE delivery`}
               </span>
             </div>
             <div className="w-full h-2 bg-[#e5eeff] rounded-full overflow-hidden">
@@ -176,64 +177,74 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </p>
               </div>
             ) : (
-              items.map((item) => (
-                <div
-                  key={item.product.id}
-                  id={`cart-item-${item.product.id}`}
-                  className="flex items-center justify-between bg-[#eff4ff]/60 p-2.5 rounded-xl gap-2 border border-[#e2e8f0]/40 hover:bg-[#eff4ff] transition-colors"
-                >
-                  <img
-                    src={item.product.image}
-                    alt={item.product.title}
-                    className="w-11 h-11 rounded-lg object-cover bg-white shrink-0 border border-[#e2e8f0]"
-                  />
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <span className="text-[13px] font-semibold text-[#0b1c30] truncate">
-                      {item.product.title}
-                    </span>
-                    <span className="text-[11px] text-[#565e74]">
-                      {item.quantity} × ${item.product.price.toFixed(2)} / {item.product.unit}
-                    </span>
-                  </div>
+              items.map((item) => {
+                const isAtMaxStock = item.quantity >= item.product.stock;
 
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center bg-white rounded-lg border border-[#e2e8f0] shadow-2xs">
-                      <button
-                        type="button"
-                        title="Decrease or remove item"
-                        onClick={() => onUpdateQty(item.product.id, -1)}
-                        className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#eff4ff] rounded-l-lg transition-colors"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-5 text-center text-[11px] font-semibold tabular-nums">
-                        {item.quantity}
+                return (
+                  <div
+                    key={item.product.id}
+                    id={`cart-item-${item.product.id}`}
+                    className="flex items-center justify-between bg-[#eff4ff]/60 p-2.5 rounded-xl gap-2 border border-[#e2e8f0]/40 hover:bg-[#eff4ff] transition-colors"
+                  >
+                    <img
+                      src={item.product.image}
+                      alt={item.product.title}
+                      className="w-11 h-11 rounded-lg object-cover bg-white shrink-0 border border-[#e2e8f0]"
+                    />
+                    <div className="flex-1 min-w-0 flex flex-col">
+                      <span className="text-[13px] font-semibold text-[#0b1c30] truncate">
+                        {item.product.title}
                       </span>
-                      <button
-                        type="button"
-                        title="Increase quantity"
-                        onClick={() => onUpdateQty(item.product.id, 1)}
-                        className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#eff4ff] rounded-r-lg transition-colors"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
+                      <span className="text-[11px] text-[#565e74]">
+                        {item.quantity} × {formatINR(item.product.price)} / {item.product.unit}
+                      </span>
+                      {isAtMaxStock && (
+                        <span className="text-[10px] text-[#b45309] font-medium">
+                          Max available: {item.product.stock}
+                        </span>
+                      )}
                     </div>
 
-                    <span className="text-[13px] font-bold text-[#0b1c30] min-w-[50px] text-right tabular-nums">
-                      ${(item.product.price * item.quantity).toFixed(2)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-white rounded-lg border border-[#e2e8f0] shadow-2xs">
+                        <button
+                          type="button"
+                          title="Decrease or remove item"
+                          onClick={() => onUpdateQty(item.product.id, -1)}
+                          className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#eff4ff] rounded-l-lg transition-colors cursor-pointer"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-5 text-center text-[11px] font-semibold tabular-nums">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          title={isAtMaxStock ? `Max available reached (${item.product.stock})` : 'Increase quantity'}
+                          disabled={isAtMaxStock}
+                          onClick={() => onUpdateQty(item.product.id, 1)}
+                          className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#eff4ff] rounded-r-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
 
-                    <button
-                      type="button"
-                      title="Remove item"
-                      onClick={() => onRemoveItem(item.product.id)}
-                      className="w-7 h-7 rounded-lg hover:bg-[#ffdad6] text-[#6e7b6c] hover:text-[#ba1a1a] transition-colors flex items-center justify-center"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                      <span className="text-[13px] font-bold text-[#0b1c30] min-w-[50px] text-right tabular-nums">
+                        {formatINR(item.product.price * item.quantity)}
+                      </span>
+
+                      <button
+                        type="button"
+                        title="Remove item"
+                        onClick={() => onRemoveItem(item.product.id)}
+                        className="w-7 h-7 rounded-lg hover:bg-[#ffdad6] text-[#6e7b6c] hover:text-[#ba1a1a] transition-colors flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -300,14 +311,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="flex justify-between text-[#565e74]">
               <span>Aisle Subtotal</span>
               <span id="cart-drawer-subtotal" className="font-semibold text-[#0b1c30] tabular-nums">
-                ${subtotal.toFixed(2)}
+                {formatINR(subtotal)}
               </span>
             </div>
 
             {discount > 0 && (
               <div className="flex justify-between text-[#006b2c]">
                 <span>Farm Welcome Discount (30%)</span>
-                <span className="font-semibold tabular-nums">-${discount.toFixed(2)}</span>
+                <span className="font-semibold tabular-nums">-{formatINR(discount)}</span>
               </div>
             )}
 
@@ -319,7 +330,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="flex justify-between text-[15px] font-bold text-[#0b1c30] pt-1 border-t border-[#e5eeff]">
               <span>Total Estimated</span>
               <span id="cart-drawer-total" className="text-[#006b2c] tabular-nums font-display">
-                ${total.toFixed(2)}
+                {formatINR(total)}
               </span>
             </div>
           </div>

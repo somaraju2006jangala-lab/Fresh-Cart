@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
+import { formatINR } from '../utils/currency';
 import {
   X,
   ShoppingCart,
@@ -32,7 +33,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   const handleAdd = () => {
     if (isOutOfStock) return;
-    onAddToCart(product, qty);
+    onAddToCart(product, Math.min(qty, product.stock));
     setAdded(true);
     setTimeout(() => {
       setAdded(false);
@@ -53,7 +54,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-[#0b1c30] hover:bg-white shadow-md transition-all"
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-[#0b1c30] hover:bg-white shadow-md transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -77,10 +78,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <h2 className="text-[20px] sm:text-[22px] font-bold text-[#0b1c30] font-display mt-0.5">
                 {product.title}
               </h2>
+              <span className="text-[12px] text-[#565e74] block mt-0.5">
+                Available Quantity: <span className="font-semibold text-[#0b1c30]">{product.stock} {product.unit}</span>
+              </span>
             </div>
             <div className="text-right shrink-0">
               <span className="text-[24px] font-extrabold text-[#006b2c] font-display tabular-nums">
-                ${product.price.toFixed(2)}
+                {formatINR(product.price)}
               </span>
               <span className="text-[12px] text-[#565e74] block">
                 / {product.unit}
@@ -137,7 +141,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   Live Stock Guarantee
                 </span>
                 <span className="text-[12px] font-semibold text-[#0b1c30]">
-                  {product.stock} units locked in Pod #104
+                  {product.stock} units available in Pod #104
                 </span>
               </div>
             </div>
@@ -158,8 +162,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <div className="flex items-center bg-[#eff4ff] rounded-xl p-1 border border-[#e2e8f0]">
             <button
               type="button"
+              disabled={qty <= 1}
               onClick={() => qty > 1 && setQty(qty - 1)}
-              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30]"
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30] disabled:opacity-40"
             >
               <Minus className="w-4 h-4" />
             </button>
@@ -168,8 +173,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             </span>
             <button
               type="button"
+              disabled={qty >= product.stock}
               onClick={() => qty < product.stock && setQty(qty + 1)}
-              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30]"
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30] disabled:opacity-40"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -184,7 +190,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 ? 'bg-[#cbd5e1] text-[#64748b] cursor-not-allowed'
                 : added
                 ? 'bg-[#15803d] text-white'
-                : 'bg-[#006b2c] text-white hover:bg-[#00873a]'
+                : 'bg-[#006b2c] text-white hover:bg-[#00873a] cursor-pointer'
             }`}
           >
             {added ? (
@@ -193,11 +199,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <span>Added to Live Cart</span>
               </>
             ) : isOutOfStock ? (
-              <span>Out of Stock</span>
+              <span>Unavailable</span>
             ) : (
               <>
                 <ShoppingCart className="w-4 h-4" />
-                <span>Add {qty} to Cart · ${(product.price * qty).toFixed(2)}</span>
+                <span>Add {qty} to Cart · {formatINR(product.price * qty)}</span>
               </>
             )}
           </button>

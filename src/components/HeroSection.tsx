@@ -82,7 +82,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               for 30% off your first certified organic farm order.
             </span>
             <span className="hidden md:inline-flex items-center gap-1 text-[11px] bg-[#006b2c] text-white px-2 py-0.5 rounded-full font-semibold ml-1">
-              Min $25 Order
+              Min ₹499 Order
             </span>
           </div>
           <button

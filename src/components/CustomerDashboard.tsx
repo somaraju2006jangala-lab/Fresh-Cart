@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { CartItem, Product, CustomerAddress } from '../types';
+import { formatINR } from '../utils/currency';
 import {
   User,
   Package,
@@ -404,7 +405,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <span>•</span>
                           <span>{order.items.length} items</span>
                           <span>•</span>
-                          <span className="font-semibold text-[#006b2c]">${order.total.toFixed(2)}</span>
+                          <span className="font-semibold text-[#006b2c]">{formatINR(order.total)}</span>
                         </div>
                       </div>
 
@@ -504,12 +505,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                               <div>
                                 <div className="font-semibold text-[#0b1c30]">{it.product.title}</div>
                                 <div className="text-[11px] text-[#565e74]">
-                                  Qty: {it.quantity} {it.product.unit} · ${it.product.price.toFixed(2)}/ea
+                                  Qty: {it.quantity} {it.product.unit} · {formatINR(it.product.price)}/ea
                                 </div>
                               </div>
                             </div>
                             <span className="font-semibold text-[#0b1c30]">
-                              ${(it.product.price * it.quantity).toFixed(2)}
+                              {formatINR(it.product.price * it.quantity)}
                             </span>
                           </div>
                         ))}
@@ -561,7 +562,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="text-[15px] font-bold text-[#006b2c] font-display">
-                            ${order.total.toFixed(2)}
+                            {formatINR(order.total)}
                           </div>
                           <div className="text-[11px] text-[#565e74]">
                             {order.items.length} items
@@ -599,7 +600,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             </span>
                           </div>
                           <span className="font-semibold text-[#0b1c30]">
-                            ${(it.product.price * it.quantity).toFixed(2)}
+                            {formatINR(it.product.price * it.quantity)}
                           </span>
                         </div>
                       ))}
@@ -663,14 +664,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <div>
                             <div className="font-bold text-[#0b1c30]">{item.product.title}</div>
                             <div className="text-[11px] text-[#565e74]">
-                              ${item.product.price.toFixed(2)} per {item.product.unit}
+                              {formatINR(item.product.price)} per {item.product.unit}
                             </div>
                           </div>
                         </div>
 
                         <div className="text-right">
                           <div className="font-bold text-[#0b1c30] font-display">
-                            ${(item.product.price * item.quantity).toFixed(2)}
+                            {formatINR(item.product.price * item.quantity)}
                           </div>
                           <div className="text-[11px] text-[#565e74]">
                             Qty: {item.quantity}
@@ -685,7 +686,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <div>
                       <span className="text-[12px] text-[#565e74]">Subtotal ({cartItemCount} items)</span>
                       <div className="text-[22px] font-extrabold text-[#006b2c] font-display">
-                        ${cartTotal.toFixed(2)}
+                        {formatINR(cartTotal)}
                       </div>
                     </div>
 

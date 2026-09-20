@@ -17,24 +17,41 @@ import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
 
+const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v1';
+
 function FreshCartStore() {
   const { currentUser, isLoading, logout } = useAuth();
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_PRODUCTS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // fallback
+    }
+    return INITIAL_PRODUCTS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_PRODUCTS_KEY, JSON.stringify(products));
+  }, [products]);
+
   // Default to login when unauthenticated; storefront when authenticated
   const [currentView, setCurrentView] = useState<ViewType>('login');
 
   // Initial cart with items matching the design:
   const [cart, setCart] = useState<CartItem[]>([
     {
-      product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples ($2.49)
+      product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples (₹199)
       quantity: 1,
     },
     {
-      product: INITIAL_PRODUCTS[1], // Grade-A Whole Milk ($3.99)
+      product: INITIAL_PRODUCTS[1], // Grade-A Whole Milk (₹79)
       quantity: 1,
     },
     {
-      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados ($4.99)
+      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados (₹349)
       quantity: 1,
     },
   ]);
@@ -113,26 +130,40 @@ function FreshCartStore() {
 
   // Cart Handlers
   const handleAddToCart = (product: Product, quantity: number) => {
+    const currentProduct = products.find((p) => p.id === product.id) || product;
+    if (currentProduct.stock <= 0) return;
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
+      const existing = prev.find((item) => item.product.id === currentProduct.id);
+      const currentQty = existing ? existing.quantity : 0;
+      const maxCanAdd = Math.max(0, currentProduct.stock - currentQty);
+      if (maxCanAdd <= 0) return prev;
+
+      const toAdd = Math.min(quantity, maxCanAdd);
       if (existing) {
         return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
+          item.product.id === currentProduct.id
+            ? { ...item, quantity: item.quantity + toAdd }
             : item
         );
       }
-      return [...prev, { product, quantity }];
+      return [...prev, { product: currentProduct, quantity: toAdd }];
     });
   };
 
   const handleUpdateCartQty = (productId: string, delta: number) => {
+    const currentProduct = products.find((p) => p.id === productId);
+
     setCart((prev) =>
       prev
         .map((item) => {
           if (item.product.id === productId) {
-            const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+            const stockLimit = currentProduct ? currentProduct.stock : item.product.stock;
+            const targetQty = item.quantity + delta;
+            if (targetQty > stockLimit) {
+              return { ...item, quantity: stockLimit };
+            }
+            return targetQty > 0 ? { ...item, quantity: targetQty } : null;
           }
           return item;
         })
@@ -148,12 +179,44 @@ function FreshCartStore() {
     setCart([]);
   };
 
+  // When a customer purchases a product, reduce the available quantity accordingly
+  const handleOrderPlaced = (purchasedItems: CartItem[]) => {
+    setProducts((prev) =>
+      prev.map((p) => {
+        const purchased = purchasedItems.find((it) => it.product.id === p.id);
+        if (purchased) {
+          const newStock = Math.max(0, p.stock - purchased.quantity);
+          return { ...p, stock: newStock };
+        }
+        return p;
+      })
+    );
+
+    // Record CDC inventory audit log entries for the purchase
+    purchasedItems.forEach((it) => {
+      const remainingStock = Math.max(0, it.product.stock - it.quantity);
+      const logEntry: InventoryLog = {
+        id: `log-${Date.now()}-${it.product.id}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sku: it.product.sku,
+        productTitle: it.product.title,
+        changeType: 'SALE',
+        quantityChange: -it.quantity,
+        newStock: remainingStock,
+        operator: 'Customer Checkout',
+        notes: `Customer Order Purchase (${it.quantity} ${it.product.unit})`,
+      };
+      setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+    });
+  };
+
   // Inventory Updates (from Admin or simulated events)
   const handleUpdateProductStock = (productId: string, newStock: number, reason: string) => {
+    const validStock = Math.max(0, newStock);
     setProducts((prev) =>
       prev.map((p) => {
         if (p.id === productId) {
-          const change = newStock - p.stock;
+          const change = validStock - p.stock;
           const logEntry: InventoryLog = {
             id: `log-${Date.now()}`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -161,12 +224,12 @@ function FreshCartStore() {
             productTitle: p.title,
             changeType: change > 0 ? 'RESTOCK' : 'SALE',
             quantityChange: change,
-            newStock,
+            newStock: validStock,
             operator: 'Manager Override',
             notes: reason,
           };
           setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
-          return { ...p, stock: Math.max(0, newStock) };
+          return { ...p, stock: validStock };
         }
         return p;
       })
@@ -450,6 +513,7 @@ function FreshCartStore() {
           items={cart}
           appliedCoupon={appliedCoupon}
           onClearCart={handleClearCart}
+          onOrderPlaced={handleOrderPlaced}
           onNavigateToDashboard={() => navigateToView('dashboard')}
         />
       )}

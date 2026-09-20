@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, InventoryLog } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
+import { formatINR } from '../utils/currency';
 import {
   Package,
   Thermometer,
@@ -322,7 +323,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <th className="py-3 px-4">SKU / Batch</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Price / Unit</th>
-                    <th className="py-3 px-4">Live Pod Stock</th>
+                    <th className="py-3 px-4">Quantity</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Quick Restock / Actions</th>
                   </tr>
@@ -371,10 +372,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <td className="py-3 px-4">
                           {editingPriceId === p.id ? (
                             <div className="flex items-center gap-1">
-                              <span className="text-[#64748b]">$</span>
+                              <span className="text-[#64748b]">₹</span>
                               <input
                                 type="number"
-                                step="0.10"
+                                step="1"
+                                min="0"
                                 value={tempPrice}
                                 onChange={(e) => setTempPrice(parseFloat(e.target.value) || 0)}
                                 className="w-16 px-1.5 py-0.5 border border-[#cbd5e1] rounded text-[12px]"
@@ -382,7 +384,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleSavePrice(p.id)}
-                                className="p-1 bg-[#006b2c] text-white rounded hover:bg-[#00873a]"
+                                className="p-1 bg-[#006b2c] text-white rounded hover:bg-[#00873a] cursor-pointer"
                               >
                                 <Check className="w-3 h-3" />
                               </button>
@@ -391,28 +393,48 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleStartEditPrice(p)}
-                              className="flex items-center gap-1 font-semibold text-[#0f172a] hover:text-[#006b2c] tabular-nums font-display group/edit"
+                              className="flex items-center gap-1 font-semibold text-[#0f172a] hover:text-[#006b2c] tabular-nums font-display group/edit cursor-pointer"
                               title="Click to edit price"
                             >
-                              <span>${p.price.toFixed(2)}</span>
+                              <span>{formatINR(p.price)}</span>
                               <span className="text-[11px] text-[#64748b]">/ {p.unit}</span>
                               <Edit2 className="w-3 h-3 opacity-0 group-hover/edit:opacity-100 text-[#94a3b8]" />
                             </button>
                           )}
                         </td>
 
-                        <td className="py-3 px-4 font-bold tabular-nums">
-                          <span
-                            className={`text-[15px] ${
-                              isOut
-                                ? 'text-[#ef4444]'
-                                : isLow
-                                ? 'text-[#b45309]'
-                                : 'text-[#16a34a]'
-                            }`}
-                          >
-                            {p.stock} units
-                          </span>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              title="Decrease quantity by 1"
+                              disabled={p.stock <= 0}
+                              onClick={() => onUpdateProductStock(p.id, Math.max(0, p.stock - 1), 'Admin Stock Decrement')}
+                              className="w-7 h-7 rounded-lg bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#0b1c30] flex items-center justify-center font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              value={p.stock}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                const newStock = isNaN(val) ? 0 : Math.max(0, val);
+                                onUpdateProductStock(p.id, newStock, 'Admin Quantity Direct Edit');
+                              }}
+                              className="w-16 px-2 py-1 border border-[#cbd5e1] rounded-lg text-center font-bold tabular-nums text-[13px] bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+                              title="Directly edit quantity (must never go below 0)"
+                            />
+                            <button
+                              type="button"
+                              title="Increase quantity by 1"
+                              onClick={() => onUpdateProductStock(p.id, p.stock + 1, 'Admin Stock Increment')}
+                              className="w-7 h-7 rounded-lg bg-[#eff4ff] hover:bg-[#dce9ff] text-[#006b2c] flex items-center justify-center font-bold text-sm cursor-pointer transition-colors"
+                            >
+                              +
+                            </button>
+                          </div>
                         </td>
 
                         <td className="py-3 px-4">

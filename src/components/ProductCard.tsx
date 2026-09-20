@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { Plus, Minus, ShoppingCart, Bell, Check } from 'lucide-react';
+import { formatINR } from '../utils/currency';
+import { Plus, Minus, ShoppingCart, Check } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -15,7 +16,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const [qty, setQty] = useState(1);
   const [addedAnim, setAddedAnim] = useState(false);
-  const [notified, setNotified] = useState(false);
 
   const isOutOfStock = product.stock <= 0;
   const isLowStock = product.stock > 0 && product.stock <= 5;
@@ -37,14 +37,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isOutOfStock) return;
-    onAddToCart(product, qty);
+    onAddToCart(product, Math.min(qty, product.stock));
     setAddedAnim(true);
     setTimeout(() => setAddedAnim(false), 1200);
-  };
-
-  const handleNotify = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setNotified(true);
   };
 
   return (
@@ -73,17 +68,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {isOutOfStock ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#ba1a1a]" />
-                Out of Stock
+                Unavailable
               </span>
             ) : isLowStock ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffddb8] text-[#825100] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#825100]" />
-                Only {product.stock} left - Low Stock
+                Only {product.stock} available
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#006b2c]" />
-                In Stock ({product.stock} left)
+                Available: {product.stock}
               </span>
             )}
           </div>
@@ -101,9 +96,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <h3 className="text-[16px] leading-snug text-[#0b1c30] font-semibold mt-1 hover:text-[#006b2c] transition-colors line-clamp-1">
             {product.title}
           </h3>
+          <div className="text-[12px] text-[#565e74] mt-0.5">
+            Available: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.unit}
+          </div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-[20px] font-bold text-[#0b1c30] tabular-nums font-display">
-              ${product.price.toFixed(2)}
+              {formatINR(product.price)}
             </span>
             <span className="text-[12px] text-[#565e74]">/ {product.unit}</span>
           </div>
@@ -113,27 +111,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="p-4 pt-0">
         {isOutOfStock ? (
           <button
-            id={`notify-btn-${product.id}`}
+            id={`add-to-cart-${product.id}`}
             type="button"
-            onClick={handleNotify}
-            disabled={notified}
-            className={`w-full py-2 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-xs ${
-              notified
-                ? 'bg-[#dcfce7] text-[#15803d]'
-                : 'bg-[#dce9ff] text-[#0b1c30] hover:bg-[#cbdbf5]'
-            }`}
+            disabled
+            className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed border border-[#e2e8f0]"
           >
-            {notified ? (
-              <>
-                <Check className="w-4 h-4 text-[#15803d]" />
-                <span>Restock Alert Set!</span>
-              </>
-            ) : (
-              <>
-                <Bell className="w-4 h-4 text-[#565e74]" />
-                <span>Notify Restock (Tomorrow 8am)</span>
-              </>
-            )}
+            <span>Unavailable</span>
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -142,7 +125,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 type="button"
                 title="Decrease quantity"
                 onClick={handleDecrement}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all"
+                disabled={qty <= 1}
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
@@ -153,7 +137,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 type="button"
                 title="Increase quantity"
                 onClick={handleIncrement}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all"
+                disabled={qty >= product.stock}
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -163,7 +148,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               id={`add-to-cart-${product.id}`}
               type="button"
               onClick={handleAdd}
-              className={`flex-1 py-2 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-98 ${
+              className={`flex-1 py-2 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-98 cursor-pointer ${
                 addedAnim
                   ? 'bg-[#15803d] text-white'
                   : 'bg-[#006b2c] text-white hover:bg-[#00873a]'
