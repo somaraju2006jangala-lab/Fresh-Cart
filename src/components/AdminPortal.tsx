@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product, InventoryLog } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
+import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
 import {
   Package,
   Thermometer,
@@ -18,6 +19,7 @@ import {
   Edit2,
   Check,
   TrendingUp,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -26,6 +28,9 @@ interface AdminPortalProps {
   onBackToStorefront: () => void;
   onUpdateProductStock: (productId: string, newStock: number, reason: string) => void;
   onUpdateProductPrice: (productId: string, newPrice: number) => void;
+  onUpdateProductUnit: (productId: string, newUnit: string) => void;
+  onAddProduct: (product: Product) => void;
+  onDeleteProduct: (productId: string) => void;
   onSimulateCdcPulse: () => void;
 }
 
@@ -35,6 +40,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onBackToStorefront,
   onUpdateProductStock,
   onUpdateProductPrice,
+  onUpdateProductUnit,
+  onAddProduct,
+  onDeleteProduct,
   onSimulateCdcPulse,
 }) => {
   const [filterCategory, setFilterCategory] = useState('all');
@@ -43,8 +51,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coldchain'>('inventory');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
-  const [restockingId, setRestockingId] = useState<string | null>(null);
-  const [restockAmount, setRestockAmount] = useState<number>(10);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
   const [pulseToast, setPulseToast] = useState<string | null>(null);
 
   const totalSkus = products.length;
@@ -79,13 +87,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       onUpdateProductPrice(productId, tempPrice);
     }
     setEditingPriceId(null);
-  };
-
-  const handleApplyRestock = (productId: string) => {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
-    onUpdateProductStock(productId, prod.stock + restockAmount, 'Dock Inbound Restock Batch');
-    setRestockingId(null);
   };
 
   const handleTriggerPulse = () => {
@@ -275,9 +276,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {/* Tab 1: Inventory Table */}
         {activeTab === 'inventory' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs overflow-hidden space-y-4 p-4 sm:p-5">
-            {/* Table Filters */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative w-full sm:w-80">
+            {/* Table Filters & Actions */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="relative w-full md:w-80">
                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#94a3b8]" />
                 <input
                   type="text"
@@ -288,7 +289,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
@@ -299,6 +300,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <option value="dairy">Dairy &amp; Eggs</option>
                   <option value="bakery">Bakery</option>
                   <option value="beverages">Beverages</option>
+                  <option value="snacks">Snacks</option>
+                  <option value="grains">Rice &amp; Grains</option>
                 </select>
 
                 <select
@@ -311,6 +314,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <option value="low">Low Stock (1-5)</option>
                   <option value="out">Out of Stock (0)</option>
                 </select>
+
+                <button
+                  type="button"
+                  id="admin-add-product-btn"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Product</span>
+                </button>
               </div>
             </div>
 
@@ -322,10 +335,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <th className="py-3 px-4">Item &amp; Supplier</th>
                     <th className="py-3 px-4">SKU / Batch</th>
                     <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Price / Unit</th>
+                    <th className="py-3 px-4">Price (₹)</th>
+                    <th className="py-3 px-4">Unit</th>
                     <th className="py-3 px-4">Quantity</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Quick Restock / Actions</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1f5f9]">
@@ -376,7 +390,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               <input
                                 type="number"
                                 step="1"
-                                min="0"
+                                min="1"
                                 value={tempPrice}
                                 onChange={(e) => setTempPrice(parseFloat(e.target.value) || 0)}
                                 className="w-16 px-1.5 py-0.5 border border-[#cbd5e1] rounded text-[12px]"
@@ -397,10 +411,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               title="Click to edit price"
                             >
                               <span>{formatINR(p.price)}</span>
-                              <span className="text-[11px] text-[#64748b]">/ {p.unit}</span>
                               <Edit2 className="w-3 h-3 opacity-0 group-hover/edit:opacity-100 text-[#94a3b8]" />
                             </button>
                           )}
+                        </td>
+
+                        {/* Unit Column with direct editing */}
+                        <td className="py-3 px-4">
+                          <select
+                            value={p.unit}
+                            onChange={(e) => {
+                              onUpdateProductUnit(p.id, e.target.value);
+                              setPulseToast(`Updated unit for "${p.title}" to "${e.target.value}"`);
+                              setTimeout(() => setPulseToast(null), 2500);
+                            }}
+                            className="px-2 py-1 text-[12px] font-bold border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] hover:border-[#006b2c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] cursor-pointer"
+                            title="Edit product unit"
+                          >
+                            {!STANDARD_UNITS.includes(p.unit as any) && (
+                              <option value={p.unit}>{p.unit}</option>
+                            )}
+                            {STANDARD_UNITS.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
                         </td>
 
                         <td className="py-3 px-4">
@@ -457,58 +493,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right">
-                          {restockingId === p.id ? (
-                            <div className="inline-flex items-center gap-1.5 justify-end">
-                              <span className="text-[11px] text-[#64748b]">Add:</span>
-                              <input
-                                type="number"
-                                min="1"
-                                value={restockAmount}
-                                onChange={(e) => setRestockAmount(parseInt(e.target.value) || 1)}
-                                className="w-12 px-1.5 py-0.5 border border-[#cbd5e1] rounded text-[12px] tabular-nums"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleApplyRestock(p.id)}
-                                className="px-2 py-1 bg-[#006b2c] text-white rounded text-[11px] font-semibold hover:bg-[#00873a]"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setRestockingId(null)}
-                                className="px-1.5 py-1 text-[#64748b] hover:text-[#0b1c30] text-[11px]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRestockingId(p.id);
-                                  setRestockAmount(15);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-[#eff4ff] hover:bg-[#dce9ff] text-[#006b2c] text-[11px] font-semibold transition-colors flex items-center gap-1"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Restock</span>
-                              </button>
-                              <button
-                                type="button"
-                                title="Subtract 1 unit (simulated walk-in purchase)"
-                                onClick={() => {
-                                  if (p.stock > 0) {
-                                    onUpdateProductStock(p.id, p.stock - 1, 'Manual Audit Sale');
-                                  }
-                                }}
-                                className="w-7 h-7 rounded-lg bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#475569] text-[11px] font-semibold flex items-center justify-center"
-                              >
-                                -1
-                              </button>
-                            </div>
-                          )}
+                          <button
+                            type="button"
+                            title={`Delete ${p.title} from store`}
+                            onClick={() => setDeleteConfirmProduct(p)}
+                            className="px-2.5 py-1 rounded-lg bg-[#fee2e2] hover:bg-[#fecaca] text-[#b91c1c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
+                            <span>Delete</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -627,6 +620,64 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Add New Product Modal */}
+      <AddProductModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddProduct={(newProd) => {
+          onAddProduct(newProd);
+          setPulseToast(`Added "${newProd.title}" (₹${newProd.price} / ${newProd.unit}) to store`);
+          setTimeout(() => setPulseToast(null), 3500);
+        }}
+      />
+
+      {/* Delete Product Confirmation Dialog */}
+      {deleteConfirmProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
+            <div className="flex items-center gap-3 text-[#b91c1c]">
+              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-[#ef4444]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                  Remove Product
+                </h3>
+                <p className="text-[12px] text-[#565e74]">
+                  This product will be removed from storefront and cart.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
+              Are you sure you want to remove <span className="font-bold text-[#0b1c30]">{deleteConfirmProduct.title}</span> from FreshCart? It will no longer appear on the customer storefront.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmProduct(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteProduct(deleteConfirmProduct.id);
+                  setPulseToast(`Removed "${deleteConfirmProduct.title}" from store`);
+                  setDeleteConfirmProduct(null);
+                  setTimeout(() => setPulseToast(null), 3000);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Yes, Delete Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -242,6 +242,81 @@ function FreshCartStore() {
     );
   };
 
+  const handleAddProduct = (newProduct: Product) => {
+    setProducts((prev) => [newProduct, ...prev]);
+
+    const logEntry: InventoryLog = {
+      id: `log-${Date.now()}-${newProduct.id}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sku: newProduct.sku,
+      productTitle: newProduct.title,
+      changeType: 'RESTOCK',
+      quantityChange: newProduct.stock,
+      newStock: newProduct.stock,
+      operator: 'Admin Portal',
+      notes: `Added new product: ${newProduct.title} (₹${newProduct.price} / ${newProduct.unit})`,
+    };
+    setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    const productToDelete = products.find((p) => p.id === productId);
+    if (productToDelete) {
+      const logEntry: InventoryLog = {
+        id: `log-${Date.now()}-${productId}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sku: productToDelete.sku,
+        productTitle: productToDelete.title,
+        changeType: 'SPOILAGE_DISPOSAL',
+        quantityChange: -productToDelete.stock,
+        newStock: 0,
+        operator: 'Admin Portal',
+        notes: `Removed product from store: ${productToDelete.title}`,
+      };
+      setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+    }
+
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+    if (activeModalProduct && activeModalProduct.id === productId) {
+      setActiveModalProduct(null);
+    }
+  };
+
+  const handleUpdateProductUnit = (productId: string, newUnit: string) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, unit: newUnit } : p))
+    );
+
+    setCart((prev) =>
+      prev.map((item) =>
+        item.product.id === productId
+          ? { ...item, product: { ...item.product, unit: newUnit } }
+          : item
+      )
+    );
+
+    if (activeModalProduct && activeModalProduct.id === productId) {
+      setActiveModalProduct((prev) => (prev ? { ...prev, unit: newUnit } : null));
+    }
+
+    const targetProduct = products.find((p) => p.id === productId);
+    if (targetProduct) {
+      const logEntry: InventoryLog = {
+        id: `log-${Date.now()}-${productId}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sku: targetProduct.sku,
+        productTitle: targetProduct.title,
+        changeType: 'AUDIT_ADJUSTMENT',
+        quantityChange: 0,
+        newStock: targetProduct.stock,
+        operator: 'Admin Portal',
+        notes: `Updated unit for ${targetProduct.title} to "${newUnit}"`,
+      };
+      setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+    }
+  };
+
   // Simulate real-time MongoDB CDC pulse
   const handleSimulateCdcPulse = () => {
     const candidate = products.find((p) => p.stock > 1);
@@ -315,6 +390,9 @@ function FreshCartStore() {
             onBackToStorefront={() => navigateToView(currentUser ? 'storefront' : 'login')}
             onUpdateProductStock={handleUpdateProductStock}
             onUpdateProductPrice={handleUpdateProductPrice}
+            onUpdateProductUnit={handleUpdateProductUnit}
+            onAddProduct={handleAddProduct}
+            onDeleteProduct={handleDeleteProduct}
             onSimulateCdcPulse={handleSimulateCdcPulse}
           />
         ) : currentView === 'login' ? (
