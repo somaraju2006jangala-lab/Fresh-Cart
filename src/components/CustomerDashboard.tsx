@@ -505,7 +505,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                               <div>
                                 <div className="font-semibold text-[#0b1c30]">{it.product.title}</div>
                                 <div className="text-[11px] text-[#565e74]">
-                                  Qty: {it.quantity} {it.product.unit} · {formatINR(it.product.price)}/ea
+                                  Qty: {it.quantity} {it.quantity === 1 ? 'pack' : 'packs'} ({it.product.unit}) · {formatINR(it.product.price)} / {it.product.unit}
                                 </div>
                               </div>
                             </div>
@@ -664,7 +664,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <div>
                             <div className="font-bold text-[#0b1c30]">{item.product.title}</div>
                             <div className="text-[11px] text-[#565e74]">
-                              {formatINR(item.product.price)} per {item.product.unit}
+                              {formatINR(item.product.price)} / {item.product.unit}
                             </div>
                           </div>
                         </div>
@@ -674,7 +674,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             {formatINR(item.product.price * item.quantity)}
                           </div>
                           <div className="text-[11px] text-[#565e74]">
-                            Qty: {item.quantity}
+                            Qty: {item.quantity} {item.quantity === 1 ? 'pack' : 'packs'}
                           </div>
                         </div>
                       </div>

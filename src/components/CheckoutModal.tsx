@@ -224,8 +224,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="max-h-28 overflow-y-auto space-y-1 pr-1 text-[12px]">
                 {items.map((it) => (
                   <div key={it.product.id} className="flex justify-between text-[#0b1c30]">
-                    <span className="truncate max-w-[240px]">
-                      {it.quantity}x {it.product.title}
+                    <span className="truncate max-w-[260px]">
+                      {it.quantity} × {it.product.title} <span className="text-[#565e74] text-[11px]">({it.product.unit})</span>
                     </span>
                     <span className="font-semibold tabular-nums">
                       {formatINR(it.product.price * it.quantity)}
@@ -248,12 +248,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               className="w-full py-3 rounded-xl bg-[#006b2c] text-white font-semibold text-[14px] hover:bg-[#00873a] active:scale-98 shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSubmitting ? (
-                <span>Locking Inventory with Pod #104...</span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Routing to Pod #104...
+                </span>
               ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4 text-[#7ffc97]" />
-                  <span>Place Order · {formatINR(total)}</span>
-                </>
+                <span>Pay {formatINR(total)} &amp; Place Order</span>
               )}
             </button>
           </form>
@@ -271,6 +271,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <p className="text-[13px] text-[#565e74] mt-1">
                 Your order is being picked at cold-chain Pod #104.
               </p>
+            </div>
+
+            {/* Order Summary with Unit */}
+            <div className="bg-[#f8fafc] p-3.5 rounded-xl border border-[#e2e8f0] text-left space-y-2">
+              <span className="text-[11px] font-bold uppercase text-[#565e74] tracking-wider block">
+                Order Summary ({items.length} items)
+              </span>
+              <div className="space-y-1 text-[12px] max-h-24 overflow-y-auto">
+                {items.map((it) => (
+                  <div key={it.product.id} className="flex justify-between text-[#0b1c30]">
+                    <span className="truncate max-w-[260px]">
+                      {it.quantity} × {it.product.title} <span className="text-[#565e74]">({it.product.unit})</span>
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {formatINR(it.product.price * it.quantity)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="pt-2 border-t border-[#e2e8f0] flex justify-between font-bold text-[13px]">
+                <span>Total Paid</span>
+                <span className="text-[#006b2c] font-display tabular-nums">
+                  {formatINR(total)}
+                </span>
+              </div>
             </div>
 
             {/* Live Tracking Visual */}

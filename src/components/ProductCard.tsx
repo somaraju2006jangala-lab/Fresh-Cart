@@ -97,7 +97,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {product.title}
           </h3>
           <div className="text-[12px] text-[#565e74] mt-0.5">
-            Available: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.unit}
+            Available: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? 'pack' : 'packs'} ({product.unit})
           </div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-[20px] font-bold text-[#0b1c30] tabular-nums font-display">

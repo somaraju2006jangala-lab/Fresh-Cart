@@ -17,15 +17,47 @@ import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
 
-const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v1';
+const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v2';
+
+const LEGACY_UNIT_MAP: Record<string, string> = {
+  jug: '500 ml',
+  carton: '1 dozen',
+  lb: '1 kg',
+  kg: '1 kg',
+  loaf: '1 piece',
+  btl: '1 litre',
+  bag: '1 packet',
+  tub: '500 g',
+  ml: '500 ml',
+  litre: '1 litre',
+  dozen: '1 dozen',
+  packet: '1 packet',
+  piece: '1 piece',
+  box: '1 box',
+};
 
 function FreshCartStore() {
   const { currentUser, isLoading, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_PRODUCTS_KEY);
-      if (saved) {
-        return JSON.parse(saved);
+      const savedV2 = localStorage.getItem(STORAGE_PRODUCTS_KEY);
+      if (savedV2) {
+        return JSON.parse(savedV2);
+      }
+      const savedV1 = localStorage.getItem('freshcart_products_inr_v1');
+      if (savedV1) {
+        const parsed: Product[] = JSON.parse(savedV1);
+        const migrated = parsed.map((p) => ({
+          ...p,
+          unit: LEGACY_UNIT_MAP[p.unit] || p.unit,
+        }));
+        // Ensure new example products (Rice, Sugar, Turmeric) are added if not present
+        INITIAL_PRODUCTS.forEach((initP) => {
+          if (!migrated.some((m) => m.id === initP.id)) {
+            migrated.push(initP);
+          }
+        });
+        return migrated;
       }
     } catch {
       // fallback
@@ -43,18 +75,31 @@ function FreshCartStore() {
   // Initial cart with items matching the design:
   const [cart, setCart] = useState<CartItem[]>([
     {
-      product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples (₹199)
+      product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples (₹199 / 1 kg)
       quantity: 1,
     },
     {
-      product: INITIAL_PRODUCTS[1], // Grade-A Whole Milk (₹79)
+      product: INITIAL_PRODUCTS[1], // Fresh Pasteurized Cow Milk (₹30 / 500 ml)
       quantity: 1,
     },
     {
-      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados (₹349)
+      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados (₹349 / 1 packet)
       quantity: 1,
     },
   ]);
+
+  // Keep cart items' product metadata (unit, price, title, stock) in sync with products
+  useEffect(() => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const matchingProduct = products.find((p) => p.id === item.product.id);
+        if (matchingProduct && (matchingProduct.unit !== item.product.unit || matchingProduct.price !== item.product.price)) {
+          return { ...item, product: matchingProduct };
+        }
+        return item;
+      })
+    );
+  }, [products]);
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);

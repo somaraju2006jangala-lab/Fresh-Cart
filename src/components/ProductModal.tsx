@@ -78,9 +78,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <h2 className="text-[20px] sm:text-[22px] font-bold text-[#0b1c30] font-display mt-0.5">
                 {product.title}
               </h2>
-              <span className="text-[12px] text-[#565e74] block mt-0.5">
-                Available Quantity: <span className="font-semibold text-[#0b1c30]">{product.stock} {product.unit}</span>
-              </span>
+              <div className="text-[12px] text-[#565e74] mt-0.5 space-y-0.5">
+                <div>
+                  Available Quantity: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? 'pack' : 'packs'}
+                </div>
+                <div>
+                  Pack Size / Unit: <span className="font-semibold text-[#0b1c30]">{product.unit}</span>
+                </div>
+              </div>
             </div>
             <div className="text-right shrink-0">
               <span className="text-[24px] font-extrabold text-[#006b2c] font-display tabular-nums">

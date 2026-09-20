@@ -18,14 +18,19 @@ const CATEGORY_OPTIONS: { id: Product['category']; label: string; aisle: string 
 ];
 
 export const STANDARD_UNITS = [
-  'kg',
-  'g',
-  'litre',
-  'ml',
-  'piece',
-  'packet',
-  'dozen',
-  'box',
+  '1 kg',
+  '500 g',
+  '250 g',
+  '100 g',
+  '50 g',
+  '1 litre',
+  '500 ml',
+  '250 ml',
+  '100 ml',
+  '1 piece',
+  '1 packet',
+  '1 box',
+  '1 dozen',
 ] as const;
 
 const PRESET_IMAGES = [
@@ -33,49 +38,49 @@ const PRESET_IMAGES = [
     name: 'Rice / Grains',
     url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
     category: 'grains' as const,
-    unit: 'kg',
+    unit: '1 kg',
   },
   {
     name: 'Milk / Dairy',
     url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80',
     category: 'dairy' as const,
-    unit: 'litre',
+    unit: '500 ml',
   },
   {
     name: 'Eggs',
     url: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=600&q=80',
     category: 'dairy' as const,
-    unit: 'dozen',
+    unit: '1 dozen',
   },
   {
     name: 'Bread',
     url: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80',
     category: 'bakery' as const,
-    unit: 'packet',
+    unit: '1 packet',
   },
   {
     name: 'Apples / Fruits',
     url: 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?auto=format&fit=crop&w=600&q=80',
     category: 'produce' as const,
-    unit: 'kg',
+    unit: '1 kg',
   },
   {
     name: 'Vegetables',
     url: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
     category: 'produce' as const,
-    unit: 'kg',
+    unit: '500 g',
   },
   {
     name: 'Beverage / Juice',
     url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
     category: 'beverages' as const,
-    unit: 'ml',
+    unit: '1 litre',
   },
   {
     name: 'Snacks / Box',
     url: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=600&q=80',
     category: 'snacks' as const,
-    unit: 'box',
+    unit: '1 box',
   },
 ];
 
@@ -90,7 +95,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState<string>('99');
   const [quantity, setQuantity] = useState<string>('25');
-  const [unit, setUnit] = useState<string>('kg');
+  const [unit, setUnit] = useState<string>('1 kg');
   const [category, setCategory] = useState<Product['category']>('produce');
   const [image, setImage] = useState(PRESET_IMAGES[0].url);
   const [description, setDescription] = useState('');
@@ -173,7 +178,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     setTitle('');
     setPrice('99');
     setQuantity('25');
-    setUnit('kg');
+    setUnit('1 kg');
     setDescription('');
     setIsCustomUnit(false);
   };
