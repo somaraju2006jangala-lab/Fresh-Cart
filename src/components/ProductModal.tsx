@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Award,
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ProductModalProps {
   product: Product | null;
@@ -24,6 +25,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onClose,
   onAddToCart,
 }) => {
+  const { t } = useLanguage();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
 
@@ -80,10 +82,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </h2>
               <div className="text-[12px] text-[#565e74] mt-0.5 space-y-0.5">
                 <div>
-                  Available Quantity: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? 'pack' : 'packs'}
+                  {t('availableQuantity')} <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? t('pack') : t('packs')}
                 </div>
                 <div>
-                  Pack Size / Unit: <span className="font-semibold text-[#0b1c30]">{product.unit}</span>
+                  {t('packSizeUnit')} <span className="font-semibold text-[#0b1c30]">{product.unit}</span>
                 </div>
               </div>
             </div>
@@ -107,7 +109,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <Award className="w-4 h-4 text-[#006b2c] mt-0.5 shrink-0" />
               <div>
                 <span className="text-[11px] text-[#565e74] font-medium block">
-                  Farm Origin
+                  {t('farmOrigin')}
                 </span>
                 <span className="text-[12px] font-semibold text-[#0b1c30]">
                   {product.farmOrigin || 'Verde Valley Organic Co-Op'}
@@ -119,7 +121,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <Calendar className="w-4 h-4 text-[#006b2c] mt-0.5 shrink-0" />
               <div>
                 <span className="text-[11px] text-[#565e74] font-medium block">
-                  Harvested / Baked
+                  {t('harvestedBaked')}
                 </span>
                 <span className="text-[12px] font-semibold text-[#0b1c30]">
                   {product.harvestDate || 'Daily Morning Batch'}
@@ -131,7 +133,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <Thermometer className="w-4 h-4 text-[#825100] mt-0.5 shrink-0" />
               <div>
                 <span className="text-[11px] text-[#565e74] font-medium block">
-                  Cold-Chain Standard
+                  {t('coldChainStandard')}
                 </span>
                 <span className="text-[12px] font-semibold text-[#0b1c30]">
                   {product.tempRequirement || 'Strict Cold Chain 4°C'}
@@ -143,7 +145,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <ShieldCheck className="w-4 h-4 text-[#006b2c] mt-0.5 shrink-0" />
               <div>
                 <span className="text-[11px] text-[#565e74] font-medium block">
-                  Live Stock Guarantee
+                  {t('liveStockGuarantee')}
                 </span>
                 <span className="text-[12px] font-semibold text-[#0b1c30]">
                   {product.stock} units available in Pod #104
@@ -155,7 +157,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           {product.nutrition && (
             <div className="bg-[#f8fafc] p-3 rounded-xl border border-[#e2e8f0] text-[12px]">
               <span className="font-semibold text-[#0b1c30] block mb-0.5">
-                Nutritional Profile:
+                {t('nutritionalProfile')}
               </span>
               <span className="text-[#565e74]">{product.nutrition}</span>
             </div>
@@ -201,14 +203,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             {added ? (
               <>
                 <Check className="w-4 h-4 text-[#7ffc97]" />
-                <span>Added to Live Cart</span>
+                <span>{t('addedToLiveCart')}</span>
               </>
             ) : isOutOfStock ? (
-              <span>Unavailable</span>
+              <span>{t('unavailable')}</span>
             ) : (
               <>
                 <ShoppingCart className="w-4 h-4" />
-                <span>Add {qty} to Cart · {formatINR(product.price * qty)}</span>
+                <span>{t('addToCartTotal', { qty, price: formatINR(product.price * qty) })}</span>
               </>
             )}
           </button>

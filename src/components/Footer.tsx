@@ -1,6 +1,7 @@
 import React from 'react';
 import { BRAND_LOGO_URL } from '../data/products';
 import { Lock, Leaf, ShieldCheck } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface FooterProps {
   onOpenAdmin: () => void;
@@ -15,6 +16,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenLogin,
   onOpenDashboard,
 }) => {
+  const { t } = useLanguage();
   return (
     <footer className="w-full bg-[#eff4ff] mt-10 border-t border-[#e2e8f0]">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-12 max-w-7xl mx-auto">
@@ -32,14 +34,14 @@ export const Footer: React.FC<FooterProps> = ({
               </span>
             </div>
             <p className="text-[13px] text-[#565e74] leading-relaxed">
-              Sustainably harvested local produce, farm-fresh dairy, and artisanal staples delivered to your kitchen within 30 minutes.
+              {t('footerAbout')}
             </p>
           </div>
 
           {/* Col 2: Shop Categories */}
           <div>
             <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              Shop Categories
+              {t('footerShopCategories')}
             </h4>
             <ul className="space-y-2 text-[13px] text-[#565e74]">
               <li>
@@ -48,7 +50,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('produce')}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
                 >
-                  Farm Vegetables &amp; Fresh Fruits
+                  {t('footerVegFruits')}
                 </button>
               </li>
               <li>
@@ -57,7 +59,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('dairy')}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
                 >
-                  Organic Dairy &amp; Pasture-Raised Eggs
+                  {t('footerDairyEggs')}
                 </button>
               </li>
               <li>
@@ -66,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('bakery')}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
                 >
-                  Artisanal Bakery &amp; Country Loaves
+                  {t('footerBakeryBread')}
                 </button>
               </li>
               <li>
@@ -75,7 +77,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onSelectCategory('grains')}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
                 >
-                  Heritage Grains &amp; Pulses
+                  {t('footerGrainsPulses')}
                 </button>
               </li>
             </ul>
@@ -84,7 +86,7 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Col 3: Customer Care */}
           <div>
             <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              Customer Care &amp; Account
+              {t('footerCustomerCare')}
             </h4>
             <ul className="space-y-2 text-[13px] text-[#565e74]">
               <li>
@@ -93,7 +95,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={onOpenDashboard || onOpenLogin}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left font-medium"
                 >
-                  Customer Account &amp; Dashboard
+                  {t('footerAccountDashboard')}
                 </button>
               </li>
               <li>
@@ -102,7 +104,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={onOpenDashboard || onOpenLogin}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left font-medium"
                 >
-                  Track Live Delivery &amp; Orders
+                  {t('footerTrackOrders')}
                 </button>
               </li>
               <li>
@@ -111,17 +113,17 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={onOpenLogin}
                   className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
                 >
-                  Sign In / Register
+                  {t('footerSignInRegister')}
                 </button>
               </li>
               <li>
                 <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
-                  Freshness Guarantee Policy
+                  {t('footerFreshnessPolicy')}
                 </span>
               </li>
               <li>
                 <span className="hover:text-[#006b2c] transition-colors cursor-pointer">
-                  Returns &amp; Store Credits
+                  {t('footerReturnsCredits')}
                 </span>
               </li>
             </ul>
@@ -130,10 +132,10 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Col 4: Store Operations */}
           <div>
             <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              Store Operations
+              {t('footerStoreOperations')}
             </h4>
             <p className="text-[13px] text-[#565e74] mb-3 leading-relaxed">
-              Authorized store personnel and inventory associates can manage real-time batches via the backend panel.
+              {t('footerOperationsDesc')}
             </p>
             <button
               type="button"
@@ -142,7 +144,7 @@ export const Footer: React.FC<FooterProps> = ({
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#dce9ff] text-[#0b1c30] hover:bg-[#cbdbf5] transition-colors text-[12px] font-semibold cursor-pointer border border-[#cbd5e1]/50"
             >
               <Lock className="w-4 h-4 text-[#006b2c]" />
-              <span>Access Admin Operations</span>
+              <span>{t('footerAccessAdmin')}</span>
             </button>
           </div>
         </div>
@@ -150,16 +152,16 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Bottom copyright line */}
         <div className="mt-10 pt-5 border-t border-[#e2e8f0] flex flex-col sm:flex-row items-center justify-between gap-3 text-[#565e74] text-[12px]">
           <div>
-            © 2025 FreshCart Inc. All local harvest and fulfillment rights reserved.
+            {t('footerCopyright')}
           </div>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-1.5 text-[#006b2c] font-medium">
               <Leaf className="w-3.5 h-3.5 text-[#006b2c]" />
-              100% Recyclable Packaging
+              {t('footerRecyclable')}
             </span>
             <span className="flex items-center gap-1.5 text-[#565e74] font-medium">
               <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
-              ISO 22000 Certified Cold-Chain
+              {t('footerCertified')}
             </span>
           </div>
         </div>

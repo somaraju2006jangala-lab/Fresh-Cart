@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Product, InventoryLog } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
 import {
   Package,
@@ -46,6 +48,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onDeleteProduct,
   onSimulateCdcPulse,
 }) => {
+  const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
@@ -121,18 +124,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-[12px] font-semibold transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Storefront</span>
+              <span>{t('backToStorefrontBtn')}</span>
             </button>
             <div className="h-4 w-px bg-[#475569] hidden sm:block" />
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
               <span className="text-[13px] font-bold tracking-tight">
-                Store #104 Central Fulfillment Operations
+                {t('adminStoreTitle')}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Language Selector in Admin Portal */}
+            <LanguageSelector variant="dark" idPrefix="admin-lang" />
+
             <button
               type="button"
               onClick={handleTriggerPulse}
@@ -140,7 +146,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               title="Simulate incoming order sale and live stock countdown"
             >
               <Radio className="w-3.5 h-3.5 text-[#7ffc97] animate-pulse" />
-              <span>Simulate MongoDB CDC Pulse</span>
+              <span>{t('simulateCdcPulse')}</span>
             </button>
 
             <div className="flex items-center gap-2 pl-2">
@@ -151,7 +157,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               />
               <div className="hidden sm:block text-left">
                 <p className="text-[12px] font-semibold leading-tight">Sarah L.</p>
-                <p className="text-[10px] text-[#94a3b8] leading-tight">Ops Manager</p>
+                <p className="text-[10px] text-[#94a3b8] leading-tight">{t('opsManager')}</p>
               </div>
             </div>
           </div>
@@ -179,14 +185,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[12px] text-[#64748b] font-medium block">
-                Total SKUs Monitored
+                {t('totalSkusMonitored')}
               </span>
               <span className="text-[28px] font-extrabold text-[#0f172a] font-display tabular-nums">
                 {totalSkus}
               </span>
               <div className="text-[11px] text-[#16a34a] flex items-center gap-1 font-semibold mt-1">
                 <TrendingUp className="w-3.5 h-3.5" />
-                <span>100% Active MongoDB sync</span>
+                <span>{t('activeMongodbSync')}</span>
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#eff4ff] text-[#006b2c] flex items-center justify-center">
@@ -197,14 +203,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[12px] text-[#64748b] font-medium block">
-                Cold-Chain Pod Temp
+                {t('coldChainPodTemp')}
               </span>
               <span className="text-[28px] font-extrabold text-[#0f172a] font-display tabular-nums">
                 3.8°C
               </span>
               <div className="text-[11px] text-[#16a34a] font-semibold mt-1 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#16a34a]" />
-                <span>Optimal (Tolerance 2-5°C)</span>
+                <span>{t('optimalTempRange')}</span>
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#fef3c7] text-[#825100] flex items-center justify-center">
@@ -215,13 +221,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[12px] text-[#64748b] font-medium block">
-                Stock Warnings
+                {t('stockWarnings')}
               </span>
               <span className="text-[28px] font-extrabold text-[#b45309] font-display tabular-nums">
                 {lowStockCount + outOfStockCount}
               </span>
               <div className="text-[11px] text-[#64748b] font-medium mt-1">
-                {lowStockCount} Low · {outOfStockCount} Out of Stock
+                {t('stockWarningDetail', { low: lowStockCount, out: outOfStockCount })}
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#fee2e2] text-[#ef4444] flex items-center justify-center">
@@ -232,13 +238,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[12px] text-[#64748b] font-medium block">
-                Active Pickers &amp; Runners
+                {t('activePickersRunners')}
               </span>
               <span className="text-[28px] font-extrabold text-[#0f172a] font-display tabular-nums">
                 12
               </span>
               <div className="text-[11px] text-[#16a34a] font-semibold mt-1">
-                Avg pack time: 5.4 mins
+                {t('avgPackTime')}
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#eff4ff] text-[#006b2c] flex items-center justify-center">
@@ -259,7 +265,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>Live Inventory Management ({products.length})</span>
+            <span>{t('tabLiveInventory', { count: products.length })}</span>
           </button>
           <button
             type="button"
@@ -271,7 +277,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <History className="w-4 h-4" />
-            <span>CDC Audit &amp; Dispatch Logs</span>
+            <span>{t('tabCdcLogs')}</span>
           </button>
           <button
             type="button"
@@ -283,7 +289,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <Thermometer className="w-4 h-4" />
-            <span>Cold-Chain Telemetry</span>
+            <span>{t('tabColdChain')}</span>
           </button>
         </div>
 
@@ -298,7 +304,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   type="text"
                   value={adminSearch}
                   onChange={(e) => setAdminSearch(e.target.value)}
-                  placeholder="Filter SKU, item, or farm supplier..."
+                  placeholder={t('filterSkuPlaceholder')}
                   className="w-full pl-9 pr-3 py-1.5 text-[13px] border border-[#cbd5e1] rounded-lg bg-[#f8fafc] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
                 />
               </div>
@@ -309,13 +315,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="px-3 py-1.5 text-[12px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden"
                 >
-                  <option value="all">All Aisles</option>
-                  <option value="produce">Produce &amp; Fruit</option>
-                  <option value="dairy">Dairy &amp; Eggs</option>
-                  <option value="bakery">Bakery</option>
-                  <option value="beverages">Beverages</option>
-                  <option value="snacks">Snacks</option>
-                  <option value="grains">Rice &amp; Grains</option>
+                  <option value="all">{t('allAisles')}</option>
+                  <option value="produce">{t('catProduce')}</option>
+                  <option value="dairy">{t('catDairy')}</option>
+                  <option value="bakery">{t('catBakery')}</option>
+                  <option value="beverages">{t('catBeverages')}</option>
+                  <option value="snacks">{t('catSnacks')}</option>
+                  <option value="grains">{t('catGrains')}</option>
                 </select>
 
                 <select
@@ -323,10 +329,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   onChange={(e) => setFilterStockStatus(e.target.value)}
                   className="px-3 py-1.5 text-[12px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden"
                 >
-                  <option value="all">All Stock Statuses</option>
-                  <option value="healthy">In Stock (&gt; 5)</option>
-                  <option value="low">Low Stock (1-5)</option>
-                  <option value="out">Out of Stock (0)</option>
+                  <option value="all">{t('allStockStatuses')}</option>
+                  <option value="healthy">{t('inStockOption')}</option>
+                  <option value="low">{t('lowStockOption')}</option>
+                  <option value="out">{t('outOfStockOption')}</option>
                 </select>
 
                 <button
@@ -336,7 +342,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add New Product</span>
+                  <span>{t('addNewProductBtn')}</span>
                 </button>
               </div>
             </div>
@@ -346,14 +352,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <table className="w-full text-left text-[13px]">
                 <thead>
                   <tr className="bg-[#f8fafc] text-[#64748b] border-b border-[#e2e8f0] text-[11px] font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Item &amp; Supplier</th>
-                    <th className="py-3 px-4">SKU / Batch</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Price (₹)</th>
-                    <th className="py-3 px-4">Unit / Pack Size</th>
-                    <th className="py-3 px-4">Quantity (Packs)</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">{t('tableHeaderItem')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderSku')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderCategory')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderPrice')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderUnit')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderQuantity')}</th>
+                    <th className="py-3 px-4">{t('tableHeaderStatus')}</th>
+                    <th className="py-3 px-4 text-right">{t('tableHeaderActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1f5f9]">
@@ -489,7 +495,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                     {u}
                                   </option>
                                 ))}
-                                <option value="__custom__">✏️ Custom Unit...</option>
+                                <option value="__custom__">{t('customUnitOption')}</option>
                               </select>
                               <button
                                 type="button"
@@ -544,17 +550,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           {isOut ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fee2e2] text-[#b91c1c] text-[11px] font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444]" />
-                              Out of Stock
+                              {t('outOfStockStatus')}
                             </span>
                           ) : isLow ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#b45309] text-[11px] font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
-                              Low Stock
+                              {t('lowStockStatus')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a]" />
-                              Healthy
+                              {t('healthyStatus')}
                             </span>
                           )}
                         </td>
@@ -567,7 +573,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             className="px-2.5 py-1 rounded-lg bg-[#fee2e2] hover:bg-[#fecaca] text-[#b91c1c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
-                            <span>Delete</span>
+                            <span>{t('deleteBtn')}</span>
                           </button>
                         </td>
                       </tr>
@@ -585,15 +591,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
               <div>
                 <h3 className="text-[16px] font-bold text-[#0f172a] font-display">
-                  Live Change Data Capture (CDC) Ledger
+                  {t('cdcLedgerHeading')}
                 </h3>
                 <p className="text-[12px] text-[#64748b]">
-                  Real-time synchronization events between Store #104 mini-fulfillment pod and customer mobile clients.
+                  {t('cdcLedgerSubheading')}
                 </p>
               </div>
               <span className="px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping" />
-                Cluster Healthy
+                {t('clusterHealthy')}
               </span>
             </div>
 
@@ -645,12 +651,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {activeTab === 'coldchain' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 space-y-4">
             <h3 className="text-[16px] font-bold text-[#0f172a] font-display">
-              Continuous Cold-Chain Refrigeration Telemetry
+              {t('coldChainTelemetryHeading')}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
                 <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  Pod #104 Dairy &amp; Produce Vault
+                  {t('telemetryProduceVault')}
                 </span>
                 <span className="text-[26px] font-bold text-[#0f172a] font-display">
                   3.8°C
@@ -662,7 +668,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
               <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
                 <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  Bakery Ambient Chute
+                  {t('telemetryBakeryChute')}
                 </span>
                 <span className="text-[26px] font-bold text-[#0f172a] font-display">
                   21.2°C
@@ -674,7 +680,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
               <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
                 <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  Electric Runner Thermal Totes
+                  {t('telemetryThermalTotes')}
                 </span>
                 <span className="text-[26px] font-bold text-[#0f172a] font-display">
                   4.1°C
@@ -709,16 +715,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
               <div>
                 <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
-                  Remove Product
+                  {t('removeProductTitle')}
                 </h3>
                 <p className="text-[12px] text-[#565e74]">
-                  This product will be removed from storefront and cart.
+                  {t('removeProductSubtitle')}
                 </p>
               </div>
             </div>
 
             <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
-              Are you sure you want to remove <span className="font-bold text-[#0b1c30]">{deleteConfirmProduct.title}</span> from FreshCart? It will no longer appear on the customer storefront.
+              {t('removeProductConfirm', { title: deleteConfirmProduct.title })}
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
@@ -727,7 +733,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 onClick={() => setDeleteConfirmProduct(null)}
                 className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 type="button"
@@ -739,7 +745,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 }}
                 className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
               >
-                Yes, Delete Product
+                {t('yesDeleteProduct')}
               </button>
             </div>
           </div>

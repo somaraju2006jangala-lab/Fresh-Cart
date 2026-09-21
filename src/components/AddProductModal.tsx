@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 import { X, Plus, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 interface AddProductModalProps {
@@ -92,6 +93,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   onClose,
   onAddProduct,
 }) => {
+  const { t } = useLanguage();
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState<string>('99');
   const [quantity, setQuantity] = useState<string>('25');
@@ -194,10 +196,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
             <div>
               <h2 className="text-[17px] font-bold text-[#0b1c30] font-display">
-                Add New Product
+                {t('addProductTitle')}
               </h2>
               <p className="text-[11px] text-[#565e74]">
-                New products will automatically appear on the customer storefront.
+                {t('addProductSubtitle')}
               </p>
             </div>
           </div>
@@ -221,14 +223,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           {/* Product Name */}
           <div className="space-y-1">
             <label className="text-[12px] font-semibold text-[#0b1c30]">
-              Product Name *
+              {t('productNameLabel')}
             </label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Organic Basmati Rice, Fresh Farm Milk, Brown Eggs"
+              placeholder={t('productNamePlaceholder')}
               className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
             />
           </div>
@@ -237,24 +239,38 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-[#0b1c30]">
-                Category *
+                {t('categoryLabel')}
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as Product['category'])}
                 className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] cursor-pointer"
               >
-                {CATEGORY_OPTIONS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
+                {CATEGORY_OPTIONS.map((c) => {
+                  const catLabel =
+                    c.id === 'produce'
+                      ? t('catProduce')
+                      : c.id === 'dairy'
+                      ? t('catDairy')
+                      : c.id === 'bakery'
+                      ? t('catBakery')
+                      : c.id === 'beverages'
+                      ? t('catBeverages')
+                      : c.id === 'snacks'
+                      ? t('catSnacks')
+                      : t('catGrains');
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {catLabel}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-[#0b1c30]">
-                Unit of Sale *
+                {t('unitPackSizeLabel')}
               </label>
               {!isCustomUnit ? (
                 <div className="flex gap-1.5">
@@ -274,7 +290,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                         {u}
                       </option>
                     ))}
-                    <option value="custom">+ Other (Custom Unit)</option>
+                    <option value="custom">{t('enterCustomUnitBtn')}</option>
                   </select>
                 </div>
               ) : (
@@ -283,7 +299,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     type="text"
                     value={customUnit}
                     onChange={(e) => setCustomUnit(e.target.value)}
-                    placeholder="e.g. bunch, tray, pack"
+                    placeholder="e.g. 500 g, 1 kg"
                     className="flex-1 px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
                   />
                   <button
@@ -291,7 +307,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     onClick={() => setIsCustomUnit(false)}
                     className="px-2.5 py-1 text-[11px] text-[#565e74] hover:text-[#0b1c30] underline cursor-pointer"
                   >
-                    Standard
+                    {t('switchToStandardUnits')}
                   </button>
                 </div>
               )}
@@ -302,7 +318,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-[#0b1c30]">
-                Price in Indian Rupees (₹) *
+                {t('priceLabel')}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-[14px] font-bold text-[#64748b]">
@@ -323,7 +339,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-[#0b1c30]">
-                Initial Available Quantity *
+                {t('stockQuantityLabel')}
               </label>
               <input
                 type="number"
@@ -343,12 +359,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-[12px] font-semibold text-[#0b1c30] flex items-center gap-1.5">
                 <ImageIcon className="w-3.5 h-3.5 text-[#006b2c]" />
-                Product Image URL *
+                {t('presetImageLabel')}
               </label>
-              <span className="text-[11px] text-[#64748b] flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-[#006b2c]" />
-                Quick presets below
-              </span>
             </div>
 
             <div className="flex gap-2 items-center">
@@ -392,14 +404,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           {/* Description */}
           <div className="space-y-1">
             <label className="text-[12px] font-semibold text-[#0b1c30]">
-              Product Description *
+              {t('productDescriptionLabel')}
             </label>
             <textarea
               rows={3}
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Fresh farm harvested daily, pesticide free, packaged cleanly in recyclable container."
+              placeholder={t('productDescriptionPlaceholder')}
               className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
             />
           </div>
@@ -411,14 +423,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0b1c30] transition-colors cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
               className="px-5 py-2 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-semibold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
-              <span>Add to Storefront</span>
+              <span>{t('addProductSubmitBtn')}</span>
             </button>
           </div>
         </form>

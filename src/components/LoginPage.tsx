@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from './LanguageSelector';
 import { BRAND_LOGO_URL } from '../data/products';
 import { DEMO_CUSTOMER_EMAIL, DEMO_CUSTOMER_PASSWORD } from '../services/authService';
 import {
@@ -29,6 +31,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onNavigateToAdmin,
 }) => {
   const { login, requestReset } = useAuth();
+  const { t } = useLanguage();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -47,12 +50,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage(null);
 
     if (!identifier.trim()) {
-      setErrorMessage('Please enter your email or User ID.');
+      setErrorMessage(t('userIdEmail'));
       return;
     }
 
     if (!password) {
-      setErrorMessage('Please enter your password.');
+      setErrorMessage(t('password'));
       return;
     }
 
@@ -94,21 +97,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-12">
       {/* Top Banner Navigation */}
-      <div className="w-full max-w-md mb-4 flex items-center justify-between">
+      <div className="w-full max-w-md mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#006b2c] bg-[#eff4ff] px-3 py-1 rounded-full border border-[#cbd5e1]/50">
           <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
-          <span>Customer Access Portal</span>
+          <span>{t('customerAccessPortal')}</span>
         </div>
 
-        {onNavigateToAdmin && (
-          <button
-            type="button"
-            onClick={onNavigateToAdmin}
-            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors cursor-pointer"
-          >
-            <span>Ops &amp; Admin Portal →</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <LanguageSelector variant="light" compact={true} idPrefix="login-lang" />
+          {onNavigateToAdmin && (
+            <button
+              type="button"
+              onClick={onNavigateToAdmin}
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors cursor-pointer"
+            >
+              <span>{t('opsAdminPortalLink')}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Login Card */}
@@ -123,10 +129,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             />
           </div>
           <h1 className="text-[24px] sm:text-[28px] font-bold text-[#0b1c30] font-display">
-            Welcome to FreshCart
+            {t('welcomeToFreshCart')}
           </h1>
           <p className="text-[13px] text-[#565e74] mt-1.5">
-            Log in to manage orders, live deliveries, and saved fresh grocery carts
+            {t('loginSubtitle')}
           </p>
 
           {/* 1-Click Demo Login Pill */}
@@ -138,7 +144,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               title="Auto-fill pre-seeded customer credentials"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#006b2c]" />
-              <span>Click to auto-fill Demo Customer Account</span>
+              <span>{t('clickDemoAccount')}</span>
             </button>
           </div>
         </div>
@@ -162,7 +168,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               htmlFor="customer-email"
               className="block text-[12px] font-semibold text-[#0b1c30]"
             >
-              User ID / Email Address
+              {t('userIdEmail')}
             </label>
             <div className="relative flex items-center">
               <Mail className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -189,7 +195,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 htmlFor="customer-password"
                 className="block text-[12px] font-semibold text-[#0b1c30]"
               >
-                Password
+                {t('password')}
               </label>
               <button
                 type="button"
@@ -201,7 +207,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 }}
                 className="text-[12px] font-semibold text-[#006b2c] hover:underline cursor-pointer"
               >
-                Forgot Password?
+                {t('forgotPassword')}
               </button>
             </div>
             <div className="relative flex items-center">
@@ -246,11 +252,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             {isSubmitting ? (
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                <span>Authenticating Customer...</span>
+                <span>{t('authenticatingCustomer')}</span>
               </div>
             ) : (
               <>
-                <span>Log In &amp; Continue to Store</span>
+                <span>{t('logInContinue')}</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -259,21 +265,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           {/* Security Assurance Tag */}
           <div className="flex items-center justify-center gap-2 text-[11px] text-[#565e74] pt-1">
             <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
-            <span>Encrypted Session · SHA-256 Hashed Security</span>
+            <span>{t('encryptedSession')}</span>
           </div>
         </form>
 
         {/* Register Account Footer */}
         <div className="bg-[#f8fafc] px-6 sm:px-8 py-4 border-t border-[#e2e8f0] text-center">
           <p className="text-[13px] text-[#565e74]">
-            New to FreshCart?{' '}
+            {t('newToFreshCart')}{' '}
             <button
               type="button"
               id="goto-register-btn"
               onClick={onNavigateToRegister}
               className="font-bold text-[#006b2c] hover:underline cursor-pointer"
             >
-              Create Account / Register
+              {t('createAccountRegister')}
             </button>
           </p>
         </div>
@@ -290,10 +296,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 </div>
                 <div>
                   <h3 className="text-[16px] font-bold text-[#0b1c30] font-display">
-                    Reset Password
+                    {t('resetPassword')}
                   </h3>
                   <p className="text-[11px] text-[#565e74]">
-                    Verify email to receive your password reset token
+                    {t('resetPasswordDesc')}
                   </p>
                 </div>
               </div>
@@ -325,12 +331,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               )}
 
               <p className="text-[13px] text-[#565e74]">
-                Enter the email address registered with your FreshCart account. We will send a secure password reset link.
+                {t('enterRegisteredEmail')}
               </p>
 
               <div className="space-y-1.5">
                 <label className="text-[12px] font-semibold text-[#0b1c30]">
-                  Your Account Email
+                  {t('yourAccountEmail')}
                 </label>
                 <input
                   type="email"
@@ -348,7 +354,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   onClick={() => setShowForgotModal(false)}
                   className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#565e74] hover:bg-[#f1f5f9] transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
@@ -356,9 +362,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   className="px-5 py-2 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-semibold transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   {forgotLoading ? (
-                    <span>Sending Token...</span>
+                    <span>{t('sendingToken')}</span>
                   ) : (
-                    <span>Send Reset Link</span>
+                    <span>{t('sendResetLink')}</span>
                   )}
                 </button>
               </div>

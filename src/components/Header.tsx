@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ViewType } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from './LanguageSelector';
 import {
   BRAND_LOGO_URL,
   AISLE_CATEGORIES,
@@ -41,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectCategory,
 }) => {
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentLocation, setCurrentLocation] = useState('Downtown Supercenter · 30m');
@@ -59,17 +62,29 @@ export const Header: React.FC<HeaderProps> = ({
   const getViewBadgeLabel = () => {
     switch (currentView) {
       case 'storefront':
-        return 'Retail Storefront';
+        return t('navRetailStorefront');
       case 'admin':
-        return 'Ops Portal';
+        return t('navOpsPortal');
       case 'dashboard':
-        return 'Customer Portal';
+        return t('navCustomerPortal');
       case 'login':
-        return 'Sign In';
+        return t('navSignIn');
       case 'register':
-        return 'New Account';
+        return t('navNewAccount');
       default:
-        return 'Retail Storefront';
+        return t('navRetailStorefront');
+    }
+  };
+
+  const getCategoryName = (catId: string, fallback: string) => {
+    switch (catId) {
+      case 'produce': return t('catProduce');
+      case 'dairy': return t('catDairy');
+      case 'bakery': return t('catBakery');
+      case 'beverages': return t('catBeverages');
+      case 'snacks': return t('catSnacks');
+      case 'grains': return t('catGrains');
+      default: return fallback;
     }
   };
 
@@ -110,7 +125,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Navigation className="w-4 h-4 text-[#006b2c] shrink-0" />
                 <div className="flex flex-col text-left">
-                  <span className="text-[11px] text-[#3e4a3d] leading-tight">Delivering to</span>
+                  <span className="text-[11px] text-[#3e4a3d] leading-tight">{t('deliveringTo')}</span>
                   <span className="text-[12px] text-[#0b1c30] font-semibold truncate max-w-[190px] leading-tight flex items-center gap-1">
                     {currentLocation}
                     <ChevronDown className="w-3 h-3 text-[#565e74]" />
@@ -121,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
               {showLocationModal && (
                 <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#e2e8f0] p-3 z-50">
                   <div className="flex items-center justify-between pb-2 border-b border-[#e2e8f0]">
-                    <span className="text-[12px] font-bold text-[#0b1c30]">Select Delivery Hub</span>
+                    <span className="text-[12px] font-bold text-[#0b1c30]">{t('selectDeliveryHub')}</span>
                     <button
                       onClick={() => setShowLocationModal(false)}
                       className="text-[#565e74] hover:text-[#0b1c30] cursor-pointer"
@@ -158,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
             {currentView === 'login' || currentView === 'register' ? (
               <div className="text-center hidden md:block">
                 <span className="text-[12px] font-medium text-[#565e74]">
-                  Farm-fresh grocery harvest · 30-min neighborhood express delivery
+                  {t('tagline')}
                 </span>
               </div>
             ) : (
@@ -169,7 +184,7 @@ export const Header: React.FC<HeaderProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder="Search fresh vegetables, organic milk, fruits, artisanal bakery..."
+                  placeholder={t('searchPlaceholder')}
                   className="w-full pl-9 pr-8 py-2 rounded-lg bg-white font-body text-[13px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] shadow-xs border border-[#e2e8f0]"
                 />
                 {searchQuery && (
@@ -187,7 +202,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right Action Controls */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Global Language Selector */}
+            <LanguageSelector variant="light" compact={true} idPrefix="header-lang" />
+
             {/* Toggle between Storefront/Login & Admin Portal */}
             <button
               id="toggle-admin-portal-btn"
@@ -211,12 +229,12 @@ export const Header: React.FC<HeaderProps> = ({
               {currentView === 'admin' ? (
                 <>
                   <Store className="w-4 h-4" />
-                  <span>{currentUser ? 'Retail Storefront' : 'Customer Login'}</span>
+                  <span>{currentUser ? t('navRetailStorefront') : t('navSignIn')}</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Admin Portal</span>
+                  <span>{t('navAdminPortal')}</span>
                 </>
               )}
             </button>
@@ -230,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] transition-colors text-[12px] font-semibold shadow-xs cursor-pointer"
               >
                 <ShoppingCart className="w-4 h-4" />
-                <span className="hidden sm:inline">Cart</span>
+                <span className="hidden sm:inline">{t('cart')}</span>
                 <span
                   id="header-cart-count"
                   className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold"
@@ -262,7 +280,7 @@ export const Header: React.FC<HeaderProps> = ({
                       {currentUser.name}
                     </span>
                     <span className="text-[10px] text-[#006b2c] font-semibold leading-tight">
-                      My Dashboard
+                      {t('myDashboard')}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-[#565e74]" />
@@ -285,7 +303,7 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#0b1c30] hover:bg-[#eff4ff] hover:text-[#006b2c] flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
                       <User className="w-4 h-4 text-[#006b2c]" />
-                      <span>Customer Dashboard</span>
+                      <span>{t('navCustomerPortal')}</span>
                     </button>
 
                     <button
@@ -298,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#0b1c30] hover:bg-[#eff4ff] hover:text-[#006b2c] flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
                       <Truck className="w-4 h-4 text-[#006b2c]" />
-                      <span>My Orders &amp; Tracking</span>
+                      <span>{t('myOrdersTracking')}</span>
                     </button>
 
                     <div className="border-t border-[#e2e8f0] mt-1 pt-1">
@@ -313,7 +331,7 @@ export const Header: React.FC<HeaderProps> = ({
                         className="w-full text-left px-3 py-2 rounded-xl text-[12px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2] flex items-center gap-2.5 transition-colors cursor-pointer"
                       >
                         <LogOut className="w-4 h-4" />
-                        <span>Log Out</span>
+                        <span>{t('logOut')}</span>
                       </button>
                     </div>
                   </div>
@@ -326,7 +344,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onToggleView('register')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] text-white hover:bg-[#00873a] text-[12px] font-semibold transition-all shadow-2xs cursor-pointer"
               >
-                <span>Register</span>
+                <span>{t('navRegister')}</span>
               </button>
             ) : (
               <button
@@ -336,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#006b2c] hover:bg-[#eff4ff] border border-[#cbd5e1] text-[12px] font-semibold transition-all shadow-2xs cursor-pointer"
               >
                 <User className="w-4 h-4 text-[#006b2c]" />
-                <span>Sign In</span>
+                <span>{t('navSignIn')}</span>
               </button>
             )}
           </div>
@@ -355,7 +373,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-[#3e4a3d] hover:bg-[#dce9ff] hover:text-[#0b1c30]'
                 }`}
               >
-                All Aisles
+                {t('allAisles')}
               </button>
               {AISLE_CATEGORIES.map((cat) => (
                 <button
@@ -368,7 +386,7 @@ export const Header: React.FC<HeaderProps> = ({
                       : 'text-[#3e4a3d] hover:bg-[#dce9ff] hover:text-[#0b1c30]'
                   }`}
                 >
-                  {cat.name}
+                  {getCategoryName(cat.id, cat.name)}
                 </button>
               ))}
             </nav>

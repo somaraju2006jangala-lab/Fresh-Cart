@@ -10,6 +10,7 @@ import {
   X,
   Check,
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface HeroSectionProps {
   onSearch: (term: string) => void;
@@ -26,6 +27,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onApplyCoupon,
   appliedCoupon,
 }) => {
+  const { t } = useLanguage();
   const [showBanner, setShowBanner] = useState(true);
   const [heroSearch, setHeroSearch] = useState('');
   const [couponCopied, setCouponCopied] = useState(false);
@@ -61,7 +63,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="flex items-center gap-2 mx-auto text-[12px] sm:text-[13px] flex-wrap justify-center">
             <ShoppingBag className="w-4 h-4 text-[#7ffc97] shrink-0" />
             <span>
-              Welcome to FreshCart! Use coupon code{' '}
+              {t('promoBannerText')}{' '}
               <button
                 type="button"
                 onClick={handleCopyCoupon}
@@ -71,18 +73,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 FRESH30
                 {couponCopied || appliedCoupon === 'FRESH30' ? (
                   <span className="text-[10px] bg-[#7ffc97] text-[#002109] px-1.5 py-0.2 rounded-full font-bold ml-1">
-                    APPLIED!
+                    {t('promoApplied')}
                   </span>
                 ) : (
                   <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-sm ml-0.5">
-                    Click to apply
+                    {t('promoClickToApply')}
                   </span>
                 )}
               </button>{' '}
-              for 30% off your first certified organic farm order.
+              {t('promoDiscountText')}
             </span>
             <span className="hidden md:inline-flex items-center gap-1 text-[11px] bg-[#006b2c] text-white px-2 py-0.5 rounded-full font-semibold ml-1">
-              Min ₹499 Order
+              {t('promoMinOrder')}
             </span>
           </div>
           <button
@@ -105,17 +107,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#006b2c]" />
             </span>
             <span className="font-medium">
-              ⚡ Real-time inventory synchronization active with Store #104 MongoDB cluster
+              {t('tickerSync')}
             </span>
           </div>
           <div className="flex items-center gap-4 text-[#565e74]">
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-[#006b2c]" />
-              Avg Delivery: 24 mins
+              {t('tickerAvgDelivery')}
             </span>
             <span className="flex items-center gap-1">
               <Thermometer className="w-3.5 h-3.5 text-[#825100]" />
-              Active Cold-Chain Validated (3.8°C)
+              {t('tickerColdChain')}
             </span>
           </div>
         </div>
@@ -128,16 +130,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="lg:col-span-7 space-y-4">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#e5eeff] text-[#131b2e] text-[12px] font-semibold">
               <Sprout className="w-4 h-4 text-[#006b2c]" />
-              <span>Zero-Pesticide Local Harvesters • Direct Daily Batch</span>
+              <span>{t('heroBadge')}</span>
             </div>
 
             <h1 className="text-[34px] sm:text-[44px] text-[#0b1c30] tracking-tight leading-tight font-extrabold font-display">
-              Farm–Fresh Groceries Delivered in{' '}
-              <span className="text-[#006b2c] italic">30 Mins</span>
+              {t('heroHeadingLine1')} {t('heroHeadingLine2')}{' '}
+              <span className="text-[#006b2c] italic">{t('heroHeadingMinutes')}</span>
             </h1>
 
             <p className="text-[15px] sm:text-[16px] text-[#3e4a3d] leading-relaxed max-w-2xl font-body">
-              Shop crisp organic produce, local farm dairy, fresh artisanal bakery items, and pantry essentials with real-time live stock guarantees straight from the refrigeration facility.
+              {t('heroSubheading')}
             </p>
 
             {/* Quick Hero Search Input */}
@@ -150,21 +152,21 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   type="text"
                   value={heroSearch}
                   onChange={(e) => setHeroSearch(e.target.value)}
-                  placeholder="Search sweet honeydew, farm eggs, pasture-fed kefir..."
+                  placeholder={t('heroSearchPlaceholder')}
                   className="w-full pl-2.5 pr-24 py-3 bg-transparent text-[14px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden"
                 />
                 <button
                   type="submit"
                   className="absolute right-1.5 top-1.5 bottom-1.5 px-4 rounded-lg bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>Find</span>
+                  <span>{t('find')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
 
               {/* Trending suggestions */}
               <div className="flex flex-wrap items-center gap-2 pt-2 px-1 text-[#565e74] text-[11px] sm:text-[12px]">
-                <span className="text-[#6e7b6c] font-medium">Trending:</span>
+                <span className="text-[#6e7b6c] font-medium">{t('trending')}</span>
                 {trendingTerms.map((term) => (
                   <button
                     key={term}
@@ -192,7 +194,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                All Aisles
+                {t('allAisles')}
               </button>
               <button
                 type="button"
@@ -203,7 +205,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                Fruits & Vegetables
+                {t('catProduce')}
               </button>
               <button
                 type="button"
@@ -214,7 +216,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                Dairy & Eggs
+                {t('catDairy')}
               </button>
               <button
                 type="button"
@@ -225,7 +227,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                Bakery
+                {t('catBakery')}
               </button>
               <button
                 type="button"
@@ -236,7 +238,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                Beverages
+                {t('catBeverages')}
               </button>
               <button
                 type="button"
@@ -247,7 +249,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
                 }`}
               >
-                Pantry & Grains
+                {t('catGrains')}
               </button>
             </div>
           </div>

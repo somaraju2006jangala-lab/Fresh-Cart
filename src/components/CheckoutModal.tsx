@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem, CustomerOrder } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { formatINR } from '../utils/currency';
 import {
   X,
@@ -34,6 +35,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onOrderPlaced,
 }) => {
   const { currentUser, addOrder } = useAuth();
+  const { t } = useLanguage();
   const [step, setStep] = useState<'details' | 'success'>('details');
   const [address, setAddress] = useState(
     currentUser?.address || '742 Evergreen Terrace, Apt 4B'
@@ -112,12 +114,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
             <div>
               <h2 className="text-[17px] font-bold text-[#0b1c30] font-display">
-                {step === 'details' ? 'Express 30-Min Checkout' : 'Order Dispatched!'}
+                {step === 'details' ? t('expressCheckout') : t('orderConfirmed')}
               </h2>
               <p className="text-[11px] text-[#565e74]">
                 {step === 'details'
-                  ? 'Store #104 Cold-Chain Fulfillment Hub'
-                  : `Order ID: #${orderNumber}`}
+                  ? t('thirtyMinDelivery')
+                  : `${t('orderNumber')}: #${orderNumber}`}
               </p>
             </div>
           </div>
@@ -137,10 +139,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="bg-[#eff4ff] border border-[#d3e4fe] p-3 rounded-xl flex items-center justify-between text-[12px]">
               <div className="flex items-center gap-2 text-[#006b2c] font-semibold">
                 <Clock className="w-4 h-4 text-[#006b2c]" />
-                <span>Estimated Arrival: 24–30 Mins</span>
+                <span>{t('estimatedArrival')}: {t('minsArrival')}</span>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[10px] font-bold">
-                Direct Runner
+                Store #104
               </span>
             </div>
 
@@ -148,7 +150,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-[#0b1c30] flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-[#006b2c]" />
-                Delivery Address
+                {t('deliveryAddress')}
               </label>
               <input
                 type="text"
@@ -156,20 +158,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-[#f8f9ff] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
-                placeholder="Apartment, building, street..."
+                placeholder={t('deliveryAddressPlaceholder')}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-[#0b1c30]">
-                Fulfillment Instructions (Optional)
+                {t('fulfillmentNotes')}
               </label>
               <input
                 type="text"
                 value={deliveryNote}
                 onChange={(e) => setDeliveryNote(e.target.value)}
                 className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-[#f8f9ff] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
-                placeholder="e.g. Ring bell, leave in insulated cooler..."
+                placeholder={t('fulfillmentNotesPlaceholder')}
               />
             </div>
 
@@ -177,7 +179,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-[#0b1c30] flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5 text-[#006b2c]" />
-                Payment Method
+                {t('paymentMethod')}
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -189,7 +191,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       : 'border-[#e2e8f0] bg-white text-[#565e74] hover:bg-[#f8f9ff]'
                   }`}
                 >
-                  ⚡ Express Pay
+                  {t('payApplePay')}
                 </button>
                 <button
                   type="button"
@@ -200,7 +202,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       : 'border-[#e2e8f0] bg-white text-[#565e74] hover:bg-[#f8f9ff]'
                   }`}
                 >
-                  Credit Card
+                  {t('payCard')}
                 </button>
                 <button
                   type="button"
@@ -211,7 +213,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       : 'border-[#e2e8f0] bg-white text-[#565e74] hover:bg-[#f8f9ff]'
                   }`}
                 >
-                  Pay on Delivery
+                  {t('payCod')}
                 </button>
               </div>
             </div>
@@ -219,7 +221,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Order Items Review */}
             <div className="bg-[#f8fafc] p-3 rounded-xl border border-[#e2e8f0] space-y-1.5">
               <span className="text-[11px] font-bold uppercase text-[#565e74] tracking-wider">
-                Order Items ({items.length})
+                {t('orderSummary', { count: items.length })}
               </span>
               <div className="max-h-28 overflow-y-auto space-y-1 pr-1 text-[12px]">
                 {items.map((it) => (
@@ -234,7 +236,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 ))}
               </div>
               <div className="pt-2 border-t border-[#e2e8f0] flex justify-between font-bold text-[14px]">
-                <span>Total Amount Due</span>
+                <span>{t('total')}</span>
                 <span className="text-[#006b2c] font-display tabular-nums">
                   {formatINR(total)}
                 </span>
@@ -250,10 +252,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Routing to Pod #104...
+                  {t('processingOrder')}
                 </span>
               ) : (
-                <span>Pay {formatINR(total)} &amp; Place Order</span>
+                <span>{t('placeOrder', { total: formatINR(total) })}</span>
               )}
             </button>
           </form>
@@ -266,10 +268,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             <div>
               <h3 className="text-[20px] font-bold text-[#0b1c30] font-display">
-                Order Successfully Placed!
+                {t('orderConfirmed')}
               </h3>
               <p className="text-[13px] text-[#565e74] mt-1">
-                Your order is being picked at cold-chain Pod #104.
+                {t('orderPlacedSuccess')}
               </p>
             </div>
 
@@ -355,7 +357,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#eff4ff] text-[#006b2c] border border-[#d3e4fe] text-[13px] font-semibold hover:bg-[#dce9ff] transition-colors cursor-pointer"
                 >
-                  View in Customer Dashboard
+                  {t('trackInDashboard')}
                 </button>
               )}
               <button
@@ -364,7 +366,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 onClick={handleDone}
                 className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors cursor-pointer"
               >
-                Continue Shopping
+                {t('continueShopping')}
               </button>
             </div>
           </div>

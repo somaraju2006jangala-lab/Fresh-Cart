@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { CartItem, Product, CustomerAddress } from '../types';
 import { formatINR } from '../utils/currency';
 import {
@@ -44,6 +45,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onLogout,
 }) => {
   const { currentUser, orders, updateProfile, addAddress, removeAddress } = useAuth();
+  const { t } = useLanguage();
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'Pending': return t('statusPending');
+      case 'Picking at Pod #104': return t('statusPicking');
+      case 'Cold-Chain En Route': return t('statusColdChain');
+      case 'Delivered': return t('statusDelivered');
+      default: return status;
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'orders' | 'history' | 'profile' | 'addresses' | 'cart'>('orders');
 
@@ -109,7 +121,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     orderItems.forEach((it) => {
       onAddToCart(it.product, it.quantity);
     });
-    setReorderToast(`Re-added ${orderItems.length} items from #${orderId} into your cart!`);
+    setReorderToast(t('reorderToastMsg', { count: orderItems.length, id: orderId }));
     setTimeout(() => setReorderToast(null), 3500);
   };
 
@@ -126,7 +138,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       {profileSavedToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-[13px] font-semibold animate-in slide-in-from-bottom-4 duration-200">
           <CheckCircle2 className="w-4 h-4 text-[#7ffc97]" />
-          <span>Profile changes saved successfully!</span>
+          <span>{t('profileSavedMsg')}</span>
         </div>
       )}
 
@@ -139,11 +151,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#cbd5e1] text-[#0b1c30] hover:bg-[#f1f5f9] text-[12px] font-semibold transition-colors cursor-pointer"
           >
             <Store className="w-4 h-4 text-[#006b2c]" />
-            <span>Back to Storefront</span>
+            <span>{t('backToStorefrontBtn')}</span>
           </button>
           <span className="text-[12px] text-[#565e74]">/</span>
           <span className="text-[13px] font-semibold text-[#006b2c]">
-            Customer Account Dashboard
+            {t('customerAccountDashboard')}
           </span>
         </div>
 
@@ -155,7 +167,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-[#fecaca] bg-white text-[#b91c1c] hover:bg-[#fef2f2] text-[12px] font-semibold transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Log Out</span>
+            <span>{t('logOut')}</span>
           </button>
         </div>
       </div>
@@ -178,17 +190,17 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider bg-[#7ffc97] text-[#002109] px-2.5 py-0.5 rounded-full">
-                  {currentUser.loyaltyTier || 'Verified Customer'}
+                  {currentUser.loyaltyTier || t('verifiedCustomer')}
                 </span>
                 <span className="text-white/70 text-[12px] hidden sm:inline">
-                  Member since {new Date(currentUser.createdAt).toLocaleDateString()}
+                  {t('memberSince', { date: new Date(currentUser.createdAt).toLocaleDateString() })}
                 </span>
               </div>
               <h1
                 id="customer-dashboard-greeting"
                 className="text-[24px] sm:text-[30px] font-extrabold font-display tracking-tight text-white mt-1"
               >
-                Welcome back, {currentUser.name}!
+                {t('welcomeBack', { name: currentUser.name })}
               </h1>
               <p className="text-white/80 text-[13px] flex items-center gap-3 mt-1">
                 <span className="flex items-center gap-1">
@@ -211,21 +223,21 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <div className="text-[20px] font-bold font-display text-white">
                 {activeOrders.length}
               </div>
-              <div className="text-[11px] text-white/75">Active Deliveries</div>
+              <div className="text-[11px] text-white/75">{t('activeDeliveriesCount')}</div>
             </div>
             <div className="w-px h-8 bg-white/20" />
             <div className="text-center px-2 sm:px-3">
               <div className="text-[20px] font-bold font-display text-white">
                 {orders.length}
               </div>
-              <div className="text-[11px] text-white/75">Total Orders</div>
+              <div className="text-[11px] text-white/75">{t('totalOrdersCount')}</div>
             </div>
             <div className="w-px h-8 bg-white/20" />
             <div className="text-center px-2 sm:px-3">
               <div className="text-[20px] font-bold font-display text-[#7ffc97]">
                 {cartItemCount}
               </div>
-              <div className="text-[11px] text-white/75">Cart Items</div>
+              <div className="text-[11px] text-white/75">{t('cartItemsCount')}</div>
             </div>
           </div>
         </div>
@@ -248,7 +260,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Truck className="w-4 h-4" />
-                <span>My Orders</span>
+                <span>{t('tabMyOrders')}</span>
               </div>
               {activeOrders.length > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-[#006b2c] text-white text-[11px] font-bold">
@@ -269,7 +281,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Clock className="w-4 h-4" />
-                <span>Order History</span>
+                <span>{t('tabOrderHistory')}</span>
               </div>
               <span className="text-[11px] text-[#565e74] font-medium">
                 {pastOrders.length}
@@ -288,7 +300,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <ShoppingCart className="w-4 h-4" />
-                <span>Cart Overview</span>
+                <span>{t('tabCartOverview')}</span>
               </div>
               {cartItemCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold">
@@ -309,7 +321,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <User className="w-4 h-4" />
-                <span>Profile Information</span>
+                <span>{t('tabProfileSettings')}</span>
               </div>
             </button>
 
@@ -325,7 +337,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <MapPin className="w-4 h-4" />
-                <span>Saved Addresses</span>
+                <span>{t('tabSavedAddresses')}</span>
               </div>
               <span className="text-[11px] text-[#565e74] font-medium">
                 {(currentUser.savedAddresses || []).length}
@@ -370,17 +382,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <Package className="w-6 h-6" />
                   </div>
                   <h3 className="text-[16px] font-bold text-[#0b1c30]">
-                    No Active Orders in Transit
+                    {t('noActiveOrders')}
                   </h3>
-                  <p className="text-[13px] text-[#565e74] max-w-md mx-auto">
-                    You do not have any orders currently being picked or delivered. Start shopping farm-fresh produce to place a new order!
-                  </p>
                   <button
                     type="button"
                     onClick={onBackToStorefront}
                     className="mt-2 px-4 py-2 bg-[#006b2c] text-white text-[13px] font-semibold rounded-xl hover:bg-[#00873a] transition-colors cursor-pointer"
                   >
-                    Explore Fresh Storefront
+                    {t('backToStorefrontBtn')}
                   </button>
                 </div>
               ) : (
@@ -397,7 +406,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             Order #{order.id}
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
-                            ● {order.status}
+                            ● {getStatusLabel(order.status)}
                           </span>
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5 flex items-center gap-3">
@@ -536,7 +545,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
               {pastOrders.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-[#e2e8f0] p-10 text-center text-[#565e74]">
-                  No past orders found in your account history.
+                  {t('noPastOrders')}
                 </div>
               ) : (
                 pastOrders.map((order) => (
@@ -551,7 +560,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             Order #{order.id}
                           </span>
                           <span className="px-2 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] text-[11px] font-bold">
-                            ✓ {order.status}
+                            ✓ {getStatusLabel(order.status)}
                           </span>
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5">
@@ -577,7 +586,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           title="Add all items from this order into your current cart"
                         >
                           <RotateCcw className="w-3.5 h-3.5 text-[#006b2c]" />
-                          <span>Reorder All</span>
+                          <span>{t('reorderItems')}</span>
                         </button>
                       </div>
                     </div>
@@ -635,16 +644,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               {cart.length === 0 ? (
                 <div className="text-center py-12 space-y-3">
                   <ShoppingCart className="w-12 h-12 text-[#94a3b8] mx-auto" />
-                  <h3 className="text-[16px] font-bold text-[#0b1c30]">Your Cart is Empty</h3>
+                  <h3 className="text-[16px] font-bold text-[#0b1c30]">{t('emptyCartTitle')}</h3>
                   <p className="text-[13px] text-[#565e74]">
-                    Add produce, dairy, bakery, or pantry goods to start an order.
+                    {t('emptyCartDesc')}
                   </p>
                   <button
                     type="button"
                     onClick={onBackToStorefront}
                     className="mt-2 px-4 py-2 bg-[#006b2c] text-white text-[13px] font-semibold rounded-xl hover:bg-[#00873a] transition-colors cursor-pointer"
                   >
-                    Browse Produce Aisle
+                    {t('startShopping')}
                   </button>
                 </div>
               ) : (
@@ -723,7 +732,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#cbd5e1] text-[#0b1c30] hover:bg-[#f8fafc] text-[12px] font-semibold transition-colors cursor-pointer"
                   >
                     <Edit3 className="w-3.5 h-3.5 text-[#006b2c]" />
-                    <span>Edit Profile</span>
+                    <span>{t('editProfile')}</span>
                   </button>
                 )}
               </div>
@@ -777,14 +786,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       type="submit"
                       className="px-5 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-semibold transition-colors cursor-pointer"
                     >
-                      Save Profile Changes
+                      {t('saveChanges')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsEditingProfile(false)}
                       className="px-4 py-2.5 rounded-xl text-[#565e74] hover:bg-[#f1f5f9] text-[13px] font-medium transition-colors cursor-pointer"
                     >
-                      Cancel
+                      {t('cancel')}
                     </button>
                   </div>
                 </form>
@@ -846,7 +855,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <div className="flex items-center justify-between pb-4 border-b border-[#e5eeff]">
                 <div>
                   <h2 className="text-[20px] font-bold text-[#0b1c30] font-display">
-                    Saved Delivery Addresses
+                    {t('savedAddressesHeading')}
                   </h2>
                   <p className="text-[13px] text-[#565e74]">
                     Fast 30-min destination addresses for homes, apartments, and offices
@@ -858,7 +867,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add New Address</span>
+                  <span>{t('addNewAddress')}</span>
                 </button>
               </div>
 
@@ -881,7 +890,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </span>
                         {addr.isDefault && (
                           <span className="px-2 py-0.5 rounded-full bg-[#006b2c] text-white text-[10px] font-bold">
-                            Default
+                            {t('defaultAddressBadge')}
                           </span>
                         )}
                       </div>
@@ -972,13 +981,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           onClick={() => setShowAddAddressModal(false)}
                           className="px-4 py-2 text-[13px] font-medium text-[#565e74] hover:bg-[#f1f5f9] rounded-lg cursor-pointer"
                         >
-                          Cancel
+                          {t('cancel')}
                         </button>
                         <button
                           type="submit"
                           className="px-5 py-2 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-semibold cursor-pointer"
                         >
-                          Save Address
+                          {t('saveAddressBtn')}
                         </button>
                       </div>
                     </form>

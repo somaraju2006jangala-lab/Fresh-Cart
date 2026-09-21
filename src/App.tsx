@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, CartItem, InventoryLog, ViewType } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
@@ -38,6 +39,7 @@ const LEGACY_UNIT_MAP: Record<string, string> = {
 
 function FreshCartStore() {
   const { currentUser, isLoading, logout } = useAuth();
+  const { t } = useLanguage();
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const savedV2 = localStorage.getItem(STORAGE_PRODUCTS_KEY);
@@ -401,7 +403,7 @@ function FreshCartStore() {
       <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]">
         <div className="flex flex-col items-center gap-3">
           <span className="w-8 h-8 border-3 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
-          <span className="text-[13px] font-semibold text-[#565e74]">Loading FreshCart...</span>
+          <span className="text-[13px] font-semibold text-[#565e74]">{t('loading')}</span>
         </div>
       </div>
     );
@@ -496,10 +498,10 @@ function FreshCartStore() {
                 <div>
                   <div className="flex items-center gap-1.5 text-[#006b2c] text-[11px] uppercase tracking-wider font-bold">
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Live Synchronized Produce &amp; Staples</span>
+                    <span>{t('liveProduceHeader')}</span>
                   </div>
                   <h2 className="text-[26px] sm:text-[32px] text-[#0b1c30] font-bold font-display">
-                    Featured Harvest &amp; Daily Goods
+                    {t('featuredHarvestTitle')}
                   </h2>
                 </div>
 
@@ -514,7 +516,7 @@ function FreshCartStore() {
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
-                    All Live Stock
+                    {t('filterAllStock')}
                   </button>
                   <button
                     type="button"
@@ -525,7 +527,7 @@ function FreshCartStore() {
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
-                    Organic Only
+                    {t('filterOrganicOnly')}
                   </button>
                   <button
                     type="button"
@@ -536,7 +538,7 @@ function FreshCartStore() {
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
-                    Quick Meal Prep
+                    {t('filterQuickPrep')}
                   </button>
                 </div>
               </div>
@@ -546,10 +548,10 @@ function FreshCartStore() {
                 <div className="text-center py-16 bg-white rounded-2xl border border-[#e2e8f0] p-8">
                   <Sparkles className="w-10 h-10 text-[#006b2c] mx-auto mb-3 opacity-60" />
                   <h3 className="text-[18px] font-bold text-[#0b1c30]">
-                    No items found matching your filter
+                    {t('noItemsFound')}
                   </h3>
                   <p className="text-[13px] text-[#565e74] mt-1 max-w-md mx-auto">
-                    Try clearing the search &quot;{searchQuery}&quot; or resetting the category selection.
+                    {t('tryClearingSearch', { query: searchQuery })}
                   </p>
                   <button
                     type="button"
@@ -560,7 +562,7 @@ function FreshCartStore() {
                     }}
                     className="mt-4 px-4 py-2 bg-[#006b2c] text-white text-[12px] font-semibold rounded-lg hover:bg-[#00873a] transition-colors cursor-pointer"
                   >
-                    Reset All Filters
+                    {t('resetAllFilters')}
                   </button>
                 </div>
               ) : (
@@ -646,8 +648,10 @@ function FreshCartStore() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <FreshCartStore />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <FreshCartStore />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../types';
 import { formatINR } from '../utils/currency';
 import { Plus, Minus, ShoppingCart, Check } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ProductCardProps {
   product: Product;
@@ -14,6 +15,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onAddToCart,
   onOpenDetails,
 }) => {
+  const { t } = useLanguage();
   const [qty, setQty] = useState(1);
   const [addedAnim, setAddedAnim] = useState(false);
 
@@ -68,17 +70,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {isOutOfStock ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#ba1a1a]" />
-                Unavailable
+                {t('unavailable')}
               </span>
             ) : isLowStock ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffddb8] text-[#825100] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#825100]" />
-                Only {product.stock} available
+                {t('onlyAvailableStock', { stock: product.stock })}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-semibold shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#006b2c]" />
-                Available: {product.stock}
+                {t('availableStock', { stock: product.stock })}
               </span>
             )}
           </div>
@@ -97,7 +99,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {product.title}
           </h3>
           <div className="text-[12px] text-[#565e74] mt-0.5">
-            Available: <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? 'pack' : 'packs'} ({product.unit})
+            {t('availableStock', { stock: product.stock })} {product.stock === 1 ? t('pack') : t('packs')} ({product.unit})
           </div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-[20px] font-bold text-[#0b1c30] tabular-nums font-display">
@@ -116,7 +118,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             disabled
             className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed border border-[#e2e8f0]"
           >
-            <span>Unavailable</span>
+            <span>{t('unavailable')}</span>
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -157,12 +159,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {addedAnim ? (
                 <>
                   <Check className="w-4 h-4 text-[#7ffc97]" />
-                  <span>Added!</span>
+                  <span>{t('added')}</span>
                 </>
               ) : (
                 <>
                   <ShoppingCart className="w-4 h-4" />
-                  <span>Add</span>
+                  <span>{t('add')}</span>
                 </>
               )}
             </button>

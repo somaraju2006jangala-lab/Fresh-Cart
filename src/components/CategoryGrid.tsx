@@ -9,6 +9,7 @@ import {
   Wheat,
   ChevronRight,
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface CategoryGridProps {
   selectedCategory: string;
@@ -19,6 +20,20 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
   selectedCategory,
   onSelectCategory,
 }) => {
+  const { t } = useLanguage();
+
+  const getCategoryName = (id: string, fallback: string) => {
+    switch (id) {
+      case 'produce': return t('catProduce');
+      case 'dairy': return t('catDairy');
+      case 'bakery': return t('catBakery');
+      case 'beverages': return t('catBeverages');
+      case 'snacks': return t('catSnacks');
+      case 'grains': return t('catGrains');
+      default: return fallback;
+    }
+  };
+
   const getCategoryIcon = (id: string) => {
     switch (id) {
       case 'produce':
@@ -43,10 +58,10 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
       <div className="flex items-end justify-between mb-5">
         <div>
           <span className="text-[11px] text-[#006b2c] tracking-widest uppercase font-bold">
-            Curated Catalog
+            {t('curatedCatalog')}
           </span>
           <h2 className="text-[26px] sm:text-[30px] text-[#0b1c30] font-bold font-display">
-            Shop by Fresh Category
+            {t('shopByCategory')}
           </h2>
         </div>
         <button
@@ -54,7 +69,7 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
           onClick={() => onSelectCategory('all')}
           className="text-[13px] text-[#006b2c] hover:underline font-semibold flex items-center gap-1 group cursor-pointer"
         >
-          <span>View all 18 aisles</span>
+          <span>{t('viewAllAisles')}</span>
           <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
         </button>
       </div>
@@ -83,10 +98,10 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
               </div>
               <div className="text-center">
                 <h3 className="text-[14px] font-semibold text-[#0b1c30] leading-tight">
-                  {cat.name}
+                  {getCategoryName(cat.id, cat.name)}
                 </h3>
                 <span className="text-[11px] text-[#565e74] mt-0.5 block">
-                  {cat.count} items
+                  {t('itemsCount', { count: cat.count })}
                 </span>
               </div>
             </button>
