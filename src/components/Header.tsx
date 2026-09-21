@@ -203,8 +203,10 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Action Controls */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Global Language Selector */}
-            <LanguageSelector variant="light" compact={true} idPrefix="header-lang" />
+            {/* Customer Portal Language Selector (Only shown after customer successfully logs in) */}
+            {currentUser && currentView !== 'login' && currentView !== 'register' && currentView !== 'admin' && (
+              <LanguageSelector variant="light" compact={true} idPrefix="header-lang" />
+            )}
 
             {/* Toggle between Storefront/Login & Admin Portal */}
             <button

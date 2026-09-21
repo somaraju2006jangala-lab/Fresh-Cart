@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
-import { LanguageSelector } from './LanguageSelector';
 import { BRAND_LOGO_URL } from '../data/products';
 import {
   User,
@@ -31,7 +29,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   onNavigateToAdmin,
 }) => {
   const { register } = useAuth();
-  const { t } = useLanguage();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -102,22 +99,19 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-10">
       {/* Top Banner Navigation */}
-      <div className="w-full max-w-lg mb-4 flex items-center justify-between gap-2">
+      <div className="w-full max-w-lg mb-4 flex items-center justify-between">
         <button
           type="button"
           onClick={onNavigateToLogin}
           className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#565e74] hover:text-[#006b2c] transition-colors group cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>{t('backToSignIn')}</span>
+          <span>Back to Sign In</span>
         </button>
 
-        <div className="flex items-center gap-2">
-          <LanguageSelector variant="light" compact={true} idPrefix="reg-lang" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-[#eff4ff] px-2.5 py-1 rounded-full border border-[#cbd5e1]/40">
-            {t('newCustomerRegistration')}
-          </span>
-        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-[#eff4ff] px-2.5 py-1 rounded-full border border-[#cbd5e1]/40">
+          New Customer Registration
+        </span>
       </div>
 
       {/* Main Register Card */}
@@ -132,15 +126,15 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             />
           </div>
           <h1 className="text-[22px] sm:text-[26px] font-bold text-[#0b1c30] font-display">
-            {t('createAccountTitle')}
+            Create FreshCart Account
           </h1>
           <p className="text-[13px] text-[#565e74] mt-1">
-            {t('createAccountSubtitle')}
+            Unlock fast 30-min neighborhood delivery, order history, and exclusive organic perks
           </p>
 
           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-semibold">
             <Sparkles className="w-3 h-3 text-[#16a34a]" />
-            <span>{t('newMemberBonus')}</span>
+            <span>New Member Bonus: 10% Off Your First Order</span>
           </div>
         </div>
 
@@ -163,7 +157,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               htmlFor="reg-name"
               className="block text-[12px] font-semibold text-[#0b1c30]"
             >
-              {t('fullName')} <span className="text-red-500">*</span>
+              Customer Full Name <span className="text-red-500">*</span>
             </label>
             <div className="relative flex items-center">
               <User className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -173,7 +167,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t('fullNamePlaceholder')}
+                placeholder="e.g. Jordan Miller"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
               />
             </div>
@@ -186,7 +180,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 htmlFor="reg-email"
                 className="block text-[12px] font-semibold text-[#0b1c30]"
               >
-                {t('emailUserId')} <span className="text-red-500">*</span>
+                Email / User ID <span className="text-red-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Mail className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -207,7 +201,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 htmlFor="reg-phone"
                 className="block text-[12px] font-semibold text-[#0b1c30]"
               >
-                {t('phoneNumber')}
+                Phone Number
               </label>
               <div className="relative flex items-center">
                 <Phone className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -229,7 +223,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               htmlFor="reg-address"
               className="block text-[12px] font-semibold text-[#0b1c30]"
             >
-              {t('primaryDeliveryAddress')} <span className="text-red-500">*</span>
+              Primary Delivery Address <span className="text-red-500">*</span>
             </label>
             <div className="relative flex items-center">
               <MapPin className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -239,7 +233,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 required
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder={t('primaryDeliveryAddressPlaceholder')}
+                placeholder="Apartment, suite, street address..."
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
               />
             </div>
@@ -252,7 +246,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 htmlFor="reg-password"
                 className="block text-[12px] font-semibold text-[#0b1c30]"
               >
-                {t('password')} <span className="text-red-500">*</span>
+                Password <span className="text-red-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Lock className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -281,7 +275,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 htmlFor="reg-confirm-password"
                 className="block text-[12px] font-semibold text-[#0b1c30]"
               >
-                {t('confirmPassword')} <span className="text-red-500">*</span>
+                Confirm Password <span className="text-red-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <Lock className="absolute left-3.5 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
@@ -310,7 +304,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           {password.length > 0 && (
             <div className="space-y-1.5 p-3 rounded-xl bg-[#f8fafc] border border-[#e2e8f0]">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[#565e74] font-medium">{t('passwordStrength')}</span>
+                <span className="text-[#565e74] font-medium">Password Strength:</span>
                 <span
                   className={`font-bold ${
                     strengthScore <= 1
@@ -320,7 +314,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                       : 'text-emerald-600'
                   }`}
                 >
-                  {strengthScore <= 1 ? t('strengthWeak') : strengthScore <= 3 ? t('strengthGood') : t('strengthStrong')}
+                  {strengthScore <= 1 ? 'Weak' : strengthScore <= 3 ? 'Good' : 'Strong'}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-1.5 h-1.5">
@@ -341,16 +335,16 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[#565e74] pt-1">
                 <span className={hasMinLength ? 'text-emerald-600 font-semibold' : ''}>
-                  {hasMinLength ? '✓' : '•'} {t('pwdMinChars')}
+                  {hasMinLength ? '✓' : '•'} 8+ characters
                 </span>
                 <span className={hasLetter ? 'text-emerald-600 font-semibold' : ''}>
-                  {hasLetter ? '✓' : '•'} {t('pwdLetters')}
+                  {hasLetter ? '✓' : '•'} Letters
                 </span>
                 <span className={hasNumber ? 'text-emerald-600 font-semibold' : ''}>
-                  {hasNumber ? '✓' : '•'} {t('pwdNumbers')}
+                  {hasNumber ? '✓' : '•'} Numbers
                 </span>
                 <span className={hasSpecial ? 'text-emerald-600 font-semibold' : ''}>
-                  {hasSpecial ? '✓' : '•'} {t('pwdSymbols')}
+                  {hasSpecial ? '✓' : '•'} Symbols
                 </span>
               </div>
             </div>
@@ -360,7 +354,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           <div className="p-3 rounded-xl bg-[#eff4ff] border border-[#d3e4fe] flex items-start gap-2 text-[11px] text-[#3b4759]">
             <ShieldCheck className="w-4 h-4 text-[#006b2c] shrink-0 mt-0.5" />
             <span>
-              {t('zeroPlainTextNotice')}
+              <strong>Zero Plain-Text Storage:</strong> FreshCart cryptographically hashes your credentials using Web Crypto SHA-256 + individual salt before saving.
             </span>
           </div>
 
@@ -374,11 +368,11 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             {isSubmitting ? (
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                <span>{t('creatingProfile')}</span>
+                <span>Creating FreshCart Profile...</span>
               </div>
             ) : (
               <>
-                <span>{t('completeRegistrationBtn')}</span>
+                <span>Complete Registration &amp; Start Shopping</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -388,14 +382,14 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
         {/* Existing account link */}
         <div className="bg-[#f8fafc] px-6 sm:px-7 py-4 border-t border-[#e2e8f0] text-center">
           <p className="text-[13px] text-[#565e74]">
-            {t('alreadyHaveAccount')}{' '}
+            Already have an account?{' '}
             <button
               type="button"
               id="goto-login-btn"
               onClick={onNavigateToLogin}
               className="font-bold text-[#006b2c] hover:underline cursor-pointer"
             >
-              {t('signInYourAccount')}
+              Sign In to Your Account
             </button>
           </p>
         </div>
