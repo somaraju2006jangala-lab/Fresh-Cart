@@ -93,7 +93,7 @@ export const en = {
   freeDeliveryMeterUnlocked: '🎉 You have unlocked Free Express Delivery!',
   freeDeliveryMeterNeed: 'Add {amount} more to unlock Free Express Delivery!',
   deliveryProgress: 'Delivery Progress ({percent}%)',
-  emptyCartTitle: 'Your cart is empty',
+  emptyCartTitle: 'Your Cart is Empty',
   emptyCartDesc: 'Add organic produce, dairy, and artisanal staples to start your order.',
   startShopping: 'Start Shopping',
   promoCodeLabel: 'Promo Code / Coupon',

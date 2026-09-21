@@ -16,6 +16,7 @@ import {
   Truck,
   RotateCcw,
   Plus,
+  Minus,
   Trash2,
   Check,
   Edit3,
@@ -32,6 +33,8 @@ interface CustomerDashboardProps {
   onOpenCart: () => void;
   onOpenCheckout: () => void;
   onAddToCart: (product: Product, quantity: number) => void;
+  onUpdateQty?: (productId: string, delta: number) => void;
+  onRemoveItem?: (productId: string) => void;
   onBackToStorefront: () => void;
   onLogout: () => void;
 }
@@ -41,6 +44,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onOpenCart,
   onOpenCheckout,
   onAddToCart,
+  onUpdateQty,
+  onRemoveItem,
   onBackToStorefront,
   onLogout,
 }) => {
@@ -678,12 +683,39 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className="font-bold text-[#0b1c30] font-display">
-                            {formatINR(item.product.price * item.quantity)}
-                          </div>
-                          <div className="text-[11px] text-[#565e74]">
-                            Qty: {item.quantity} {item.quantity === 1 ? 'pack' : 'packs'}
+                        <div className="flex items-center gap-3">
+                          {onUpdateQty && (
+                            <div className="flex items-center bg-[#eff4ff] rounded-lg border border-[#e2e8f0]">
+                              <button
+                                type="button"
+                                title="Decrease quantity (removes at 0)"
+                                onClick={() => onUpdateQty(item.product.id, -1)}
+                                className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#e5eeff] rounded-l-lg transition-colors cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-6 text-center text-[11px] font-semibold tabular-nums">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                title="Increase quantity"
+                                disabled={item.quantity >= item.product.stock}
+                                onClick={() => onUpdateQty(item.product.id, 1)}
+                                className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#e5eeff] rounded-r-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="text-right min-w-[70px]">
+                            <div className="font-bold text-[#0b1c30] font-display">
+                              {formatINR(item.product.price * item.quantity)}
+                            </div>
+                            <div className="text-[11px] text-[#565e74]">
+                              Qty: {item.quantity} {item.quantity === 1 ? 'pack' : 'packs'}
+                            </div>
                           </div>
                         </div>
                       </div>

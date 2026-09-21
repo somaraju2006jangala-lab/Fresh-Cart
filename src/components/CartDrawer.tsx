@@ -169,11 +169,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             className="space-y-2.5 overflow-y-auto my-2 pr-1 flex-1 max-h-56"
           >
             {items.length === 0 ? (
-              <div className="text-center py-8 text-[#565e74]">
+              <div id="empty-cart-state" className="text-center py-8 text-[#565e74]">
                 <ShoppingCart className="w-10 h-10 mx-auto text-[#bdcaba] mb-2" />
-                <p className="text-[14px] font-medium text-[#0b1c30]">
+                <h4 id="empty-cart-title" className="text-[16px] font-bold text-[#0b1c30]">
                   {t('emptyCartTitle')}
-                </p>
+                </h4>
                 <p className="text-[12px] text-[#565e74] mt-0.5">
                   {t('emptyCartDesc')}
                 </p>

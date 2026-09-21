@@ -74,21 +74,26 @@ function FreshCartStore() {
   // Default to login when unauthenticated; storefront when authenticated
   const [currentView, setCurrentView] = useState<ViewType>('login');
 
-  // Initial cart with items matching the design:
-  const [cart, setCart] = useState<CartItem[]>([
-    {
-      product: INITIAL_PRODUCTS[2], // Crisp Honeycrisp Apples (₹199 / 1 kg)
-      quantity: 1,
-    },
-    {
-      product: INITIAL_PRODUCTS[1], // Fresh Pasteurized Cow Milk (₹30 / 500 ml)
-      quantity: 1,
-    },
-    {
-      product: INITIAL_PRODUCTS[5], // Organic Hass Avocados (₹349 / 1 packet)
-      quantity: 1,
-    },
-  ]);
+  // Cart state: starts with no pre-seeded items (NO minimum product requirement)
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('freshcart_cart_v3');
+      if (saved !== null) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // fallback
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('freshcart_cart_v3', JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
+  }, [cart]);
 
   // Keep cart items' product metadata (unit, price, title, stock) in sync with products
   useEffect(() => {
@@ -207,10 +212,15 @@ function FreshCartStore() {
           if (item.product.id === productId) {
             const stockLimit = currentProduct ? currentProduct.stock : item.product.stock;
             const targetQty = item.quantity + delta;
+            // If decreased to 0 or below, automatically remove that product from the cart
+            if (targetQty <= 0) {
+              return null;
+            }
+            // Cannot exceed available product quantity
             if (targetQty > stockLimit) {
               return { ...item, quantity: stockLimit };
             }
-            return targetQty > 0 ? { ...item, quantity: targetQty } : null;
+            return { ...item, quantity: targetQty };
           }
           return item;
         })
@@ -461,6 +471,8 @@ function FreshCartStore() {
               onOpenCart={() => setIsCartOpen(true)}
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onAddToCart={handleAddToCart}
+              onUpdateQty={handleUpdateCartQty}
+              onRemoveItem={handleRemoveCartItem}
               onBackToStorefront={() => navigateToView('storefront')}
               onLogout={() => {
                 logout();
