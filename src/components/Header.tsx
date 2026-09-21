@@ -241,8 +241,8 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Cart Button (Only on storefront and dashboard) */}
-            {currentView !== 'login' && currentView !== 'register' && (
+            {/* Cart Button (Only on storefront and customer dashboard; completely removed from Admin Portal) */}
+            {currentView !== 'login' && currentView !== 'register' && currentView !== 'admin' && (
               <button
                 id="header-cart-btn"
                 type="button"

@@ -172,6 +172,10 @@ function FreshCartStore() {
     }
 
     setCurrentView(view);
+    if (view === 'admin') {
+      setIsCartOpen(false);
+      setIsCheckoutOpen(false);
+    }
     if (view === 'storefront') {
       window.location.hash = '#/storefront';
     } else {
@@ -615,8 +619,8 @@ function FreshCartStore() {
         )}
       </main>
 
-      {/* Floating Cart Drawer Toggle & Panel (Only available when logged in) */}
-      {currentUser && (
+      {/* Floating Cart Drawer Toggle & Panel (Only available for customers; completely removed from Admin Portal) */}
+      {currentUser && currentView !== 'admin' && (
         <CartDrawer
           items={cart}
           isOpen={isCartOpen}
@@ -634,7 +638,7 @@ function FreshCartStore() {
       )}
 
       {/* Product Quick View Modal */}
-      {currentUser && (
+      {currentUser && currentView !== 'admin' && (
         <ProductModal
           product={activeModalProduct}
           onClose={() => setActiveModalProduct(null)}
@@ -642,8 +646,8 @@ function FreshCartStore() {
         />
       )}
 
-      {/* Express Checkout Modal */}
-      {currentUser && (
+      {/* Express Checkout Modal (Completely removed from Admin Portal) */}
+      {currentUser && currentView !== 'admin' && (
         <CheckoutModal
           isOpen={isCheckoutOpen}
           onClose={() => setIsCheckoutOpen(false)}
