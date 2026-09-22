@@ -99,9 +99,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             onClick={onToggle}
             aria-label={t('cart')}
             title={t('cart')}
-            className="flex items-center justify-center bg-[#213145] text-[#7ffc97] p-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#565e74]/30"
+            className="relative flex items-center justify-center bg-[#213145] text-[#7ffc97] p-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#565e74]/30"
           >
             <ShoppingCart className="w-6 h-6" />
+            {totalItemCount > 0 && (
+              <span
+                id="floating-cart-badge"
+                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-[#213145]"
+              >
+                {totalItemCount}
+              </span>
+            )}
           </button>
         </div>
       )}
