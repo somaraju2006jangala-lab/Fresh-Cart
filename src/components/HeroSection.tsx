@@ -40,9 +40,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   };
 
   const handleCopyCoupon = () => {
-    onApplyCoupon('FRESH30');
+    try {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText('SAVE10').catch(() => {});
+      }
+    } catch {
+      // fallback
+    }
     setCouponCopied(true);
-    setTimeout(() => setCouponCopied(false), 2000);
+    setTimeout(() => setCouponCopied(false), 2500);
   };
 
   const trendingTerms = [
@@ -68,16 +74,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 onClick={handleCopyCoupon}
                 className="font-bold underline tracking-wider text-white hover:text-[#7ffc97] transition-colors cursor-pointer inline-flex items-center gap-1"
-                title="Click to apply FRESH30 to your cart"
+                title="Copy coupon code SAVE10"
               >
-                FRESH30
-                {couponCopied || appliedCoupon === 'FRESH30' ? (
+                SAVE10
+                {couponCopied ? (
+                  <span className="text-[10px] bg-[#7ffc97] text-[#002109] px-1.5 py-0.2 rounded-full font-bold ml-1">
+                    Copied! Apply in Cart
+                  </span>
+                ) : appliedCoupon === 'SAVE10' ? (
                   <span className="text-[10px] bg-[#7ffc97] text-[#002109] px-1.5 py-0.2 rounded-full font-bold ml-1">
                     {t('promoApplied')}
                   </span>
                 ) : (
                   <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-sm ml-0.5">
-                    {t('promoClickToApply')}
+                    Click to copy
                   </span>
                 )}
               </button>{' '}

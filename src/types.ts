@@ -90,5 +90,14 @@ export interface CustomerOrder extends Order {
   paymentMethod?: string;
 }
 
+export interface Coupon {
+  id: string;
+  code: string;
+  discountPercentage: number;
+  isActive: boolean;
+  description?: string;
+  createdAt?: string;
+}
+
 export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard';
 

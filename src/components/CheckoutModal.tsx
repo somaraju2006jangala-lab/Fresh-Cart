@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, CustomerOrder } from '../types';
+import { CartItem, CustomerOrder, Coupon } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
 import { formatINR } from '../utils/currency';
+import { useLanguage } from '../context/LanguageContext';
 import {
-  X,
   CheckCircle,
-  Clock,
-  MapPin,
+  X,
   CreditCard,
-  Truck,
+  Banknote,
+  MapPin,
+  Clock,
+  ChevronRight,
   ShieldCheck,
-  Zap,
   UserCheck,
+  Tag,
+  Zap,
 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -23,6 +25,9 @@ interface CheckoutModalProps {
   onClearCart: () => void;
   onNavigateToDashboard?: () => void;
   onOrderPlaced?: (items: CartItem[]) => void;
+  coupons?: Coupon[];
+  onApplyCoupon?: (code: string) => void;
+  onRemoveCoupon?: () => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -33,6 +38,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClearCart,
   onNavigateToDashboard,
   onOrderPlaced,
+  coupons = [],
+  onApplyCoupon,
+  onRemoveCoupon,
 }) => {
   const { currentUser, addOrder } = useAuth();
   const { t } = useLanguage();
@@ -44,6 +52,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'apple_pay' | 'cash'>('apple_pay');
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
+  const [checkoutCouponError, setCheckoutCouponError] = useState('');
 
   useEffect(() => {
     if (currentUser?.address) {
@@ -57,8 +67,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     (sum, item) => sum + item.product.price * item.quantity,
     0
   );
-  const discount = appliedCoupon === 'FRESH30' ? subtotal * 0.3 : 0;
+
+  const activeCoupon = appliedCoupon
+    ? coupons.find(
+        (c) => c.code.toUpperCase() === appliedCoupon.toUpperCase() && c.isActive
+      )
+    : null;
+  const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
+  const discount = Math.round((subtotal * discountPercent) / 100);
   const total = Math.max(0, subtotal - discount);
+
+  const handleApplyCheckoutCoupon = () => {
+    const code = checkoutCouponInput.trim().toUpperCase();
+    if (!code) return;
+
+    const matched = coupons.find((c) => c.code.toUpperCase() === code);
+    if (!matched) {
+      setCheckoutCouponError(t('invalidCouponError') || 'Invalid coupon code.');
+      return;
+    }
+
+    if (!matched.isActive) {
+      setCheckoutCouponError(t('disabledCouponError') || 'This coupon code is currently disabled.');
+      return;
+    }
+
+    onApplyCoupon?.(matched.code);
+    setCheckoutCouponInput('');
+    setCheckoutCouponError('');
+  };
 
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,11 +272,71 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 ))}
               </div>
-              <div className="pt-2 border-t border-[#e2e8f0] flex justify-between font-bold text-[14px]">
-                <span>{t('total')}</span>
-                <span className="text-[#006b2c] font-display tabular-nums">
-                  {formatINR(total)}
-                </span>
+              {/* Promo Code input in Checkout */}
+              <div className="pt-2 border-t border-[#e2e8f0]">
+                {appliedCoupon && activeCoupon ? (
+                  <div className="flex items-center justify-between bg-[#dcfce7] p-2 rounded-lg text-[12px] text-[#15803d]">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>{activeCoupon.code} ({activeCoupon.discountPercentage}% OFF)</span>
+                    </div>
+                    {onRemoveCoupon && (
+                      <button
+                        type="button"
+                        id="checkout-remove-coupon-btn"
+                        onClick={onRemoveCoupon}
+                        className="text-[11px] underline hover:text-[#0b1c30] font-semibold cursor-pointer"
+                      >
+                        {t('remove')}
+                      </button>
+                    )}
+                  </div>
+                ) : onApplyCoupon ? (
+                  <div className="space-y-1">
+                    <div className="flex gap-1.5">
+                      <input
+                        id="checkout-coupon-input"
+                        type="text"
+                        value={checkoutCouponInput}
+                        onChange={(e) => {
+                          setCheckoutCouponInput(e.target.value.toUpperCase());
+                          if (checkoutCouponError) setCheckoutCouponError('');
+                        }}
+                        placeholder={t('couponPlaceholder')}
+                        className="flex-1 px-2.5 py-1 text-[12px] uppercase font-mono bg-white border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                      />
+                      <button
+                        type="button"
+                        id="checkout-apply-coupon-btn"
+                        onClick={handleApplyCheckoutCoupon}
+                        className="px-3 py-1 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
+                      >
+                        {t('apply')}
+                      </button>
+                    </div>
+                    {checkoutCouponError && (
+                      <p id="checkout-coupon-error" className="text-[11px] text-[#ba1a1a] font-medium">{checkoutCouponError}</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Subtotal, Discount & Total */}
+              <div className="pt-2 border-t border-[#e2e8f0] space-y-1 text-[12px]">
+                <div className="flex justify-between text-[#565e74]">
+                  <span>{t('subtotal')}</span>
+                  <span className="font-semibold text-[#0b1c30] tabular-nums">{formatINR(subtotal)}</span>
+                </div>
+                {discount > 0 && activeCoupon && (
+                  <div className="flex justify-between text-[#006b2c] font-semibold">
+                    <span>{t('discountCoupon')} ({activeCoupon.discountPercentage}% OFF)</span>
+                    <span id="checkout-discount-amount" className="tabular-nums">-{formatINR(discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-[14px] text-[#0b1c30] pt-1 border-t border-[#e2e8f0]">
+                  <span>{t('total')}</span>
+                  <span id="checkout-final-total" className="text-[#006b2c] font-display tabular-nums">{formatINR(total)}</span>
+                </div>
               </div>
             </div>
 

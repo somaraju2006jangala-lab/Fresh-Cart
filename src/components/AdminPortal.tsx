@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Product, InventoryLog } from '../types';
+import { Product, InventoryLog, Coupon } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
 import { EditProductModal } from './EditProductModal';
+import { CouponModal } from './CouponModal';
 import {
   Package,
   Thermometer,
@@ -24,11 +25,13 @@ import {
   TrendingUp,
   Trash2,
   X,
+  Tag,
 } from 'lucide-react';
 
 interface AdminPortalProps {
   products: Product[];
   inventoryLogs: InventoryLog[];
+  coupons: Coupon[];
   onBackToStorefront: () => void;
   onUpdateProductStock: (productId: string, newStock: number, reason: string) => void;
   onUpdateProductPrice: (productId: string, newPrice: number) => void;
@@ -37,11 +40,16 @@ interface AdminPortalProps {
   onEditProduct?: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onSimulateCdcPulse: () => void;
+  onCreateCoupon: (couponData: Omit<Coupon, 'id'>) => void;
+  onUpdateCoupon: (coupon: Coupon) => void;
+  onDeleteCoupon: (couponId: string) => void;
+  onToggleCoupon: (couponId: string) => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   products,
   inventoryLogs,
+  coupons,
   onBackToStorefront,
   onUpdateProductStock,
   onUpdateProductPrice,
@@ -50,12 +58,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onEditProduct,
   onDeleteProduct,
   onSimulateCdcPulse,
+  onCreateCoupon,
+  onUpdateCoupon,
+  onDeleteCoupon,
+  onToggleCoupon,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coldchain'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coldchain' | 'coupons'>('inventory');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [editingCustomUnitId, setEditingCustomUnitId] = useState<string | null>(null);
@@ -63,6 +75,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [deleteConfirmCoupon, setDeleteConfirmCoupon] = useState<Coupon | null>(null);
   const [pulseToast, setPulseToast] = useState<string | null>(null);
 
   const customCategories = Array.from(
@@ -300,6 +315,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Thermometer className="w-4 h-4" />
             <span>{t('tabColdChain')}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-coupons"
+            onClick={() => setActiveTab('coupons')}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'coupons'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>{t('tabCoupons', { count: coupons.length })}</span>
           </button>
         </div>
 
@@ -719,6 +747,153 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Tab 4: Coupons Management */}
+        {activeTab === 'coupons' && (
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-4 sm:p-5 space-y-4">
+            {/* Top action bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#e2e8f0]">
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0f172a] font-display flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-[#006b2c]" />
+                  <span>{t('couponsManagementTitle')}</span>
+                </h3>
+                <p className="text-[12px] text-[#565e74] mt-0.5">
+                  {t('couponsManagementSubtitle')}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-[#565e74] hidden md:inline">
+                  {t('activeCouponsCount', {
+                    active: coupons.filter((c) => c.isActive).length,
+                    total: coupons.length,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  id="admin-create-coupon-btn"
+                  onClick={() => {
+                    setEditingCoupon(null);
+                    setIsCouponModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{t('createCouponBtn')}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Coupons Table */}
+            {coupons.length === 0 ? (
+              <div className="text-center py-12 text-[#565e74]">
+                <Tag className="w-10 h-10 mx-auto text-[#cbd5e1] mb-2" />
+                <p className="text-[13px] font-medium">{t('noCouponsAvailable')}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[13px]">
+                  <thead>
+                    <tr className="bg-[#f8fafc] text-[#64748b] border-b border-[#e2e8f0] text-[11px] font-bold uppercase tracking-wider">
+                      <th className="py-3 px-4">{t('couponCodeLabel')}</th>
+                      <th className="py-3 px-4">{t('discountPercentageLabel')}</th>
+                      <th className="py-3 px-4">{t('couponDescriptionLabel')}</th>
+                      <th className="py-3 px-4">{t('couponStatusLabel')}</th>
+                      <th className="py-3 px-4 text-right">{t('tableHeaderActions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f1f5f9]">
+                    {coupons.map((coupon) => (
+                      <tr
+                        key={coupon.id}
+                        id={`coupon-row-${coupon.id}`}
+                        className="hover:bg-[#f8fafc]/80 transition-colors"
+                      >
+                        {/* Coupon Code */}
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-[13px] text-[#006b2c] bg-[#eff4ff] border border-[#d3e4fe] px-2.5 py-1 rounded-lg">
+                            {coupon.code}
+                          </span>
+                        </td>
+
+                        {/* Discount Percentage */}
+                        <td className="py-3 px-4">
+                          <span className="font-extrabold text-[14px] text-[#0f172a] font-display tabular-nums">
+                            {coupon.discountPercentage}% OFF
+                          </span>
+                        </td>
+
+                        {/* Description */}
+                        <td className="py-3 px-4 text-[12px] text-[#565e74]">
+                          {coupon.description || '—'}
+                        </td>
+
+                        {/* Status Badge & Quick Toggle */}
+                        <td className="py-3 px-4">
+                          <button
+                            type="button"
+                            id={`toggle-coupon-${coupon.id}`}
+                            title={coupon.isActive ? 'Click to disable coupon' : 'Click to enable coupon'}
+                            onClick={() => {
+                              onToggleCoupon(coupon.id);
+                              setPulseToast(
+                                `${coupon.code} is now ${coupon.isActive ? 'Disabled' : 'Active'}`
+                              );
+                              setTimeout(() => setPulseToast(null), 2500);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                              coupon.isActive
+                                ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac] hover:bg-[#bbf7d0]'
+                                : 'bg-[#f1f5f9] text-[#64748b] border-[#cbd5e1] hover:bg-[#e2e8f0]'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                coupon.isActive ? 'bg-[#16a34a]' : 'bg-[#94a3b8]'
+                              }`}
+                            />
+                            <span>{coupon.isActive ? t('couponActive') : t('couponDisabled')}</span>
+                          </button>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              id={`edit-coupon-btn-${coupon.id}`}
+                              title={`Edit coupon ${coupon.code}`}
+                              onClick={() => {
+                                setEditingCoupon(coupon);
+                                setIsCouponModalOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-[#eff4ff] hover:bg-[#dce9ff] text-[#006b2c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer border border-[#cbdcfc]"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-[#006b2c]" />
+                              <span>{t('editCouponBtn')}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              id={`delete-coupon-btn-${coupon.id}`}
+                              title={`Delete coupon ${coupon.code}`}
+                              onClick={() => setDeleteConfirmCoupon(coupon)}
+                              className="px-2.5 py-1 rounded-lg bg-[#fee2e2] hover:bg-[#fecaca] text-[#b91c1c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
+                              <span>{t('deleteBtn')}</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add New Product Modal */}
@@ -790,6 +965,79 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             onEditProduct(updatedProd);
           }
           setPulseToast(`Saved changes for "${updatedProd.title}" (₹${updatedProd.price} / ${updatedProd.unit})`);
+          setTimeout(() => setPulseToast(null), 3500);
+        }}
+      />
+      {/* Delete Coupon Confirmation Dialog */}
+      {deleteConfirmCoupon && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
+            <div className="flex items-center gap-3 text-[#b91c1c]">
+              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-[#ef4444]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                  Delete Coupon
+                </h3>
+                <p className="text-[12px] text-[#565e74]">
+                  This coupon will no longer be usable by customers.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
+              {t('deleteCouponConfirm', { code: deleteConfirmCoupon.code })}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmCoupon(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-coupon-btn"
+                onClick={() => {
+                  onDeleteCoupon(deleteConfirmCoupon.id);
+                  setPulseToast(`Deleted coupon "${deleteConfirmCoupon.code}"`);
+                  setDeleteConfirmCoupon(null);
+                  setTimeout(() => setPulseToast(null), 3000);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                {t('deleteBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Coupon Create / Edit Modal */}
+      <CouponModal
+        isOpen={isCouponModalOpen}
+        coupon={editingCoupon}
+        existingCodes={coupons.map((c) => c.code)}
+        onClose={() => {
+          setIsCouponModalOpen(false);
+          setEditingCoupon(null);
+        }}
+        onSave={(data) => {
+          if (editingCoupon) {
+            onUpdateCoupon({
+              ...editingCoupon,
+              ...data,
+            });
+            setPulseToast(`Updated coupon "${data.code}" (${data.discountPercentage}% OFF)`);
+          } else {
+            onCreateCoupon(data);
+            setPulseToast(`Created coupon "${data.code}" (${data.discountPercentage}% OFF)`);
+          }
+          setIsCouponModalOpen(false);
+          setEditingCoupon(null);
           setTimeout(() => setPulseToast(null), 3500);
         }}
       />

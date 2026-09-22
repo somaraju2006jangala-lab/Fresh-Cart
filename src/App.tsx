@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem, InventoryLog, ViewType } from './types';
+import { Product, CartItem, InventoryLog, ViewType, Coupon } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
+import { INITIAL_COUPONS } from './data/coupons';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Header } from './components/Header';
@@ -19,6 +20,7 @@ import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
 
 const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v2';
+const STORAGE_COUPONS_KEY = 'freshcart_coupons_v1';
 
 const LEGACY_UNIT_MAP: Record<string, string> = {
   jug: '500 ml',
@@ -120,6 +122,26 @@ function FreshCartStore() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'organic' | 'quickPrep'>('all');
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState<Coupon[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_COUPONS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // fallback
+    }
+    return INITIAL_COUPONS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_COUPONS_KEY, JSON.stringify(coupons));
+    } catch {
+      // ignore
+    }
+  }, [coupons]);
+
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(INITIAL_INVENTORY_LOGS);
 
   // Synchronize URL Hash routing with currentView and enforce route protection
@@ -417,6 +439,45 @@ function FreshCartStore() {
     );
   };
 
+  // Coupon Management Handlers (Admin CRUD)
+  const handleCreateCoupon = (couponData: Omit<Coupon, 'id'>) => {
+    const newCoupon: Coupon = {
+      ...couponData,
+      id: `cpn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: new Date().toISOString(),
+    };
+    setCoupons((prev) => [newCoupon, ...prev]);
+  };
+
+  const handleUpdateCoupon = (updatedCoupon: Coupon) => {
+    setCoupons((prev) =>
+      prev.map((c) => (c.id === updatedCoupon.id ? updatedCoupon : c))
+    );
+  };
+
+  const handleDeleteCoupon = (couponId: string) => {
+    const deleted = coupons.find((c) => c.id === couponId);
+    if (deleted && appliedCoupon && deleted.code.toUpperCase() === appliedCoupon.toUpperCase()) {
+      setAppliedCoupon(null);
+    }
+    setCoupons((prev) => prev.filter((c) => c.id !== couponId));
+  };
+
+  const handleToggleCouponStatus = (couponId: string) => {
+    setCoupons((prev) =>
+      prev.map((c) => {
+        if (c.id === couponId) {
+          const toggled = !c.isActive;
+          if (!toggled && appliedCoupon && c.code.toUpperCase() === appliedCoupon.toUpperCase()) {
+            setAppliedCoupon(null);
+          }
+          return { ...c, isActive: toggled };
+        }
+        return c;
+      })
+    );
+  };
+
   // Product Filtering logic
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
@@ -475,6 +536,7 @@ function FreshCartStore() {
           <AdminPortal
             products={products}
             inventoryLogs={inventoryLogs}
+            coupons={coupons}
             onBackToStorefront={() => navigateToView(currentUser ? 'storefront' : 'login')}
             onUpdateProductStock={handleUpdateProductStock}
             onUpdateProductPrice={handleUpdateProductPrice}
@@ -483,6 +545,10 @@ function FreshCartStore() {
             onEditProduct={handleEditProduct}
             onDeleteProduct={handleDeleteProduct}
             onSimulateCdcPulse={handleSimulateCdcPulse}
+            onCreateCoupon={handleCreateCoupon}
+            onUpdateCoupon={handleUpdateCoupon}
+            onDeleteCoupon={handleDeleteCoupon}
+            onToggleCoupon={handleToggleCouponStatus}
           />
         ) : currentView === 'login' ? (
           <LoginPage
@@ -662,6 +728,7 @@ function FreshCartStore() {
           appliedCoupon={appliedCoupon}
           onApplyCoupon={(code) => setAppliedCoupon(code)}
           onRemoveCoupon={() => setAppliedCoupon(null)}
+          coupons={coupons}
         />
       )}
 
@@ -684,6 +751,9 @@ function FreshCartStore() {
           onClearCart={handleClearCart}
           onOrderPlaced={handleOrderPlaced}
           onNavigateToDashboard={() => navigateToView('dashboard')}
+          coupons={coupons}
+          onApplyCoupon={(code) => setAppliedCoupon(code)}
+          onRemoveCoupon={() => setAppliedCoupon(null)}
         />
       )}
     </div>

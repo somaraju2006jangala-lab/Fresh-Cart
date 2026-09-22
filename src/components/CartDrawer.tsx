@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { CartItem } from '../types';
+import { CartItem, Coupon } from '../types';
 import { formatINR } from '../utils/currency';
 import {
   ShoppingCart,
-  ChevronUp,
-  X,
   Plus,
   Minus,
   Trash2,
+  ChevronRight,
+  ChevronUp,
+  ShoppingBag,
   Truck,
   ArrowRight,
-  ShoppingBag,
+  Sparkles,
   Tag,
+  X,
   Check,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -26,6 +28,7 @@ interface CartDrawerProps {
   appliedCoupon: string | null;
   onApplyCoupon: (code: string) => void;
   onRemoveCoupon: () => void;
+  coupons?: Coupon[];
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -38,6 +41,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   appliedCoupon,
   onApplyCoupon,
   onRemoveCoupon,
+  coupons = [],
 }) => {
   const { t } = useLanguage();
   const [couponInput, setCouponInput] = useState('');
@@ -50,7 +54,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
-  const discount = appliedCoupon === 'FRESH30' ? subtotal * 0.3 : 0;
+  const activeCoupon = appliedCoupon
+    ? coupons.find(
+        (c) => c.code.toUpperCase() === appliedCoupon.toUpperCase() && c.isActive
+      )
+    : null;
+  const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
+  const discount = Math.round((subtotal * discountPercent) / 100);
   const total = Math.max(0, subtotal - discount);
 
   const deliveryDiff = freeDeliveryThreshold - subtotal;
@@ -61,15 +71,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleApplyCouponSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!couponInput.trim()) return;
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
 
-    if (couponInput.trim().toUpperCase() === 'FRESH30') {
-      onApplyCoupon('FRESH30');
-      setCouponInput('');
-      setCouponError('');
-    } else {
-      setCouponError('Invalid coupon. Try FRESH30 for 30% off!');
+    const matchedCoupon = coupons.find((c) => c.code.toUpperCase() === code);
+    if (!matchedCoupon) {
+      setCouponError(t('invalidCouponError') || 'Invalid coupon code. Please enter a valid coupon.');
+      return;
     }
+
+    if (!matchedCoupon.isActive) {
+      setCouponError(t('disabledCouponError') || 'This coupon code is currently disabled.');
+      return;
+    }
+
+    onApplyCoupon(matchedCoupon.code);
+    setCouponInput('');
+    setCouponError('');
   };
 
   return (
@@ -266,14 +284,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Coupon Code Section */}
           <div className="my-2 pt-2 border-t border-[#e5eeff]">
-            {appliedCoupon ? (
+            {appliedCoupon && activeCoupon ? (
               <div className="flex items-center justify-between bg-[#dcfce7] p-2 rounded-lg text-[12px] text-[#15803d]">
                 <div className="flex items-center gap-1.5 font-medium">
                   <Check className="w-4 h-4 text-[#15803d]" />
-                  <span>{appliedCoupon} ({t('discountCoupon')})</span>
+                  <span>{activeCoupon.code} ({activeCoupon.discountPercentage}% OFF)</span>
                 </div>
                 <button
                   type="button"
+                  id="remove-coupon-btn"
                   onClick={onRemoveCoupon}
                   className="text-[11px] underline hover:text-[#0b1c30] font-semibold ml-2 cursor-pointer"
                 >
@@ -285,26 +304,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="relative flex-1">
                   <Tag className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#6e7b6c]" />
                   <input
+                    id="cart-coupon-input"
                     type="text"
                     value={couponInput}
                     onChange={(e) => {
-                      setCouponInput(e.target.value);
+                      setCouponInput(e.target.value.toUpperCase());
                       if (couponError) setCouponError('');
                     }}
                     placeholder={t('couponPlaceholder')}
-                    className="w-full pl-8 pr-2 py-1.5 text-[12px] bg-[#f8f9ff] border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                    className="w-full pl-8 pr-2 py-1.5 text-[12px] bg-[#f8f9ff] border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] uppercase font-mono"
                   />
                 </div>
                 <button
+                  id="apply-coupon-btn"
                   type="submit"
-                  className="px-3 py-1.5 bg-[#565e74] hover:bg-[#131b2e] text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   {t('apply')}
                 </button>
               </form>
             )}
             {couponError && (
-              <p className="text-[11px] text-[#ba1a1a] mt-1">{couponError}</p>
+              <p id="cart-coupon-error" className="text-[11px] text-[#ba1a1a] mt-1 font-medium">{couponError}</p>
             )}
           </div>
 
@@ -317,10 +338,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </span>
             </div>
 
-            {discount > 0 && (
-              <div className="flex justify-between text-[#006b2c]">
-                <span>{t('discountCoupon')}</span>
-                <span className="font-semibold tabular-nums">-{formatINR(discount)}</span>
+            {discount > 0 && activeCoupon && (
+              <div className="flex justify-between text-[#006b2c] font-semibold">
+                <span>{t('discountCoupon')} ({activeCoupon.discountPercentage}% OFF)</span>
+                <span id="cart-drawer-discount" className="tabular-nums">-{formatINR(discount)}</span>
               </div>
             )}
 
