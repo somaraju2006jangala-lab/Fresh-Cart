@@ -1,18 +1,16 @@
 import React from 'react';
 import { BRAND_LOGO_URL } from '../data/products';
-import { Lock, Leaf, ShieldCheck } from 'lucide-react';
+import { Leaf, ShieldCheck } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 interface FooterProps {
-  onOpenAdmin: () => void;
-  onSelectCategory: (cat: string) => void;
+  onOpenAdmin?: () => void;
+  onSelectCategory?: (cat: string) => void;
   onOpenLogin?: () => void;
   onOpenDashboard?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
-  onOpenAdmin,
-  onSelectCategory,
   onOpenLogin,
   onOpenDashboard,
 }) => {
@@ -20,7 +18,7 @@ export const Footer: React.FC<FooterProps> = ({
   return (
     <footer className="w-full bg-[#eff4ff] mt-10 border-t border-[#e2e8f0]">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-12 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
           {/* Col 1: Brand */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -33,57 +31,12 @@ export const Footer: React.FC<FooterProps> = ({
                 FreshCart
               </span>
             </div>
-            <p className="text-[13px] text-[#565e74] leading-relaxed">
+            <p className="text-[13px] text-[#565e74] leading-relaxed max-w-md">
               {t('footerAbout')}
             </p>
           </div>
 
-          {/* Col 2: Shop Categories */}
-          <div>
-            <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              {t('footerShopCategories')}
-            </h4>
-            <ul className="space-y-2 text-[13px] text-[#565e74]">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onSelectCategory('produce')}
-                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
-                >
-                  {t('footerVegFruits')}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onSelectCategory('dairy')}
-                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
-                >
-                  {t('footerDairyEggs')}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onSelectCategory('bakery')}
-                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
-                >
-                  {t('footerBakeryBread')}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onSelectCategory('grains')}
-                  className="hover:text-[#006b2c] transition-colors cursor-pointer text-left"
-                >
-                  {t('footerGrainsPulses')}
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Col 3: Customer Care */}
+          {/* Col 2: Customer Care */}
           <div>
             <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
               {t('footerCustomerCare')}
@@ -127,25 +80,6 @@ export const Footer: React.FC<FooterProps> = ({
                 </span>
               </li>
             </ul>
-          </div>
-
-          {/* Col 4: Store Operations */}
-          <div>
-            <h4 className="text-[15px] font-bold text-[#0b1c30] mb-3 font-display">
-              {t('footerStoreOperations')}
-            </h4>
-            <p className="text-[13px] text-[#565e74] mb-3 leading-relaxed">
-              {t('footerOperationsDesc')}
-            </p>
-            <button
-              type="button"
-              onClick={onOpenAdmin}
-              data-path="dashboard-overview"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#dce9ff] text-[#0b1c30] hover:bg-[#cbdbf5] transition-colors text-[12px] font-semibold cursor-pointer border border-[#cbd5e1]/50"
-            >
-              <Lock className="w-4 h-4 text-[#006b2c]" />
-              <span>{t('footerAccessAdmin')}</span>
-            </button>
           </div>
         </div>
 
