@@ -7,7 +7,6 @@ import {
   Minus,
   Trash2,
   ChevronRight,
-  ChevronUp,
   ShoppingBag,
   Truck,
   ArrowRight,
@@ -98,29 +97,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           <button
             type="button"
             onClick={onToggle}
-            className="flex items-center gap-3.5 bg-[#213145] text-[#eaf1ff] px-5 py-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#565e74]/30"
+            aria-label={t('cart')}
+            title={t('cart')}
+            className="flex items-center justify-center bg-[#213145] text-[#7ffc97] p-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#565e74]/30"
           >
-            <div className="relative">
-              <ShoppingCart className="w-6 h-6 text-[#7ffc97]" />
-              <span
-                id="cart-badge-count"
-                className="absolute -top-2 -right-2 px-1.5 py-0.2 bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-[#213145]"
-              >
-                {totalItemCount}
-              </span>
-            </div>
-            <div className="text-left hidden sm:block">
-              <div className="text-[11px] text-[#bec6e0] font-medium leading-tight">
-                {t('yourLiveCart')}
-              </div>
-              <div
-                id="cart-drawer-toggle-subtotal"
-                className="text-[16px] font-bold text-white leading-tight font-display tabular-nums"
-              >
-                {formatINR(total)}
-              </div>
-            </div>
-            <ChevronUp className="w-5 h-5 text-[#bec6e0]" />
+            <ShoppingCart className="w-6 h-6" />
           </button>
         </div>
       )}
