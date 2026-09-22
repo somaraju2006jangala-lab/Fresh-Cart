@@ -67,7 +67,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coldchain' | 'coupons'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons'>('inventory');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [editingCustomUnitId, setEditingCustomUnitId] = useState<string | null>(null);
@@ -303,18 +303,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <History className="w-4 h-4" />
             <span>{t('tabCdcLogs')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('coldchain')}
-            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'coldchain'
-                ? 'border-[#006b2c] text-[#006b2c]'
-                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
-            }`}
-          >
-            <Thermometer className="w-4 h-4" />
-            <span>{t('tabColdChain')}</span>
           </button>
           <button
             type="button"
@@ -702,51 +690,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* Tab 3: Cold-Chain Telemetry */}
-        {activeTab === 'coldchain' && (
-          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 space-y-4">
-            <h3 className="text-[16px] font-bold text-[#0f172a] font-display">
-              {t('coldChainTelemetryHeading')}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
-                <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  {t('telemetryProduceVault')}
-                </span>
-                <span className="text-[26px] font-bold text-[#0f172a] font-display">
-                  3.8°C
-                </span>
-                <p className="text-[11px] text-[#565e74] mt-1">
-                  Target: 2.0°C – 4.0°C. Verified at 11:52 AM via IoT thermocouple #TC-992.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
-                <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  {t('telemetryBakeryChute')}
-                </span>
-                <span className="text-[26px] font-bold text-[#0f172a] font-display">
-                  21.2°C
-                </span>
-                <p className="text-[11px] text-[#565e74] mt-1">
-                  Target: 19.0°C – 23.0°C. Humidity 44%. Sourdough crust preservation mode active.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-[#eff4ff] border border-[#d3e4fe]">
-                <span className="text-[12px] text-[#006b2c] font-semibold block">
-                  {t('telemetryThermalTotes')}
-                </span>
-                <span className="text-[26px] font-bold text-[#0f172a] font-display">
-                  4.1°C
-                </span>
-                <p className="text-[11px] text-[#565e74] mt-1">
-                  12/12 active thermal totes within safe limits with reusable dry ice phase-change blocks.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tab 4: Coupons Management */}
         {activeTab === 'coupons' && (
