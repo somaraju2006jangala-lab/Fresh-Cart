@@ -20,7 +20,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [addedAnim, setAddedAnim] = useState(false);
 
   const isOutOfStock = product.stock <= 0;
-  const isLowStock = product.stock > 0 && product.stock <= 5;
 
   const handleIncrement = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -65,25 +64,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             loading="lazy"
           />
 
-          {/* Stock Status Pill */}
-          <div className="absolute top-2.5 left-2.5">
-            {isOutOfStock ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] text-[11px] font-semibold shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ba1a1a]" />
-                {t('unavailable')}
-              </span>
-            ) : isLowStock ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ffddb8] text-[#825100] text-[11px] font-semibold shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#825100]" />
-                {t('onlyAvailableStock', { stock: product.stock })}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-semibold shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#006b2c]" />
-                {t('availableStock', { stock: product.stock })}
-              </span>
-            )}
-          </div>
 
           {/* Badge */}
           <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 backdrop-blur-xs text-[11px] text-[#0b1c30] font-medium shadow-xs border border-[#e2e8f0]/60">
@@ -98,9 +78,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <h3 className="text-[16px] leading-snug text-[#0b1c30] font-semibold mt-1 hover:text-[#006b2c] transition-colors line-clamp-1">
             {product.title}
           </h3>
-          <div className="text-[12px] text-[#565e74] mt-0.5">
-            {t('availableStock', { stock: product.stock })} {product.stock === 1 ? t('pack') : t('packs')} ({product.unit})
-          </div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-[20px] font-bold text-[#0b1c30] tabular-nums font-display">
               {formatINR(product.price)}

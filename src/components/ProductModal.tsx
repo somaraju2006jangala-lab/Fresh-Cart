@@ -9,7 +9,6 @@ import {
   Check,
   Calendar,
   Thermometer,
-  ShieldCheck,
   Award,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -80,10 +79,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <h2 className="text-[20px] sm:text-[22px] font-bold text-[#0b1c30] font-display mt-0.5">
                 {product.title}
               </h2>
-              <div className="text-[12px] text-[#565e74] mt-0.5 space-y-0.5">
-                <div>
-                  {t('availableQuantity')} <span className="font-semibold text-[#0b1c30]">{product.stock}</span> {product.stock === 1 ? t('pack') : t('packs')}
-                </div>
+              <div className="text-[12px] text-[#565e74] mt-0.5">
                 <div>
                   {t('packSizeUnit')} <span className="font-semibold text-[#0b1c30]">{product.unit}</span>
                 </div>
@@ -141,17 +137,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             </div>
 
-            <div className="bg-[#eff4ff]/60 p-3 rounded-xl border border-[#e2e8f0]/60 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-[#006b2c] mt-0.5 shrink-0" />
-              <div>
-                <span className="text-[11px] text-[#565e74] font-medium block">
-                  {t('liveStockGuarantee')}
-                </span>
-                <span className="text-[12px] font-semibold text-[#0b1c30]">
-                  {product.stock} units available in Pod #104
-                </span>
-              </div>
-            </div>
+
           </div>
 
           {product.nutrition && (

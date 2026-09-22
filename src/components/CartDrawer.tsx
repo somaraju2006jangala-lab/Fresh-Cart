@@ -207,11 +207,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <span className="text-[11px] text-[#565e74]">
                         {item.quantity} × {formatINR(item.product.price)} / {item.product.unit}
                       </span>
-                      {isAtMaxStock && (
-                        <span className="text-[10px] text-[#b45309] font-medium">
-                          Max available: {item.product.stock}
-                        </span>
-                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -229,7 +224,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </span>
                         <button
                           type="button"
-                          title={isAtMaxStock ? `Max available reached (${item.product.stock})` : 'Increase quantity'}
+                          title="Increase quantity"
                           disabled={isAtMaxStock}
                           onClick={() => onUpdateQty(item.product.id, 1)}
                           className="w-6 h-6 flex items-center justify-center text-[#0b1c30] hover:bg-[#eff4ff] rounded-r-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
