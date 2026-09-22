@@ -18,6 +18,7 @@ import { CustomerDashboard } from './components/CustomerDashboard';
 import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { RefreshCw, Sparkles } from 'lucide-react';
+import { createLogTimestamp, formatLogDateTime } from './utils/date';
 
 const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v2';
 const STORAGE_COUPONS_KEY = 'freshcart_coupons_v1';
@@ -147,7 +148,18 @@ function FreshCartStore() {
     try {
       const saved = localStorage.getItem(STORAGE_INVENTORY_LOGS_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((log: InventoryLog) => {
+            const dt = formatLogDateTime(log);
+            return {
+              ...log,
+              date: log.date || dt.date,
+              time: log.time || dt.time,
+              timestamp: log.timestamp?.includes('DATE :') ? log.timestamp : dt.timestamp,
+            };
+          });
+        }
       }
     } catch {
       // fallback
@@ -301,9 +313,12 @@ function FreshCartStore() {
     // Record CDC inventory audit log entries for the purchase
     purchasedItems.forEach((it) => {
       const remainingStock = Math.max(0, it.product.stock - it.quantity);
+      const { date, time, timestamp } = createLogTimestamp();
       const logEntry: InventoryLog = {
         id: `log-${Date.now()}-${it.product.id}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp,
+        date,
+        time,
         sku: it.product.sku,
         productTitle: it.product.title,
         changeType: 'SALE',
@@ -323,9 +338,12 @@ function FreshCartStore() {
       prev.map((p) => {
         if (p.id === productId) {
           const change = validStock - p.stock;
+          const { date, time, timestamp } = createLogTimestamp();
           const logEntry: InventoryLog = {
             id: `log-${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp,
+            date,
+            time,
             sku: p.sku,
             productTitle: p.title,
             changeType: change > 0 ? 'RESTOCK' : 'SALE',
@@ -351,9 +369,12 @@ function FreshCartStore() {
   const handleAddProduct = (newProduct: Product) => {
     setProducts((prev) => [newProduct, ...prev]);
 
+    const { date, time, timestamp } = createLogTimestamp();
     const logEntry: InventoryLog = {
       id: `log-${Date.now()}-${newProduct.id}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp,
+      date,
+      time,
       sku: newProduct.sku,
       productTitle: newProduct.title,
       changeType: 'RESTOCK',
@@ -368,9 +389,12 @@ function FreshCartStore() {
   const handleDeleteProduct = (productId: string) => {
     const productToDelete = products.find((p) => p.id === productId);
     if (productToDelete) {
+      const { date, time, timestamp } = createLogTimestamp();
       const logEntry: InventoryLog = {
         id: `log-${Date.now()}-${productId}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp,
+        date,
+        time,
         sku: productToDelete.sku,
         productTitle: productToDelete.title,
         changeType: 'SPOILAGE_DISPOSAL',
@@ -408,9 +432,12 @@ function FreshCartStore() {
 
     const targetProduct = products.find((p) => p.id === productId);
     if (targetProduct) {
+      const { date, time, timestamp } = createLogTimestamp();
       const logEntry: InventoryLog = {
         id: `log-${Date.now()}-${productId}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp,
+        date,
+        time,
         sku: targetProduct.sku,
         productTitle: targetProduct.title,
         changeType: 'AUDIT_ADJUSTMENT',
@@ -432,9 +459,12 @@ function FreshCartStore() {
       setActiveModalProduct(updatedProduct);
     }
 
+    const { date, time, timestamp } = createLogTimestamp();
     const logEntry: InventoryLog = {
       id: `log-${Date.now()}-${updatedProduct.id}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp,
+      date,
+      time,
       sku: updatedProduct.sku,
       productTitle: updatedProduct.title,
       changeType: 'AUDIT_ADJUSTMENT',

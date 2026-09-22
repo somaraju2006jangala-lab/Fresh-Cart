@@ -37,6 +37,8 @@ export interface AisleCategory {
 export interface InventoryLog {
   id: string;
   timestamp: string;
+  date?: string;
+  time?: string;
   sku: string;
   productTitle: string;
   changeType: 'RESTOCK' | 'SALE' | 'AUDIT_ADJUSTMENT' | 'SPOILAGE_DISPOSAL';

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product, InventoryLog, Coupon } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
+import { formatLogDateTime } from '../utils/date';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
@@ -671,58 +672,64 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   No CDC log records found.
                 </div>
               ) : (
-                inventoryLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    id={`cdc-log-${log.id}`}
-                    className="p-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] flex items-center justify-between text-[12px] gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 ${
-                          log.changeType === 'RESTOCK'
-                            ? 'bg-[#dcfce7] text-[#15803d]'
-                            : log.changeType === 'SALE'
-                            ? 'bg-[#e0e7ff] text-[#4338ca]'
-                            : 'bg-[#fef3c7] text-[#b45309]'
-                        }`}
-                      >
-                        {log.changeType}
-                      </span>
-                      <div className="min-w-0">
-                        <span className="font-semibold text-[#0f172a] truncate block">
-                          {log.productTitle} ({log.sku})
-                        </span>
-                        <span className="text-[#64748b] block text-[11px] truncate">
-                          {log.notes} · Operator: {log.operator}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
+                inventoryLogs.map((log) => {
+                  const logDt = formatLogDateTime(log);
+                  return (
+                    <div
+                      key={log.id}
+                      id={`cdc-log-${log.id}`}
+                      className="p-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] flex items-center justify-between text-[12px] gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
                         <span
-                          className={`font-bold tabular-nums block ${
-                            log.quantityChange > 0 ? 'text-[#16a34a]' : 'text-[#ef4444]'
+                          className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 ${
+                            log.changeType === 'RESTOCK'
+                              ? 'bg-[#dcfce7] text-[#15803d]'
+                              : log.changeType === 'SALE'
+                              ? 'bg-[#e0e7ff] text-[#4338ca]'
+                              : 'bg-[#fef3c7] text-[#b45309]'
                           }`}
                         >
-                          {log.quantityChange > 0 ? `+${log.quantityChange}` : log.quantityChange}
+                          {log.changeType}
                         </span>
-                        <span className="text-[10px] text-[#94a3b8]">{log.timestamp}</span>
+                        <div className="min-w-0">
+                          <span className="font-semibold text-[#0f172a] truncate block">
+                            {log.productTitle} ({log.sku})
+                          </span>
+                          <span className="text-[#64748b] block text-[11px] truncate">
+                            {log.notes} · Operator: {log.operator}
+                          </span>
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        id={`delete-log-btn-${log.id}`}
-                        title="Delete log record"
-                        onClick={() => setDeleteConfirmLog(log)}
-                        className="p-1.5 rounded-lg text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#fee2e2]/60 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <span
+                            className={`font-bold tabular-nums block ${
+                              log.quantityChange > 0 ? 'text-[#16a34a]' : 'text-[#ef4444]'
+                            }`}
+                          >
+                            {log.quantityChange > 0 ? `+${log.quantityChange}` : log.quantityChange}
+                          </span>
+                          <div className="text-[10px] text-[#64748b] leading-tight font-medium mt-0.5 whitespace-nowrap">
+                            <span className="block">DATE :{logDt.date}</span>
+                            <span className="block">TIME:{logDt.time}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          id={`delete-log-btn-${log.id}`}
+                          title="Delete log record"
+                          onClick={() => setDeleteConfirmLog(log)}
+                          className="p-1.5 rounded-lg text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#fee2e2]/60 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

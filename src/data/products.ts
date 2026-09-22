@@ -277,7 +277,9 @@ export const INITIAL_PRODUCTS: Product[] = [
 export const INITIAL_INVENTORY_LOGS: InventoryLog[] = [
   {
     id: 'log-1',
-    timestamp: '11:42 AM',
+    timestamp: 'DATE :23/09/2026 TIME:11:42 AM',
+    date: '23/09/2026',
+    time: '11:42 AM',
     sku: 'SKU-4011',
     productTitle: 'Organic Farm Bananas',
     changeType: 'SALE',
@@ -288,7 +290,9 @@ export const INITIAL_INVENTORY_LOGS: InventoryLog[] = [
   },
   {
     id: 'log-2',
-    timestamp: '10:15 AM',
+    timestamp: 'DATE :23/09/2026 TIME:10:15 AM',
+    date: '23/09/2026',
+    time: '10:15 AM',
     sku: 'SKU-8820',
     productTitle: 'Cold Brew Colombian Coffee',
     changeType: 'SALE',
@@ -299,7 +303,9 @@ export const INITIAL_INVENTORY_LOGS: InventoryLog[] = [
   },
   {
     id: 'log-3',
-    timestamp: '08:00 AM',
+    timestamp: 'DATE :23/09/2026 TIME:08:00 AM',
+    date: '23/09/2026',
+    time: '08:00 AM',
     sku: 'SKU-5501',
     productTitle: 'Fresh Sourdough Artisanal Loaf',
     changeType: 'RESTOCK',
@@ -310,7 +316,9 @@ export const INITIAL_INVENTORY_LOGS: InventoryLog[] = [
   },
   {
     id: 'log-4',
-    timestamp: '06:30 AM',
+    timestamp: 'DATE :23/09/2026 TIME:06:30 AM',
+    date: '23/09/2026',
+    time: '06:30 AM',
     sku: 'SKU-1092',
     productTitle: 'Grade-A Whole Milk 1 Gallon',
     changeType: 'RESTOCK',
