@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Product, InventoryLog, Coupon } from '../types';
+import { Product, InventoryLog, Coupon, CustomerOrder } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
-import { formatLogDateTime } from '../utils/date';
+import { formatLogDateTime, formatOrderDateTime } from '../utils/date';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
@@ -27,12 +27,15 @@ import {
   Trash2,
   X,
   Tag,
+  ShoppingBag,
+  Copy,
 } from 'lucide-react';
 
 interface AdminPortalProps {
   products: Product[];
   inventoryLogs: InventoryLog[];
   coupons: Coupon[];
+  customerOrders?: CustomerOrder[];
   onBackToStorefront: () => void;
   onUpdateProductStock: (productId: string, newStock: number, reason: string) => void;
   onUpdateProductPrice: (productId: string, newPrice: number) => void;
@@ -47,12 +50,15 @@ interface AdminPortalProps {
   onToggleCoupon: (couponId: string) => void;
   onDeleteInventoryLog?: (logId: string) => void;
   onClearInventoryLogs?: () => void;
+  onUpdateOrderStatus?: (orderId: string, status: string) => void;
+  onDeleteCustomerOrder?: (orderId: string) => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   products,
   inventoryLogs,
   coupons,
+  customerOrders = [],
   onBackToStorefront,
   onUpdateProductStock,
   onUpdateProductPrice,
@@ -67,12 +73,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onToggleCoupon,
   onDeleteInventoryLog,
   onClearInventoryLogs,
+  onUpdateOrderStatus,
+  onDeleteCustomerOrder,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders'>('inventory');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<CustomerOrder | null>(null);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
   const [editingCustomUnitId, setEditingCustomUnitId] = useState<string | null>(null);
@@ -113,6 +125,48 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       (filterStockStatus === 'healthy' && p.stock > 5);
 
     return matchesSearch && matchesCategory && matchesStock;
+  });
+
+  const formatOrderProductItem = (item: { product: Product; quantity: number }) => {
+    const qty = item.quantity;
+    const unit = item.product.unit || 'unit';
+    let unitFormatted = '';
+
+    if (qty === 1) {
+      unitFormatted = unit;
+    } else if (/^1\s+[a-zA-Z]+$/i.test(unit)) {
+      // e.g. "1 kg" -> "2 kg", "1 dozen" -> "2 dozen"
+      const unitName = unit.replace(/^1\s+/i, '');
+      unitFormatted = `${qty} ${unitName}`;
+    } else {
+      // e.g. "500 ml" -> "2 × 500 ml", "piece" -> "2 × piece"
+      unitFormatted = `${qty} × ${unit}`;
+    }
+
+    const linePrice = formatINR(item.product.price * qty);
+    return {
+      title: item.product.title,
+      qtyAndUnit: unitFormatted,
+      linePrice,
+      lineText: `${item.product.title} — ${unitFormatted} — ${linePrice}`,
+    };
+  };
+
+  const filteredOrders = customerOrders.filter((order) => {
+    const q = orderSearch.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      order.id.toLowerCase().includes(q) ||
+      order.customerName.toLowerCase().includes(q) ||
+      (order.customerId && order.customerId.toLowerCase().includes(q)) ||
+      (order.customerEmail && order.customerEmail.toLowerCase().includes(q)) ||
+      order.items.some((it) => it.product.title.toLowerCase().includes(q));
+
+    const matchesStatus =
+      orderStatusFilter === 'all' ||
+      order.status.toLowerCase() === orderStatusFilter.toLowerCase();
+
+    return matchesSearch && matchesStatus;
   });
 
   const handleStartEditPrice = (product: Product) => {
@@ -323,6 +377,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Tag className="w-4 h-4" />
             <span>{t('tabCoupons', { count: coupons.length })}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-orders"
+            onClick={() => setActiveTab('orders')}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'orders'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>{t('tabCustomerOrders', { count: customerOrders.length }) || `Customer Orders (${customerOrders.length})`}</span>
           </button>
         </div>
 
@@ -882,6 +949,241 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             )}
           </div>
         )}
+
+        {/* Tab 4: Customer Orders */}
+        {activeTab === 'orders' && (
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs overflow-hidden space-y-5 p-4 sm:p-6">
+            {/* Header / Subheader */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#e2e8f0]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#dcfce7] text-[#006b2c] flex items-center justify-center">
+                    <ShoppingBag className="w-4 h-4 text-[#006b2c]" />
+                  </div>
+                  <h3 className="text-[18px] font-bold text-[#0b1c30] font-display">
+                    {t('customerOrdersHeading')}
+                  </h3>
+                </div>
+                <p className="text-[12px] text-[#64748b] mt-1">
+                  {t('customerOrdersSubheading')}
+                </p>
+              </div>
+
+              {/* Status counter badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-bold">
+                  Total: {customerOrders.length}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-[#dcfce7] text-[#15803d] text-[12px] font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#16a34a]" />
+                  Ordered: {customerOrders.filter((o) => o.status === 'Ordered').length}
+                </span>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-96">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#94a3b8]" />
+                <input
+                  type="text"
+                  id="admin-order-search"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder={t('filterOrdersPlaceholder')}
+                  className="w-full pl-9 pr-8 py-2 border border-[#cbd5e1] rounded-lg text-[13px] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
+                />
+                {orderSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderSearch('')}
+                    className="absolute right-2.5 top-2.5 text-[#94a3b8] hover:text-[#0b1c30]"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  id="admin-order-status-filter"
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 border border-[#cbd5e1] rounded-lg text-[13px] bg-white text-[#334155] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
+                >
+                  <option value="all">{t('allOrderStatuses')}</option>
+                  <option value="Ordered">Ordered</option>
+                  <option value="Picking at Pod #104">Picking at Pod #104</option>
+                  <option value="Cold-Chain En Route">Cold-Chain En Route</option>
+                  <option value="Delivered">Delivered</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Orders List / Cards */}
+            {filteredOrders.length === 0 ? (
+              <div className="py-16 text-center text-[#94a3b8]">
+                <ShoppingBag className="w-12 h-12 mx-auto mb-2 opacity-30 text-[#006b2c]" />
+                <p className="text-[14px] font-semibold text-[#475569]">
+                  {t('noOrdersFound')}
+                </p>
+                <p className="text-[12px] text-[#94a3b8] mt-1">
+                  Orders placed by customers from the Customer Portal will appear here automatically.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredOrders.map((order) => {
+                  const formattedDateTime = formatOrderDateTime(order.createdAt);
+                  const displayOrderId = order.id.startsWith('#') ? order.id : `#${order.id}`;
+
+                  // Build plain text format matching user's requested specification:
+                  const textLines: string[] = [
+                    `Order ID: ${displayOrderId}`,
+                    `Customer: ${order.customerName}`,
+                    `User ID: ${order.customerId || 'N/A'}`,
+                  ];
+                  if (order.customerEmail) {
+                    textLines.push(`Customer Email: ${order.customerEmail}`);
+                  }
+                  textLines.push(`Date & Time: ${formattedDateTime}`);
+                  textLines.push('');
+                  textLines.push('Products:');
+                  order.items.forEach((item) => {
+                    const formattedItem = formatOrderProductItem(item);
+                    textLines.push(`- ${formattedItem.lineText}`);
+                  });
+                  textLines.push('');
+                  textLines.push(`Total: ${formatINR(order.total)}`);
+                  textLines.push(`Status: ${order.status}`);
+
+                  const fullOrderText = textLines.join('\n');
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="border border-[#e2e8f0] rounded-xl p-4 sm:p-5 bg-gradient-to-br from-white to-[#f8fafc] hover:shadow-md transition-shadow duration-150 space-y-4"
+                    >
+                      {/* Top Action Bar */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#e2e8f0]">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                              order.status === 'Ordered'
+                                ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
+                                : order.status === 'Delivered'
+                                ? 'bg-[#eff4ff] text-[#1d4ed8] border-[#bfdbfe]'
+                                : 'bg-[#fef3c7] text-[#825100] border-[#fde68a]'
+                            }`}
+                          >
+                            ● {order.status}
+                          </span>
+                        </div>
+
+                        {/* Actions: Copy Record, Change Status, Delete Order */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            title="Copy order record text"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(fullOrderText);
+                              setCopiedOrderId(order.id);
+                              setTimeout(() => setCopiedOrderId(null), 2000);
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-[#475569] hover:text-[#0b1c30] bg-white border border-[#cbd5e1] rounded-lg hover:bg-[#f8fafc] transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedOrderId === order.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-[#16a34a]" />
+                                <span className="text-[#16a34a]">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy Record</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Status changer */}
+                          {onUpdateOrderStatus && (
+                            <select
+                              value={order.status}
+                              onChange={(e) => onUpdateOrderStatus(order.id, e.target.value)}
+                              className="px-2.5 py-1 text-[11px] font-bold border border-[#cbd5e1] rounded-lg bg-white text-[#0f172a] focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] cursor-pointer"
+                            >
+                              <option value="Ordered">Status: Ordered</option>
+                              <option value="Picking at Pod #104">Status: Picking</option>
+                              <option value="Cold-Chain En Route">Status: In Transit</option>
+                              <option value="Delivered">Status: Delivered</option>
+                            </select>
+                          )}
+
+                          {/* Delete order record */}
+                          <button
+                            type="button"
+                            title="Delete order record"
+                            onClick={() => setDeleteConfirmOrder(order)}
+                            className="p-1 text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#fee2e2] rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Structured Order Record Box matching user's exact specification */}
+                      <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 sm:p-5 font-mono text-[13px] text-[#0f172a] space-y-2 shadow-2xs">
+                        <div>
+                          <span className="font-semibold text-[#64748b]">Order ID: </span>
+                          <span className="font-bold text-[#006b2c]">{displayOrderId}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#64748b]">Customer: </span>
+                          <span className="font-bold text-[#0b1c30]">{order.customerName}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#64748b]">User ID: </span>
+                          <span className="font-semibold text-[#0b1c30]">{order.customerId || 'N/A'}</span>
+                        </div>
+                        {order.customerEmail && (
+                          <div>
+                            <span className="font-semibold text-[#64748b]">Email: </span>
+                            <span className="text-[#334155]">{order.customerEmail}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-semibold text-[#64748b]">Date & Time: </span>
+                          <span className="font-medium text-[#0b1c30]">{formattedDateTime}</span>
+                        </div>
+                        <div className="pt-2">
+                          <span className="font-semibold text-[#64748b] block mb-1">Products:</span>
+                          <ul className="space-y-1 pl-2">
+                            {order.items.map((item, idx) => {
+                              const formattedItem = formatOrderProductItem(item);
+                              return (
+                                <li key={idx} className="text-[#0b1c30] font-medium">
+                                  - {formattedItem.title} — {formattedItem.qtyAndUnit} — {formattedItem.linePrice}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                        <div className="pt-2 border-t border-[#e2e8f0]">
+                          <span className="font-semibold text-[#64748b]">Total: </span>
+                          <span className="font-bold text-[#006b2c]">{formatINR(order.total)}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#64748b]">Status: </span>
+                          <span className="font-bold text-[#006b2c]">{order.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add New Product Modal */}
@@ -1129,6 +1431,59 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           setTimeout(() => setPulseToast(null), 3500);
         }}
       />
+
+      {/* Delete Order Confirmation Dialog */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
+            <div className="flex items-center gap-3 text-[#b91c1c]">
+              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-[#ef4444]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                  {t('deleteOrderTitle')}
+                </h3>
+                <p className="text-[12px] text-[#565e74]">
+                  This will remove the order record from Customer Orders.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
+              {t('deleteOrderConfirm', {
+                id: deleteConfirmOrder.id,
+                name: deleteConfirmOrder.customerName,
+              })}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrder(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-order-btn"
+                onClick={() => {
+                  if (onDeleteCustomerOrder) {
+                    onDeleteCustomerOrder(deleteConfirmOrder.id);
+                  }
+                  setPulseToast(`Deleted order record ${deleteConfirmOrder.id}`);
+                  setDeleteConfirmOrder(null);
+                  setTimeout(() => setPulseToast(null), 3000);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                {t('deleteBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
