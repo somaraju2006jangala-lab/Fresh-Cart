@@ -24,7 +24,7 @@ interface CheckoutModalProps {
   appliedCoupon: string | null;
   onClearCart: () => void;
   onNavigateToDashboard?: () => void;
-  onOrderPlaced?: (items: CartItem[]) => void;
+  onOrderPlaced?: (items: CartItem[], placedOrder?: CustomerOrder) => void;
   coupons?: Coupon[];
   onApplyCoupon?: (code: string) => void;
   onRemoveCoupon?: () => void;
@@ -102,14 +102,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setIsSubmitting(true);
     setTimeout(() => {
       setIsSubmitting(false);
-      const generatedOrder = `FC-${Math.floor(100000 + Math.random() * 900000)}`;
-      setOrderNumber(generatedOrder);
+      const orderNum = Math.floor(1000 + Math.random() * 9000);
+      const generatedOrder = `#${orderNum}`;
+      setOrderNumber(String(orderNum));
 
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
         id: generatedOrder,
-        customerId: currentUser?.id,
+        customerId: currentUser?.id || 'guest_user',
         customerName: currentUser?.name || 'Guest Customer',
+        customerEmail: currentUser?.email,
         deliveryAddress: address,
         deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
         estimatedDeliveryTime: 'Arriving in ~22 minutes',
@@ -118,7 +120,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: 'Picking at Pod #104',
+        status: 'Ordered',
         createdAt: new Date().toISOString(),
         paymentMethod:
           paymentMethod === 'apple_pay'
@@ -129,7 +131,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       };
       addOrder(newCustomerOrder);
 
-      onOrderPlaced?.(items);
+      onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');
       onClearCart();
     }, 800);

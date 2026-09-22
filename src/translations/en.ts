@@ -334,6 +334,28 @@ export const en = {
   activeCouponsCount: '{active} Active / {total} Total Coupons',
   presetDiscountLabel: 'Quick Preset Discounts:',
 
+  // Customer Orders
+  tabCustomerOrders: 'Customer Orders ({count})',
+  customerOrdersHeading: 'Customer Orders Ledger',
+  customerOrdersSubheading: 'Real-time record of customer orders placed on FreshCart with customer IDs, items, and delivery status.',
+  filterOrdersPlaceholder: 'Search by Order ID, Customer, User ID, or Product...',
+  allOrderStatuses: 'All Order Statuses',
+  orderStatusOrdered: 'Ordered',
+  orderStatusPicking: 'Picking at Pod #104',
+  orderStatusColdChain: 'Cold-Chain En Route',
+  orderStatusDelivered: 'Delivered',
+  orderIdLabel: 'Order ID',
+  customerLabel: 'Customer',
+  userIdLabel: 'User ID',
+  customerEmailLabel: 'Email',
+  orderDateTimeLabel: 'Date & Time',
+  productsLabel: 'Products',
+  orderTotalLabel: 'Total',
+  orderStatusLabel: 'Status',
+  noOrdersFound: 'No customer orders match your search or filter.',
+  deleteOrderTitle: 'Delete Order Record',
+  deleteOrderConfirm: 'Are you sure you want to delete order {id} for customer {name}? This will only remove the order record.',
+
   // Footer
   footerAbout: 'Sustainably harvested local produce, farm-fresh dairy, and artisanal staples delivered to your kitchen within 30 minutes.',
   footerShopCategories: 'Shop Categories',

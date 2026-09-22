@@ -336,6 +336,28 @@ export const hi: typeof en = {
   activeCouponsCount: '{active} सक्रिय / {total} कुल कूपन',
   presetDiscountLabel: 'त्वरित छूट प्रीसेट:',
 
+  // Customer Orders
+  tabCustomerOrders: 'ग्राहक के ऑर्डर ({count})',
+  customerOrdersHeading: 'ग्राहक ऑर्डर बहीखाता',
+  customerOrdersSubheading: 'ग्राहकों द्वारा दिए गए ऑर्डरों का रीयल-टाइम रिकॉर्ड, ग्राहक आईडी, आइटम और डिलीवरी स्थिति के साथ।',
+  filterOrdersPlaceholder: 'ऑर्डर आईडी, ग्राहक, यूज़र आईडी या उत्पाद द्वारा खोजें...',
+  allOrderStatuses: 'सभी ऑर्डर स्थितियां',
+  orderStatusOrdered: 'ऑर्डर किया गया (Ordered)',
+  orderStatusPicking: 'पॉड #104 पर पिकिंग जारी',
+  orderStatusColdChain: 'कोल्ड-चेन मार्ग में',
+  orderStatusDelivered: 'डिलीवर हो चुका',
+  orderIdLabel: 'ऑर्डर आईडी',
+  customerLabel: 'ग्राहक',
+  userIdLabel: 'यूज़र आईडी',
+  customerEmailLabel: 'ईमेल',
+  orderDateTimeLabel: 'दिनांक और समय',
+  productsLabel: 'ऑर्डर किए गए उत्पाद',
+  orderTotalLabel: 'कुल राशि',
+  orderStatusLabel: 'स्थिति',
+  noOrdersFound: 'आपकी खोज से मेल खाता कोई ग्राहक ऑर्डर नहीं मिला।',
+  deleteOrderTitle: 'ऑर्डर रिकॉर्ड हटाएं',
+  deleteOrderConfirm: 'क्या आप वाकई ग्राहक {name} के ऑर्डर {id} को हटाना चाहते हैं? यह केवल ऑर्डर रिकॉर्ड को हटाएगा।',
+
   // Footer
   footerAbout: 'टिकाऊ स्थानीय उपज, ताज़ा डेयरी और कारीगरी बेकरी उत्पाद 30 मिनट के भीतर आपकी रसोई तक पहुंचाए जाते हैं।',
   footerShopCategories: 'श्रेणियां',

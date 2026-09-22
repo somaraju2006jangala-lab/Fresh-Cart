@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem, InventoryLog, ViewType, Coupon } from './types';
+import { Product, CartItem, InventoryLog, ViewType, Coupon, CustomerOrder } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
 import { INITIAL_COUPONS } from './data/coupons';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { getCustomerOrders, updateOrderStatus, deleteCustomerOrder } from './services/authService';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
@@ -175,6 +176,14 @@ function FreshCartStore() {
     }
   }, [inventoryLogs]);
 
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>(() => {
+    return getCustomerOrders();
+  });
+
+  useEffect(() => {
+    setCustomerOrders(getCustomerOrders());
+  }, [currentUser]);
+
   // Synchronize URL Hash routing with currentView and enforce route protection
   useEffect(() => {
     if (isLoading) return;
@@ -298,7 +307,7 @@ function FreshCartStore() {
   };
 
   // When a customer purchases a product, reduce the available quantity accordingly
-  const handleOrderPlaced = (purchasedItems: CartItem[]) => {
+  const handleOrderPlaced = (purchasedItems: CartItem[], placedOrder?: CustomerOrder) => {
     setProducts((prev) =>
       prev.map((p) => {
         const purchased = purchasedItems.find((it) => it.product.id === p.id);
@@ -329,6 +338,23 @@ function FreshCartStore() {
       };
       setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
     });
+
+    // Update customer orders state
+    if (placedOrder) {
+      setCustomerOrders((prev) => [placedOrder, ...prev.filter((o) => o.id !== placedOrder.id)]);
+    } else {
+      setCustomerOrders(getCustomerOrders());
+    }
+  };
+
+  const handleUpdateOrderStatus = (orderId: string, status: string) => {
+    updateOrderStatus(orderId, status);
+    setCustomerOrders(getCustomerOrders());
+  };
+
+  const handleDeleteCustomerOrder = (orderId: string) => {
+    deleteCustomerOrder(orderId);
+    setCustomerOrders(getCustomerOrders());
   };
 
   // Inventory Updates (from Admin or simulated events)
@@ -594,6 +620,9 @@ function FreshCartStore() {
             products={products}
             inventoryLogs={inventoryLogs}
             coupons={coupons}
+            customerOrders={customerOrders}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onDeleteCustomerOrder={handleDeleteCustomerOrder}
             onBackToStorefront={() => navigateToView(currentUser ? 'storefront' : 'login')}
             onUpdateProductStock={handleUpdateProductStock}
             onUpdateProductPrice={handleUpdateProductPrice}

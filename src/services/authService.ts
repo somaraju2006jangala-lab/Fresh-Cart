@@ -28,12 +28,48 @@ export function generateSalt(length = 16): string {
   return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Initial seed orders for the demo customer
+// Initial seed orders for demo customers
 const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
   {
-    id: 'FC-94821',
+    id: '#1001',
+    customerId: 'rahul123',
+    customerName: 'Rahul',
+    customerEmail: 'rahul@example.com',
+    deliveryAddress: 'Flat 402, Green Meadows, Bengaluru 560001',
+    deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
+    estimatedDeliveryTime: 'Arriving in ~20 minutes',
+    items: [
+      {
+        product: {
+          ...INITIAL_PRODUCTS[8], // prod-9: Basmati Rice
+          title: 'Basmati Rice',
+          price: 120,
+          unit: '1 kg',
+        },
+        quantity: 2,
+      },
+      {
+        product: {
+          ...INITIAL_PRODUCTS[1], // prod-2: Milk
+          title: 'Milk',
+          price: 30,
+          unit: '500 ml',
+        },
+        quantity: 2,
+      },
+    ],
+    subtotal: 300,
+    discount: 0,
+    total: 300,
+    status: 'Ordered',
+    createdAt: '2026-09-23T10:42:00.000Z',
+    paymentMethod: 'Cash on Delivery',
+  },
+  {
+    id: '#FC-94821',
     customerId: 'cust-demo-1',
     customerName: 'Alex Morgan',
+    customerEmail: DEMO_CUSTOMER_EMAIL,
     deliveryAddress: '742 Evergreen Terrace, Apt 4B, Springfield, OR 97477',
     deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
     estimatedDeliveryTime: 'Arriving in ~18 minutes',
@@ -44,7 +80,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     subtotal: 217,
     discount: 0,
     total: 217,
-    status: 'Picking at Pod #104',
+    status: 'Ordered',
     createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     paymentMethod: '⚡ Express Pay',
   },
@@ -52,6 +88,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     id: 'FC-88120',
     customerId: 'cust-demo-1',
     customerName: 'Alex Morgan',
+    customerEmail: DEMO_CUSTOMER_EMAIL,
     deliveryAddress: '742 Evergreen Terrace, Apt 4B, Springfield, OR 97477',
     deliveryTimeSlot: 'Yesterday, 05:45 PM',
     estimatedDeliveryTime: 'Delivered',
@@ -72,6 +109,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     id: 'FC-75402',
     customerId: 'cust-demo-1',
     customerName: 'Alex Morgan',
+    customerEmail: DEMO_CUSTOMER_EMAIL,
     deliveryAddress: '100 Innovation Way, Suite 300, Springfield, OR 97477',
     deliveryTimeSlot: '3 days ago',
     estimatedDeliveryTime: 'Delivered',
@@ -137,6 +175,16 @@ export async function initializeAuthStore(): Promise<void> {
     const existingOrders = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
     if (!existingOrders) {
       localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(INITIAL_DEMO_ORDERS));
+    } else {
+      try {
+        const parsed: CustomerOrder[] = JSON.parse(existingOrders);
+        if (!parsed.some((o) => o.id === '#1001' || o.id === '1001')) {
+          parsed.unshift(INITIAL_DEMO_ORDERS[0]);
+          localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(parsed));
+        }
+      } catch {
+        localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(INITIAL_DEMO_ORDERS));
+      }
     }
   } catch (err) {
     console.error('Failed to initialize local auth storage:', err);
@@ -424,11 +472,50 @@ export function getCustomerOrders(customerId?: string): CustomerOrder[] {
 export function saveOrderForCustomer(order: CustomerOrder): void {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
-    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : [];
+    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : [...INITIAL_DEMO_ORDERS];
     orders.unshift(order);
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(orders));
   } catch (err) {
     console.error('Failed to record customer order:', err);
+  }
+}
+
+/**
+ * Updates the status of an existing customer order.
+ */
+export function updateOrderStatus(orderId: string, newStatus: string): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
+    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+    const updated = orders.map((o) => (o.id === orderId ? { ...o, status: newStatus as any } : o));
+    localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to update order status:', err);
+  }
+}
+
+/**
+ * Deletes a customer order by ID.
+ */
+export function deleteCustomerOrder(orderId: string): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
+    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+    const updated = orders.filter((o) => o.id !== orderId);
+    localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to delete order:', err);
+  }
+}
+
+/**
+ * Clears all customer orders.
+ */
+export function clearCustomerOrders(): void {
+  try {
+    localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify([]));
+  } catch (err) {
+    console.error('Failed to clear customer orders:', err);
   }
 }
 

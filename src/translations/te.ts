@@ -336,6 +336,28 @@ export const te: typeof en = {
   activeCouponsCount: '{active} యాక్టివ్ / {total} మొత్తం కూపన్లు',
   presetDiscountLabel: 'త్వరిత డిస్కౌంట్ ప్రీసెట్లు:',
 
+  // Customer Orders
+  tabCustomerOrders: 'కస్టమర్ ఆర్డర్లు ({count})',
+  customerOrdersHeading: 'కస్టమర్ ఆర్డర్ల రిజిస్టర్',
+  customerOrdersSubheading: 'కస్టమర్ల ఆర్డర్లు, కస్టమర్ ఐడీలు, వస్తువులు మరియు డెలివరీ స్థితితో కూడిన రియల్-టైమ్ రికార్డు.',
+  filterOrdersPlaceholder: 'ఆర్డర్ ఐడీ, కస్టమర్, యూజర్ ఐడీ లేదా ఉత్పత్తి ద్వారా వెతకండి...',
+  allOrderStatuses: 'అన్ని ఆర్డర్ స్థితులు',
+  orderStatusOrdered: 'ఆర్డర్ చేయబడింది (Ordered)',
+  orderStatusPicking: 'పాడ్ #104 వద్ద ప్యాకింగ్',
+  orderStatusColdChain: 'రవాణాలో ఉంది (కోల్డ్ చైన్)',
+  orderStatusDelivered: 'డెలివరీ పూర్తయింది',
+  orderIdLabel: 'ఆర్డర్ ఐడీ',
+  customerLabel: 'కస్టమర్',
+  userIdLabel: 'యూజర్ ఐడీ',
+  customerEmailLabel: 'ఈమెయిల్',
+  orderDateTimeLabel: 'తేదీ & సమయం',
+  productsLabel: 'ఆర్డర్ చేసిన ఉత్పత్తులు',
+  orderTotalLabel: 'మొత్తం మొత్తం',
+  orderStatusLabel: 'స్థితి',
+  noOrdersFound: 'మీ శోధనకు తగిన కస్టమర్ ఆర్డర్లు ఏవీ కనిపించలేదు.',
+  deleteOrderTitle: 'ఆర్డర్ రికార్డును తొలగించండి',
+  deleteOrderConfirm: 'మీరు నిజంగా కస్టమర్ {name} యొక్క ఆర్డర్ {id} ను తొలగించాలనుకుంటున్నారా? ఇది ఆర్డర్ రికార్డును మాత్రమే తొలగిస్తుంది.',
+
   // Footer
   footerAbout: 'రైతుల నుండి సేకరించిన తాజా ఉత్పత్తులు, పాలు, బేకరీ వస్తువులు 30 నిమిషాల్లో మీ ఇంటికి అందించబడతాయి.',
   footerShopCategories: 'షాపింగ్ విభాగాలు',
