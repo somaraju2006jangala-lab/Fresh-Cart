@@ -5,6 +5,7 @@ import { formatINR } from '../utils/currency';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
+import { EditProductModal } from './EditProductModal';
 import {
   Package,
   Thermometer,
@@ -33,6 +34,7 @@ interface AdminPortalProps {
   onUpdateProductPrice: (productId: string, newPrice: number) => void;
   onUpdateProductUnit: (productId: string, newUnit: string) => void;
   onAddProduct: (product: Product) => void;
+  onEditProduct?: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onSimulateCdcPulse: () => void;
 }
@@ -45,6 +47,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onUpdateProductPrice,
   onUpdateProductUnit,
   onAddProduct,
+  onEditProduct,
   onDeleteProduct,
   onSimulateCdcPulse,
 }) => {
@@ -59,7 +62,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [customUnitInput, setCustomUnitInput] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [pulseToast, setPulseToast] = useState<string | null>(null);
+
+  const customCategories = Array.from(
+    new Set(products.map((p) => p.category))
+  ).filter((c) => !['produce', 'dairy', 'bakery', 'beverages', 'snacks', 'grains'].includes(c));
+
+  const allCatalogCategories = Array.from(new Set(products.map((p) => p.category)));
 
   const totalSkus = products.length;
   const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= 5).length;
@@ -322,6 +332,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <option value="beverages">{t('catBeverages')}</option>
                   <option value="snacks">{t('catSnacks')}</option>
                   <option value="grains">{t('catGrains')}</option>
+                  {customCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
                 </select>
 
                 <select
@@ -566,15 +581,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            title={`Delete ${p.title} from store`}
-                            onClick={() => setDeleteConfirmProduct(p)}
-                            className="px-2.5 py-1 rounded-lg bg-[#fee2e2] hover:bg-[#fecaca] text-[#b91c1c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
-                            <span>{t('deleteBtn')}</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              id={`edit-product-btn-${p.id}`}
+                              title={`Edit ${p.title}`}
+                              onClick={() => setEditingProduct(p)}
+                              className="px-2.5 py-1 rounded-lg bg-[#eff4ff] hover:bg-[#dce9ff] text-[#006b2c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer border border-[#cbdcfc]"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-[#006b2c]" />
+                              <span>{t('editProductBtn')}</span>
+                            </button>
+                            <button
+                              type="button"
+                              title={`Delete ${p.title} from store`}
+                              onClick={() => setDeleteConfirmProduct(p)}
+                              className="px-2.5 py-1 rounded-lg bg-[#fee2e2] hover:bg-[#fecaca] text-[#b91c1c] text-[11px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
+                              <span>{t('deleteBtn')}</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -751,6 +778,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Edit Product Modal */}
+      <EditProductModal
+        isOpen={!!editingProduct}
+        product={editingProduct}
+        allCategories={allCatalogCategories}
+        onClose={() => setEditingProduct(null)}
+        onSaveProduct={(updatedProd) => {
+          if (onEditProduct) {
+            onEditProduct(updatedProd);
+          }
+          setPulseToast(`Saved changes for "${updatedProd.title}" (₹${updatedProd.price} / ${updatedProd.unit})`);
+          setTimeout(() => setPulseToast(null), 3500);
+        }}
+      />
     </div>
   );
 };

@@ -296,6 +296,18 @@ export const en = {
   productDescriptionPlaceholder: 'Describe the harvest freshness, origin, or preparation notes...',
   addProductSubmitBtn: 'Add Product to Live Store',
 
+  // Edit Product Modal
+  editProductBtn: 'Edit Product',
+  editProductTitle: 'Edit Product Details',
+  editProductSubtitle: 'Update product title, supplier, category, image, unit, price, and stock quantity.',
+  supplierLabel: 'Supplier',
+  supplierPlaceholder: 'e.g. ABC Foods',
+  uploadNewImage: 'Upload / Replace Image',
+  enterNewCategory: '+ Enter New Category',
+  newCategoryPlaceholder: 'e.g. Rice & Cereals',
+  imagePreview: 'Image Preview',
+  imageUploadHint: 'Upload from device or enter image URL',
+
   // Footer
   footerAbout: 'Sustainably harvested local produce, farm-fresh dairy, and artisanal staples delivered to your kitchen within 30 minutes.',
   footerShopCategories: 'Shop Categories',

@@ -8,7 +8,7 @@ export interface Product {
   stock: number;
   badge: string;
   image: string;
-  category: 'produce' | 'dairy' | 'bakery' | 'beverages' | 'snacks' | 'grains';
+  category: string;
   categoryLabel: string;
   isOrganic?: boolean;
   isQuickPrep?: boolean;

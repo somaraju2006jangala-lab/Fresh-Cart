@@ -95,16 +95,20 @@ function FreshCartStore() {
     }
   }, [cart]);
 
-  // Keep cart items' product metadata (unit, price, title, stock) in sync with products
+  // Keep cart items' product metadata (title, image, category, unit, price, stock) in sync with products
   useEffect(() => {
     setCart((prevCart) =>
-      prevCart.map((item) => {
-        const matchingProduct = products.find((p) => p.id === item.product.id);
-        if (matchingProduct && (matchingProduct.unit !== item.product.unit || matchingProduct.price !== item.product.price)) {
-          return { ...item, product: matchingProduct };
-        }
-        return item;
-      })
+      prevCart
+        .map((item) => {
+          const matchingProduct = products.find((p) => p.id === item.product.id);
+          if (matchingProduct) {
+            const safeQty = Math.min(item.quantity, matchingProduct.stock);
+            if (safeQty <= 0) return null;
+            return { ...item, product: matchingProduct, quantity: safeQty };
+          }
+          return item;
+        })
+        .filter((item): item is CartItem => item !== null)
     );
   }, [products]);
 
@@ -378,6 +382,29 @@ function FreshCartStore() {
     }
   };
 
+  const handleEditProduct = (updatedProduct: Product) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+    );
+
+    if (activeModalProduct && activeModalProduct.id === updatedProduct.id) {
+      setActiveModalProduct(updatedProduct);
+    }
+
+    const logEntry: InventoryLog = {
+      id: `log-${Date.now()}-${updatedProduct.id}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sku: updatedProduct.sku,
+      productTitle: updatedProduct.title,
+      changeType: 'AUDIT_ADJUSTMENT',
+      quantityChange: 0,
+      newStock: updatedProduct.stock,
+      operator: 'Admin Portal',
+      notes: `Updated details: ${updatedProduct.title} (${updatedProduct.category}, ${updatedProduct.supplier}, ₹${updatedProduct.price} / ${updatedProduct.unit}, Stock: ${updatedProduct.stock})`,
+    };
+    setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+  };
+
   // Simulate real-time MongoDB CDC pulse
   const handleSimulateCdcPulse = () => {
     const candidate = products.find((p) => p.stock > 1);
@@ -453,6 +480,7 @@ function FreshCartStore() {
             onUpdateProductPrice={handleUpdateProductPrice}
             onUpdateProductUnit={handleUpdateProductUnit}
             onAddProduct={handleAddProduct}
+            onEditProduct={handleEditProduct}
             onDeleteProduct={handleDeleteProduct}
             onSimulateCdcPulse={handleSimulateCdcPulse}
           />

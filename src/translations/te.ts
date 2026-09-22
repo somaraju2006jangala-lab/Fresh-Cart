@@ -298,6 +298,18 @@ export const te: typeof en = {
   productDescriptionPlaceholder: 'ఉత్పత్తి తాజాదనం, మూలం లేదా తయారీ వివరాలను రాయండి...',
   addProductSubmitBtn: 'స్టోర్‌కు ఉత్పత్తిని జోడించండి',
 
+  // Edit Product Modal
+  editProductBtn: 'ఉత్పత్తిని సవరించండి',
+  editProductTitle: 'ఉత్పత్తి వివరాలను సవరించండి',
+  editProductSubtitle: 'ఉత్పత్తి పేరు, సరఫరాదారు, వర్గం, చిత్రం, యూనిట్, ధర మరియు స్టాక్ పరిమాణాన్ని అప్‌డేట్ చేయండి.',
+  supplierLabel: 'సరఫరాదారు',
+  supplierPlaceholder: 'ఉదా. ABC ఫుడ్స్',
+  uploadNewImage: 'చిత్రాన్ని అప్‌లోడ్ / మార్చండి',
+  enterNewCategory: '+ కొత్త వర్గాన్ని నమోదు చేయండి',
+  newCategoryPlaceholder: 'ఉదా. బియ్యం మరియు ధాన్యాలు',
+  imagePreview: 'చిత్ర ప్రివ్యూ',
+  imageUploadHint: 'డివైస్ నుండి అప్‌లోడ్ చేయండి లేదా చిత్రం URL నమోదు చేయండి',
+
   // Footer
   footerAbout: 'రైతుల నుండి సేకరించిన తాజా ఉత్పత్తులు, పాలు, బేకరీ వస్తువులు 30 నిమిషాల్లో మీ ఇంటికి అందించబడతాయి.',
   footerShopCategories: 'షాపింగ్ విభాగాలు',

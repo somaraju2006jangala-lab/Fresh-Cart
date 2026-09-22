@@ -298,6 +298,18 @@ export const hi: typeof en = {
   productDescriptionPlaceholder: 'उपज की ताज़गी, स्रोत या तैयारी संबंधी विवरण लिखें...',
   addProductSubmitBtn: 'लाइव स्टोर में उत्पाद जोड़ें',
 
+  // Edit Product Modal
+  editProductBtn: 'उत्पाद संपादित करें',
+  editProductTitle: 'उत्पाद विवरण संपादित करें',
+  editProductSubtitle: 'उत्पाद का नाम, आपूर्तिकर्ता, श्रेणी, छवि, इकाई, मूल्य और स्टॉक मात्रा अपडेट करें।',
+  supplierLabel: 'आपूर्तिकर्ता',
+  supplierPlaceholder: 'उदा. ABC फूड्स',
+  uploadNewImage: 'छवि अपलोड / बदलें',
+  enterNewCategory: '+ नई श्रेणी दर्ज करें',
+  newCategoryPlaceholder: 'उदा. चावल और अनाज',
+  imagePreview: 'छवि पूर्वावलोकन',
+  imageUploadHint: 'डिवाइस से अपलोड करें या छवि URL दर्ज करें',
+
   // Footer
   footerAbout: 'टिकाऊ स्थानीय उपज, ताज़ा डेयरी और कारीगरी बेकरी उत्पाद 30 मिनट के भीतर आपकी रसोई तक पहुंचाए जाते हैं।',
   footerShopCategories: 'श्रेणियां',
