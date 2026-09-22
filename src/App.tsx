@@ -21,6 +21,7 @@ import { RefreshCw, Sparkles } from 'lucide-react';
 
 const STORAGE_PRODUCTS_KEY = 'freshcart_products_inr_v2';
 const STORAGE_COUPONS_KEY = 'freshcart_coupons_v1';
+const STORAGE_INVENTORY_LOGS_KEY = 'freshcart_inventory_logs_v1';
 
 const LEGACY_UNIT_MAP: Record<string, string> = {
   jug: '500 ml',
@@ -142,7 +143,25 @@ function FreshCartStore() {
     }
   }, [coupons]);
 
-  const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(INITIAL_INVENTORY_LOGS);
+  const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_INVENTORY_LOGS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // fallback
+    }
+    return INITIAL_INVENTORY_LOGS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_INVENTORY_LOGS_KEY, JSON.stringify(inventoryLogs));
+    } catch {
+      // ignore
+    }
+  }, [inventoryLogs]);
 
   // Synchronize URL Hash routing with currentView and enforce route protection
   useEffect(() => {
@@ -427,6 +446,14 @@ function FreshCartStore() {
     setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
   };
 
+  const handleDeleteInventoryLog = (logId: string) => {
+    setInventoryLogs((prevLogs) => prevLogs.filter((log) => log.id !== logId));
+  };
+
+  const handleClearInventoryLogs = () => {
+    setInventoryLogs([]);
+  };
+
   // Simulate real-time MongoDB CDC pulse
   const handleSimulateCdcPulse = () => {
     const candidate = products.find((p) => p.stock > 1);
@@ -549,6 +576,8 @@ function FreshCartStore() {
             onUpdateCoupon={handleUpdateCoupon}
             onDeleteCoupon={handleDeleteCoupon}
             onToggleCoupon={handleToggleCouponStatus}
+            onDeleteInventoryLog={handleDeleteInventoryLog}
+            onClearInventoryLogs={handleClearInventoryLogs}
           />
         ) : currentView === 'login' ? (
           <LoginPage

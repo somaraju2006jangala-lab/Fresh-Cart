@@ -44,6 +44,8 @@ interface AdminPortalProps {
   onUpdateCoupon: (coupon: Coupon) => void;
   onDeleteCoupon: (couponId: string) => void;
   onToggleCoupon: (couponId: string) => void;
+  onDeleteInventoryLog?: (logId: string) => void;
+  onClearInventoryLogs?: () => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -62,6 +64,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onUpdateCoupon,
   onDeleteCoupon,
   onToggleCoupon,
+  onDeleteInventoryLog,
+  onClearInventoryLogs,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
@@ -78,6 +82,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [deleteConfirmCoupon, setDeleteConfirmCoupon] = useState<Coupon | null>(null);
+  const [deleteConfirmLog, setDeleteConfirmLog] = useState<InventoryLog | null>(null);
+  const [showClearLogsConfirm, setShowClearLogsConfirm] = useState(false);
   const [pulseToast, setPulseToast] = useState<string | null>(null);
 
   const customCategories = Array.from(
@@ -631,7 +637,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {/* Tab 2: Logs */}
         {activeTab === 'logs' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#e2e8f0]">
               <div>
                 <h3 className="text-[16px] font-bold text-[#0f172a] font-display">
                   {t('cdcLedgerHeading')}
@@ -640,52 +646,84 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   {t('cdcLedgerSubheading')}
                 </p>
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping" />
-                {t('clusterHealthy')}
-              </span>
+              <div className="flex items-center gap-2">
+                {inventoryLogs.length > 0 && (
+                  <button
+                    type="button"
+                    id="clear-logs-btn"
+                    onClick={() => setShowClearLogsConfirm(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#ef4444]/30 text-[#b91c1c] hover:bg-[#fee2e2]/60 text-[12px] font-semibold transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
+                    <span>Clear Logs</span>
+                  </button>
+                )}
+                <span className="px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping" />
+                  {t('clusterHealthy')}
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2">
-              {inventoryLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="p-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] flex items-center justify-between text-[12px]"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold ${
-                        log.changeType === 'RESTOCK'
-                          ? 'bg-[#dcfce7] text-[#15803d]'
-                          : log.changeType === 'SALE'
-                          ? 'bg-[#e0e7ff] text-[#4338ca]'
-                          : 'bg-[#fef3c7] text-[#b45309]'
-                      }`}
-                    >
-                      {log.changeType}
-                    </span>
-                    <div>
-                      <span className="font-semibold text-[#0f172a]">
-                        {log.productTitle} ({log.sku})
+              {inventoryLogs.length === 0 ? (
+                <div className="p-8 text-center text-[#64748b] text-[13px] bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
+                  No CDC log records found.
+                </div>
+              ) : (
+                inventoryLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    id={`cdc-log-${log.id}`}
+                    className="p-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] flex items-center justify-between text-[12px] gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold shrink-0 ${
+                          log.changeType === 'RESTOCK'
+                            ? 'bg-[#dcfce7] text-[#15803d]'
+                            : log.changeType === 'SALE'
+                            ? 'bg-[#e0e7ff] text-[#4338ca]'
+                            : 'bg-[#fef3c7] text-[#b45309]'
+                        }`}
+                      >
+                        {log.changeType}
                       </span>
-                      <span className="text-[#64748b] block text-[11px]">
-                        {log.notes} · Operator: {log.operator}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="font-semibold text-[#0f172a] truncate block">
+                          {log.productTitle} ({log.sku})
+                        </span>
+                        <span className="text-[#64748b] block text-[11px] truncate">
+                          {log.notes} · Operator: {log.operator}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <span
+                          className={`font-bold tabular-nums block ${
+                            log.quantityChange > 0 ? 'text-[#16a34a]' : 'text-[#ef4444]'
+                          }`}
+                        >
+                          {log.quantityChange > 0 ? `+${log.quantityChange}` : log.quantityChange}
+                        </span>
+                        <span className="text-[10px] text-[#94a3b8]">{log.timestamp}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        id={`delete-log-btn-${log.id}`}
+                        title="Delete log record"
+                        onClick={() => setDeleteConfirmLog(log)}
+                        className="p-1.5 rounded-lg text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#fee2e2]/60 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="text-right">
-                    <span
-                      className={`font-bold tabular-nums block ${
-                        log.quantityChange > 0 ? 'text-[#16a34a]' : 'text-[#ef4444]'
-                      }`}
-                    >
-                      {log.quantityChange > 0 ? `+${log.quantityChange}` : log.quantityChange}
-                    </span>
-                    <span className="text-[10px] text-[#94a3b8]">{log.timestamp}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -953,6 +991,106 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
               >
                 {t('deleteBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Log Confirmation Dialog */}
+      {deleteConfirmLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
+            <div className="flex items-center gap-3 text-[#b91c1c]">
+              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-[#ef4444]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                  Delete Audit Log
+                </h3>
+                <p className="text-[12px] text-[#565e74]">
+                  This will remove this log record from the audit trail.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
+              Are you sure you want to delete the log record for <span className="font-semibold text-[#0b1c30]">{deleteConfirmLog.productTitle}</span> ({deleteConfirmLog.changeType})? The actual product and stock will remain unchanged.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmLog(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-log-btn"
+                onClick={() => {
+                  if (onDeleteInventoryLog) {
+                    onDeleteInventoryLog(deleteConfirmLog.id);
+                  }
+                  setPulseToast(`Deleted audit log record for "${deleteConfirmLog.productTitle}"`);
+                  setDeleteConfirmLog(null);
+                  setTimeout(() => setPulseToast(null), 3000);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                {t('deleteBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Logs Confirmation Dialog */}
+      {showClearLogsConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
+            <div className="flex items-center gap-3 text-[#b91c1c]">
+              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-[#ef4444]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                  Clear All Audit Logs
+                </h3>
+                <p className="text-[12px] text-[#565e74]">
+                  This will remove all CDC audit & dispatch log history.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
+              Are you sure you want to clear all {inventoryLogs.length} audit log entries? This will only remove the log history; all products and quantities will remain unchanged.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
+              <button
+                type="button"
+                onClick={() => setShowClearLogsConfirm(false)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                id="confirm-clear-logs-btn"
+                onClick={() => {
+                  if (onClearInventoryLogs) {
+                    onClearInventoryLogs();
+                  }
+                  setPulseToast('Cleared all CDC audit & dispatch log records');
+                  setShowClearLogsConfirm(false);
+                  setTimeout(() => setPulseToast(null), 3000);
+                }}
+                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Clear All Logs
               </button>
             </div>
           </div>
