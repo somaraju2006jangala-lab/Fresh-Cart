@@ -83,7 +83,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders'>('inventory');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
-  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<CustomerOrder | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
@@ -1138,16 +1137,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               <option value="Delivered">Status: Delivered</option>
                             </select>
                           )}
-
-                          {/* Delete order record */}
-                          <button
-                            type="button"
-                            title="Delete order record"
-                            onClick={() => setDeleteConfirmOrder(order)}
-                            className="p-1 text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#fee2e2] rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       </div>
 
@@ -1452,58 +1441,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         }}
       />
 
-      {/* Delete Order Confirmation Dialog */}
-      {deleteConfirmOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] p-6 space-y-4">
-            <div className="flex items-center gap-3 text-[#b91c1c]">
-              <div className="w-10 h-10 rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5 text-[#ef4444]" />
-              </div>
-              <div>
-                <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
-                  {t('deleteOrderTitle')}
-                </h3>
-                <p className="text-[12px] text-[#565e74]">
-                  This will remove the order record from Customer Orders.
-                </p>
-              </div>
-            </div>
-
-            <p className="text-[13px] text-[#3e4a3d] leading-relaxed">
-              {t('deleteOrderConfirm', {
-                id: deleteConfirmOrder.id,
-                name: deleteConfirmOrder.customerName,
-              })}
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e2e8f0]">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmOrder(null)}
-                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
-              >
-                {t('cancel')}
-              </button>
-              <button
-                type="button"
-                id="confirm-delete-order-btn"
-                onClick={() => {
-                  if (onDeleteCustomerOrder) {
-                    onDeleteCustomerOrder(deleteConfirmOrder.id);
-                  }
-                  setPulseToast(`Deleted order record ${deleteConfirmOrder.id}`);
-                  setDeleteConfirmOrder(null);
-                  setTimeout(() => setPulseToast(null), 3000);
-                }}
-                className="px-4 py-2 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                {t('deleteBtn')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
