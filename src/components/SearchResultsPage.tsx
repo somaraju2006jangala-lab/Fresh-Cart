@@ -6,6 +6,8 @@ import { Footer } from './Footer';
 import { Search, ArrowLeft, Sparkles, PackageSearch } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
+import { AISLE_CATEGORIES } from '../data/products';
+
 interface SearchResultsPageProps {
   searchQuery: string;
   products: Product[];
@@ -32,19 +34,52 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
   const { t } = useLanguage();
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  // Search by product name (supports exact and partial names, e.g., "mil" -> "Milk")
+  // Find matching aisle categories (e.g., "fruit", "dairy", "bakery", "rice", "grains")
+  const matchingAisleIds = new Set(
+    AISLE_CATEGORIES
+      .filter(
+        (cat) =>
+          cat.id.toLowerCase().includes(normalizedQuery) ||
+          cat.name.toLowerCase().includes(normalizedQuery) ||
+          cat.slug.toLowerCase().includes(normalizedQuery)
+      )
+      .map((cat) => cat.id.toLowerCase())
+  );
+
+  // Search by product name and product category (supports exact and partial, case-insensitive)
   const matchingProducts = products.filter((product) => {
     if (!normalizedQuery) return false;
-    const titleLower = product.title.toLowerCase();
 
-    // Partial substring match
+    const titleLower = product.title.toLowerCase();
+    const categoryLower = product.category ? product.category.toLowerCase() : '';
+    const categoryLabelLower = product.categoryLabel ? product.categoryLabel.toLowerCase() : '';
+
+    // 1. Direct product name match (e.g. "Milk", "Ban")
     if (titleLower.includes(normalizedQuery)) {
       return true;
     }
 
-    // Multiple space-separated keywords match
+    // 2. Direct category or categoryLabel match (e.g. "dairy", "bakery", "fruit", "rice")
+    if (categoryLower.includes(normalizedQuery) || categoryLabelLower.includes(normalizedQuery)) {
+      return true;
+    }
+
+    // 3. Aisle category match
+    if (matchingAisleIds.has(categoryLower)) {
+      return true;
+    }
+
+    // 4. Multiple space-separated keywords match across title or category
     const words = normalizedQuery.split(/\s+/).filter(Boolean);
-    if (words.length > 1 && words.every((word) => titleLower.includes(word))) {
+    if (
+      words.length > 1 &&
+      words.every(
+        (word) =>
+          titleLower.includes(word) ||
+          categoryLower.includes(word) ||
+          categoryLabelLower.includes(word)
+      )
+    ) {
       return true;
     }
 

@@ -592,6 +592,7 @@ function FreshCartStore() {
       product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.supplier.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategory =
