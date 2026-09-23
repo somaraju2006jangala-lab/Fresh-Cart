@@ -1200,7 +1200,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     </select>
                   </div>
 
-                  {/* 3. Order History on the RIGHT side with 1:2 width ratio (170px dropdown : 340px input) */}
+                  {/* 3. Order History on the RIGHT side */}
                   <div className="justify-self-end">
                     <form
                       onSubmit={handleCustomHistorySearch}
@@ -1214,7 +1214,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <span>Order History:</span>
                       </label>
 
-                      <div className="relative w-[340px]">
+                      <div className="relative w-[130px]">
                         <input
                           type="text"
                           id="admin-order-custom-history-input"
@@ -1223,9 +1223,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             setHistorySearchInput(e.target.value);
                             if (historySearchError) setHistorySearchError(null);
                           }}
-                          placeholder="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
-                          aria-label="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
-                          className={`w-full h-8 pl-2.5 pr-8 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
+                          placeholder="Enter period"
+                          aria-label="Enter period"
+                          className={`w-full h-8 pl-2.5 pr-7 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
                             historySearchError
                               ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
                               : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
@@ -1236,7 +1236,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           id="admin-order-custom-history-search-btn"
                           title="Search"
                           aria-label="Search order history"
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
                         >
                           <Search className="w-3.5 h-3.5" />
                         </button>
