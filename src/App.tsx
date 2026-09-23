@@ -18,6 +18,7 @@ import { RegisterPage } from './components/RegisterPage';
 import { CustomerDashboard } from './components/CustomerDashboard';
 import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
+import { SearchResultsPage } from './components/SearchResultsPage';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { createLogTimestamp, formatLogDateTime } from './utils/date';
 
@@ -122,6 +123,14 @@ function FreshCartStore() {
   const [activeModalProduct, setActiveModalProduct] = useState<Product | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState('');
+
+  const handleSearchSubmit = (term: string) => {
+    const trimmed = term.trim();
+    setSearchQuery(trimmed);
+    setSubmittedSearchQuery(trimmed);
+    navigateToView('search', trimmed);
+  };
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'organic' | 'quickPrep'>('all');
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -212,6 +221,18 @@ function FreshCartStore() {
           setCurrentView('admin');
         } else if (hash === '#/dashboard' || hash === '#dashboard') {
           setCurrentView('dashboard');
+        } else if (hash.startsWith('#/search') || hash.startsWith('#search')) {
+          setCurrentView('search');
+          const rawHash = window.location.hash;
+          const searchParamIndex = rawHash.indexOf('?q=');
+          if (searchParamIndex !== -1) {
+            const rawQuery = rawHash.substring(searchParamIndex + 3);
+            const decodedQuery = decodeURIComponent(rawQuery.split('&')[0]);
+            if (decodedQuery) {
+              setSearchQuery(decodedQuery);
+              setSubmittedSearchQuery(decodedQuery);
+            }
+          }
         } else if (hash === '#/login' || hash === '#/register' || hash === '#login' || hash === '#register') {
           // Already logged in: redirect to storefront
           setCurrentView('storefront');
@@ -228,9 +249,9 @@ function FreshCartStore() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [currentUser, isLoading]);
 
-  const navigateToView = (view: ViewType) => {
-    // Route guard: if trying to open storefront or dashboard without auth, redirect to login
-    if (!currentUser && (view === 'storefront' || view === 'dashboard')) {
+  const navigateToView = (view: ViewType, searchParam?: string) => {
+    // Route guard: if trying to open storefront, dashboard, or search without auth, redirect to login
+    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search')) {
       setCurrentView('login');
       window.location.hash = '#/login';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -244,6 +265,9 @@ function FreshCartStore() {
     }
     if (view === 'storefront') {
       window.location.hash = '#/storefront';
+    } else if (view === 'search') {
+      const q = searchParam !== undefined ? searchParam : (submittedSearchQuery || searchQuery);
+      window.location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
     } else {
       window.location.hash = `#/${view}`;
     }
@@ -604,6 +628,7 @@ function FreshCartStore() {
         onOpenCart={() => setIsCartOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onSearchSubmit={handleSearchSubmit}
         selectedCategory={selectedCategory}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
@@ -672,12 +697,35 @@ function FreshCartStore() {
               onNavigateToAdmin={() => navigateToView('admin')}
             />
           )
+        ) : currentView === 'search' ? (
+          currentUser ? (
+            <SearchResultsPage
+              searchQuery={submittedSearchQuery}
+              products={products}
+              onAddToCart={handleAddToCart}
+              onOpenDetails={(p) => setActiveModalProduct(p)}
+              onBackToStorefront={() => navigateToView('storefront')}
+              onOpenAdmin={() => navigateToView('admin')}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                navigateToView('storefront');
+              }}
+              onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
+              onOpenDashboard={() => navigateToView('dashboard')}
+            />
+          ) : (
+            <LoginPage
+              onNavigateToRegister={() => navigateToView('register')}
+              onLoginSuccess={() => navigateToView('storefront')}
+              onNavigateToAdmin={() => navigateToView('admin')}
+            />
+          )
         ) : currentUser ? (
           /* Main Grocery Storefront (Protected: only visible when successfully logged in) */
           <div className="flex flex-col w-full">
             {/* Hero Section */}
             <HeroSection
-              onSearch={setSearchQuery}
+              onSearch={handleSearchSubmit}
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
               onApplyCoupon={(code) => setAppliedCoupon(code)}

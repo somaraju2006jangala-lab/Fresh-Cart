@@ -26,6 +26,7 @@ interface HeaderProps {
   onOpenCart: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onSearchSubmit?: (query: string) => void;
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
 }
@@ -37,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCart,
   searchQuery,
   onSearchChange,
+  onSearchSubmit,
   selectedCategory,
   onSelectCategory,
 }) => {
@@ -56,8 +58,17 @@ export const Header: React.FC<HeaderProps> = ({
         return t('navSignIn');
       case 'register':
         return t('navNewAccount');
+      case 'search':
+        return 'Search Results';
       default:
         return t('navRetailStorefront');
+    }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onSearchSubmit) {
+      onSearchSubmit(searchQuery);
     }
   };
 
@@ -110,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
             ) : (
-              <div className="relative flex items-center w-full">
+              <form onSubmit={handleFormSubmit} className="relative flex items-center w-full">
                 <Search className="absolute left-3 w-4 h-4 text-[#6e7b6c] pointer-events-none" />
                 <input
                   id="global-search-input"
@@ -118,19 +129,28 @@ export const Header: React.FC<HeaderProps> = ({
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
                   placeholder={t('searchPlaceholder')}
-                  className="w-full pl-9 pr-8 py-2 rounded-lg bg-white font-body text-[13px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] shadow-xs border border-[#e2e8f0]"
+                  className="w-full pl-9 pr-24 py-2 rounded-lg bg-white font-body text-[13px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] shadow-xs border border-[#e2e8f0]"
                 />
-                {searchQuery && (
+                <div className="absolute right-1.5 flex items-center gap-1.5">
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => onSearchChange('')}
+                      className="p-1 text-[#6e7b6c] hover:text-[#0b1c30] cursor-pointer"
+                      title="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
-                    type="button"
-                    onClick={() => onSearchChange('')}
-                    className="absolute right-2.5 text-[#6e7b6c] hover:text-[#0b1c30] cursor-pointer"
-                    title="Clear search"
+                    type="submit"
+                    id="header-search-find-btn"
+                    className="px-2.5 py-1 rounded-md bg-[#006b2c] text-white text-[12px] font-semibold hover:bg-[#00873a] transition-colors cursor-pointer shadow-2xs"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    {t('find')}
                   </button>
-                )}
-              </div>
+                </div>
+              </form>
             )}
           </div>
 
@@ -291,7 +311,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Secondary Aisles Navigation Bar */}
-        {currentView === 'storefront' && (
+        {(currentView === 'storefront' || currentView === 'search') && (
           <div className="flex items-center justify-between border-t border-[#e5eeff] pt-1.5 mt-2">
             <nav className="flex items-center gap-1.5 overflow-x-auto py-1 w-full text-[12px]">
               <button

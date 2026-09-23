@@ -159,6 +159,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <Zap className="w-5 h-5 text-[#006b2c]" />
                 </span>
                 <input
+                  id="hero-search-input"
                   type="text"
                   value={heroSearch}
                   onChange={(e) => setHeroSearch(e.target.value)}
@@ -167,6 +168,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 />
                 <button
                   type="submit"
+                  id="hero-search-find-btn"
                   className="absolute right-1.5 top-1.5 bottom-1.5 px-4 rounded-lg bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>{t('find')}</span>
