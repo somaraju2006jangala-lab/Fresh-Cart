@@ -1192,7 +1192,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
-            {/* Custom History Search: ONLY ONE INPUT BOX AND ONE SEARCH BUTTON */}
+            {/* Custom History Search: ONLY ONE INPUT BOX WITH EMBEDDED SEARCH ICON */}
             <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg px-3 py-2 space-y-2">
               <form
                 onSubmit={handleCustomHistorySearch}
@@ -1217,45 +1217,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     }}
                     placeholder="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
                     aria-label="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
-                    className={`w-full h-8 pl-2.5 pr-7 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
+                    className={`w-full h-8 pl-2.5 pr-8 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
                       historySearchError
                         ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
                         : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
                     }`}
                   />
-                  {historySearchInput && (
-                    <button
-                      type="button"
-                      onClick={() => setHistorySearchInput('')}
-                      className="absolute right-2 top-2 text-[#94a3b8] hover:text-[#0b1c30]"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="submit"
                     id="admin-order-custom-history-search-btn"
-                    className="h-8 px-3 py-1 rounded-md bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                    title="Search"
+                    aria-label="Search order history"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
                   >
-                    <Search className="w-3 h-3" />
-                    <span>Search</span>
+                    <Search className="w-3.5 h-3.5" />
                   </button>
-
-                  {activeHistoryPeriod && (
-                    <button
-                      type="button"
-                      id="admin-order-custom-history-clear-btn"
-                      onClick={handleClearHistorySearch}
-                      title="Clear period filter"
-                      className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
-                    >
-                      Reset
-                    </button>
-                  )}
                 </div>
+
+                {activeHistoryPeriod && (
+                  <button
+                    type="button"
+                    id="admin-order-custom-history-clear-btn"
+                    onClick={handleClearHistorySearch}
+                    title="Clear period filter"
+                    className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
+                  >
+                    Reset
+                  </button>
+                )}
               </form>
 
               {/* Validation Error Message */}
