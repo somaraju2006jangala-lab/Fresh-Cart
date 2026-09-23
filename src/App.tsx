@@ -149,7 +149,36 @@ function FreshCartStore() {
     try {
       const saved = localStorage.getItem(STORAGE_COUPONS_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: Coupon[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const migrated = parsed.map((c) => {
+            let minAmount = c.minOrderAmount;
+            if (minAmount === undefined || isNaN(minAmount)) {
+              if (c.discountPercentage === 5) minAmount = 1000;
+              else if (c.discountPercentage === 7) minAmount = 1500;
+              else if (c.discountPercentage === 10) minAmount = 2000;
+              else minAmount = 1000;
+            }
+            return {
+              ...c,
+              minOrderAmount: minAmount,
+            };
+          });
+
+          // Ensure default tiers (SAVE5, SAVE7, SAVE10) are included
+          INITIAL_COUPONS.forEach((initC) => {
+            const existingIdx = migrated.findIndex(
+              (m) => m.code.toUpperCase() === initC.code.toUpperCase()
+            );
+            if (existingIdx === -1) {
+              migrated.push(initC);
+            } else if (migrated[existingIdx].minOrderAmount === undefined) {
+              migrated[existingIdx].minOrderAmount = initC.minOrderAmount;
+            }
+          });
+
+          return migrated;
+        }
       }
     } catch {
       // fallback

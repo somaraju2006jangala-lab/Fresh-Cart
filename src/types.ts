@@ -98,7 +98,12 @@ export interface Coupon {
   id: string;
   code: string;
   discountPercentage: number;
+  minOrderAmount: number;
   isActive: boolean;
+  startDate?: string;
+  expiryDate?: string;
+  maxUses?: number;
+  usedCount?: number;
   description?: string;
   createdAt?: string;
 }

@@ -10,13 +10,17 @@ interface CouponModalProps {
   onSave: (couponData: {
     code: string;
     discountPercentage: number;
+    minOrderAmount: number;
     isActive: boolean;
+    startDate?: string;
+    expiryDate?: string;
+    maxUses?: number;
     description?: string;
   }) => void;
   existingCodes?: string[];
 }
 
-const PRESET_DISCOUNTS = [3, 5, 10, 15, 20];
+const PRESET_DISCOUNTS = [5, 7, 10, 15, 20];
 
 export const CouponModal: React.FC<CouponModalProps> = ({
   isOpen,
@@ -28,7 +32,11 @@ export const CouponModal: React.FC<CouponModalProps> = ({
   const { t } = useLanguage();
   const [code, setCode] = useState('');
   const [discountPercentage, setDiscountPercentage] = useState<number>(10);
+  const [minOrderAmount, setMinOrderAmount] = useState<number>(1000);
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [startDate, setStartDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [maxUses, setMaxUses] = useState<string>('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
 
@@ -36,13 +44,21 @@ export const CouponModal: React.FC<CouponModalProps> = ({
     if (coupon) {
       setCode(coupon.code);
       setDiscountPercentage(coupon.discountPercentage);
+      setMinOrderAmount(coupon.minOrderAmount ?? 0);
       setIsActive(coupon.isActive);
+      setStartDate(coupon.startDate || '');
+      setExpiryDate(coupon.expiryDate || '');
+      setMaxUses(coupon.maxUses !== undefined ? String(coupon.maxUses) : '');
       setDescription(coupon.description || '');
       setError('');
     } else {
       setCode('');
       setDiscountPercentage(10);
+      setMinOrderAmount(1000);
       setIsActive(true);
+      setStartDate('');
+      setExpiryDate('');
+      setMaxUses('');
       setDescription('');
       setError('');
     }
@@ -74,10 +90,30 @@ export const CouponModal: React.FC<CouponModalProps> = ({
       return;
     }
 
+    if (isNaN(minOrderAmount) || minOrderAmount < 0) {
+      setError('Minimum order amount must be a positive number or zero.');
+      return;
+    }
+
+    if (startDate && expiryDate && new Date(expiryDate) < new Date(startDate)) {
+      setError('Expiry date cannot be earlier than start date.');
+      return;
+    }
+
+    const parsedMaxUses = maxUses.trim() ? parseInt(maxUses.trim(), 10) : undefined;
+    if (parsedMaxUses !== undefined && (isNaN(parsedMaxUses) || parsedMaxUses <= 0)) {
+      setError('Maximum uses must be a positive integer.');
+      return;
+    }
+
     onSave({
       code: trimmedCode,
       discountPercentage,
+      minOrderAmount,
       isActive,
+      startDate: startDate || undefined,
+      expiryDate: expiryDate || undefined,
+      maxUses: parsedMaxUses,
       description: description.trim(),
     });
     onClose();
@@ -88,9 +124,9 @@ export const CouponModal: React.FC<CouponModalProps> = ({
       id="coupon-modal-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in"
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-[#e2e8f0] flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#e2e8f0] bg-[#f8fafc]">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#e2e8f0] bg-[#f8fafc] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#006b2c] text-white flex items-center justify-center shadow-xs">
               <Tag className="w-4 h-4" />
@@ -100,7 +136,7 @@ export const CouponModal: React.FC<CouponModalProps> = ({
                 {coupon ? t('editCouponTitle') : t('createCouponTitle')}
               </h2>
               <p className="text-[11px] text-[#565e74]">
-                {coupon ? 'Modify discount code & percentage' : 'Add new promotional discount code'}
+                {coupon ? 'Modify discount rule & minimum amount' : 'Add new promotional discount rule'}
               </p>
             </div>
           </div>
@@ -115,7 +151,7 @@ export const CouponModal: React.FC<CouponModalProps> = ({
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
           {error && (
             <div
               id="coupon-error-alert"
@@ -139,6 +175,33 @@ export const CouponModal: React.FC<CouponModalProps> = ({
               placeholder={t('couponCodePlaceholder')}
               className="w-full px-3 py-2 text-[13px] font-mono font-bold tracking-wider uppercase border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
             />
+          </div>
+
+          {/* Minimum Order Amount (₹) */}
+          <div className="space-y-1">
+            <label htmlFor="coupon-min-order-input" className="text-[12px] font-semibold text-[#0b1c30]">
+              Minimum Order Amount (₹) *
+            </label>
+            <div className="relative flex items-center">
+              <span className="absolute left-3 text-[13px] font-bold text-[#64748b]">₹</span>
+              <input
+                id="coupon-min-order-input"
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={minOrderAmount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setMinOrderAmount(isNaN(val) ? 0 : Math.max(0, val));
+                }}
+                placeholder="1000"
+                className="w-full pl-7 pr-3 py-2 text-[13px] font-bold border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+              />
+            </div>
+            <p className="text-[10.5px] text-[#565e74]">
+              Customer cart subtotal must reach at least this amount to qualify.
+            </p>
           </div>
 
           {/* Discount Percentage */}
@@ -192,6 +255,51 @@ export const CouponModal: React.FC<CouponModalProps> = ({
             </div>
           </div>
 
+          {/* Dates: Start Date & Expiry Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="coupon-start-date" className="text-[12px] font-semibold text-[#0b1c30]">
+                Start Date
+              </label>
+              <input
+                id="coupon-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-[12px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="coupon-expiry-date" className="text-[12px] font-semibold text-[#0b1c30]">
+                Expiry Date
+              </label>
+              <input
+                id="coupon-expiry-date"
+                type="date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-[12px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+              />
+            </div>
+          </div>
+
+          {/* Maximum Uses (Optional) */}
+          <div className="space-y-1">
+            <label htmlFor="coupon-max-uses" className="text-[12px] font-semibold text-[#0b1c30]">
+              Maximum Uses (Optional)
+            </label>
+            <input
+              id="coupon-max-uses"
+              type="number"
+              min="1"
+              step="1"
+              value={maxUses}
+              onChange={(e) => setMaxUses(e.target.value)}
+              placeholder="Unlimited if empty"
+              className="w-full px-3 py-1.5 text-[12px] border border-[#cbd5e1] rounded-lg bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+            />
+          </div>
+
           {/* Status Toggle */}
           <div className="flex items-center justify-between p-3 rounded-xl border border-[#e2e8f0] bg-[#f8fafc]">
             <div>
@@ -236,7 +344,7 @@ export const CouponModal: React.FC<CouponModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-2 border-t border-[#e2e8f0] flex items-center justify-end gap-2">
+          <div className="pt-2 border-t border-[#e2e8f0] flex items-center justify-end gap-2 shrink-0">
             <button
               type="button"
               id="cancel-coupon-btn"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem, Coupon } from '../types';
 import { formatINR } from '../utils/currency';
 import {
@@ -45,6 +45,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const { t } = useLanguage();
   const [couponInput, setCouponInput] = useState('');
   const [couponError, setCouponError] = useState('');
+  const [couponFeedback, setCouponFeedback] = useState('');
 
   const freeDeliveryThreshold = 499.0;
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -53,14 +54,89 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
+  const isCouponValidNow = (c: Coupon): boolean => {
+    if (!c.isActive) return false;
+    const now = new Date();
+    if (c.startDate) {
+      const s = new Date(c.startDate);
+      s.setHours(0, 0, 0, 0);
+      if (now < s) return false;
+    }
+    if (c.expiryDate) {
+      const e = new Date(c.expiryDate);
+      e.setHours(23, 59, 59, 999);
+      if (now > e) return false;
+    }
+    if (c.maxUses !== undefined && c.usedCount !== undefined && c.usedCount >= c.maxUses) {
+      return false;
+    }
+    return true;
+  };
+
+  // Active and date-valid rules
+  const activeRules = coupons.filter(isCouponValidNow);
+
+  // The coupon currently applied - ONLY active if customer explicitly applied it
   const activeCoupon = appliedCoupon
-    ? coupons.find(
-        (c) => c.code.toUpperCase() === appliedCoupon.toUpperCase() && c.isActive
-      )
+    ? activeRules.find((c) => c.code.toUpperCase() === appliedCoupon.toUpperCase())
     : null;
-  const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
+
+  // The coupon only applies if the cart subtotal meets its minimum requirement
+  const isQualified = Boolean(activeCoupon && subtotal >= (activeCoupon.minOrderAmount || 0));
+  const discountPercent = isQualified && activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
   const total = Math.max(0, subtotal - discount);
+
+  // Dynamic cart total revalidation when subtotal changes
+  const prevSubtotalRef = React.useRef(subtotal);
+  useEffect(() => {
+    // Only revalidate if a coupon was actively applied
+    if (!appliedCoupon) {
+      prevSubtotalRef.current = subtotal;
+      return;
+    }
+
+    if (subtotal <= 0) {
+      onRemoveCoupon();
+      setCouponFeedback('');
+      prevSubtotalRef.current = subtotal;
+      return;
+    }
+
+    // Only recalculate when subtotal actually changed
+    if (prevSubtotalRef.current !== subtotal) {
+      prevSubtotalRef.current = subtotal;
+
+      const qualifyingRules = activeRules.filter(
+        (c) => subtotal >= (c.minOrderAmount || 0)
+      );
+
+      if (qualifyingRules.length === 0) {
+        // Cart no longer qualifies for any active discount tier
+        const minReq = activeRules.length > 0
+          ? Math.min(...activeRules.map((c) => c.minOrderAmount || 0))
+          : 1000;
+        onRemoveCoupon();
+        setCouponError(
+          `Coupon removed: Cart total (${formatINR(subtotal)}) no longer qualifies for the minimum order requirement (${formatINR(minReq)}).`
+        );
+        setCouponFeedback('');
+      } else {
+        // Re-select the highest applicable discount tier for the new subtotal
+        const highestRule = [...qualifyingRules].sort(
+          (a, b) => b.discountPercentage - a.discountPercentage || (b.minOrderAmount || 0) - (a.minOrderAmount || 0)
+        )[0];
+
+        if (highestRule && highestRule.code.toUpperCase() !== appliedCoupon.toUpperCase()) {
+          onApplyCoupon(highestRule.code);
+          setCouponFeedback(
+            `Discount updated: ${highestRule.discountPercentage}% OFF tier applied for cart total of ${formatINR(subtotal)}.`
+          );
+          setCouponError('');
+        }
+      }
+    }
+  }, [subtotal, appliedCoupon, coupons, activeRules, onApplyCoupon, onRemoveCoupon]);
 
   const deliveryDiff = freeDeliveryThreshold - subtotal;
   const deliveryProgressPct = Math.min(
@@ -70,23 +146,74 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleApplyCouponSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const code = couponInput.trim().toUpperCase();
-    if (!code) return;
-
-    const matchedCoupon = coupons.find((c) => c.code.toUpperCase() === code);
-    if (!matchedCoupon) {
-      setCouponError(t('invalidCouponError') || 'Invalid coupon code. Please enter a valid coupon.');
-      return;
-    }
-
-    if (!matchedCoupon.isActive) {
-      setCouponError(t('disabledCouponError') || 'This coupon code is currently disabled.');
-      return;
-    }
-
-    onApplyCoupon(matchedCoupon.code);
-    setCouponInput('');
     setCouponError('');
+    setCouponFeedback('');
+
+    if (items.length === 0 || subtotal <= 0) {
+      setCouponError('Please add items to your cart before applying a coupon.');
+      return;
+    }
+
+    const code = couponInput.trim().toUpperCase();
+
+    if (code) {
+      // Customer entered a specific coupon code
+      const matchedCoupon = coupons.find((c) => c.code.toUpperCase() === code);
+      if (!matchedCoupon) {
+        setCouponError(t('invalidCouponError') || 'Invalid coupon code. Please enter a valid coupon.');
+        return;
+      }
+
+      if (!matchedCoupon.isActive) {
+        setCouponError(t('disabledCouponError') || 'This coupon code is currently disabled.');
+        return;
+      }
+
+      if (!isCouponValidNow(matchedCoupon)) {
+        setCouponError('This coupon is currently expired or has reached its usage limit.');
+        return;
+      }
+
+      const requiredMin = matchedCoupon.minOrderAmount || 0;
+      if (subtotal < requiredMin) {
+        setCouponError(
+          `Coupon "${matchedCoupon.code}" requires a minimum order of ${formatINR(requiredMin)}. Current cart total is ${formatINR(subtotal)}.`
+        );
+        return;
+      }
+
+      onApplyCoupon(matchedCoupon.code);
+      setCouponInput('');
+      setCouponError('');
+      setCouponFeedback(`Coupon "${matchedCoupon.code}" applied successfully! (${matchedCoupon.discountPercentage}% OFF)`);
+    } else {
+      // Customer clicked "Apply Coupon" without entering a specific code:
+      // Automatically select the highest applicable discount tier
+      const qualifying = activeRules.filter(
+        (c) => subtotal >= (c.minOrderAmount || 0)
+      );
+
+      if (qualifying.length === 0) {
+        const lowestMin = activeRules.length > 0
+          ? Math.min(...activeRules.map((c) => c.minOrderAmount || 0))
+          : 1000;
+        setCouponError(
+          `Minimum order of ${formatINR(lowestMin)} required to apply coupon discount. Current cart is ${formatINR(subtotal)}.`
+        );
+        return;
+      }
+
+      const bestRule = [...qualifying].sort(
+        (a, b) => b.discountPercentage - a.discountPercentage || (b.minOrderAmount || 0) - (a.minOrderAmount || 0)
+      )[0];
+
+      onApplyCoupon(bestRule.code);
+      setCouponInput('');
+      setCouponError('');
+      setCouponFeedback(
+        `Applied highest discount tier: ${bestRule.discountPercentage}% OFF for orders over ${formatINR(bestRule.minOrderAmount || 0)}!`
+      );
+    }
   };
 
   return (
@@ -267,20 +394,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           )}
 
           {/* Coupon Code Section */}
-          <div className="my-2 pt-2 border-t border-[#e5eeff]">
-            {appliedCoupon && activeCoupon ? (
-              <div className="flex items-center justify-between bg-[#dcfce7] p-2 rounded-lg text-[12px] text-[#15803d]">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-4 h-4 text-[#15803d]" />
-                  <span>{activeCoupon.code} ({activeCoupon.discountPercentage}% OFF)</span>
+          <div className="my-2 pt-2 border-t border-[#e5eeff] space-y-1.5">
+            {appliedCoupon && isQualified && activeCoupon ? (
+              <div className="flex items-center justify-between bg-[#dcfce7] p-2.5 rounded-xl text-[12px] text-[#15803d] border border-[#86efac] shadow-2xs">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <Check className="w-4 h-4 text-[#15803d] shrink-0" />
+                  <span>{activeCoupon.code} ({activeCoupon.discountPercentage}% OFF Applied)</span>
                 </div>
                 <button
                   type="button"
                   id="remove-coupon-btn"
-                  onClick={onRemoveCoupon}
-                  className="text-[11px] underline hover:text-[#0b1c30] font-semibold ml-2 cursor-pointer"
+                  onClick={() => {
+                    onRemoveCoupon();
+                    setCouponFeedback('Coupon removed. Original cart total restored.');
+                    setCouponError('');
+                    setTimeout(() => setCouponFeedback(''), 3000);
+                  }}
+                  className="text-[12px] underline hover:text-[#0b1c30] font-bold ml-2 cursor-pointer text-[#dc2626] shrink-0"
                 >
-                  {t('remove')}
+                  Remove Coupon
                 </button>
               </div>
             ) : (
@@ -294,22 +426,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     onChange={(e) => {
                       setCouponInput(e.target.value.toUpperCase());
                       if (couponError) setCouponError('');
+                      if (couponFeedback) setCouponFeedback('');
                     }}
-                    placeholder={t('couponPlaceholder')}
+                    placeholder="Enter coupon code (e.g. SAVE10)"
                     className="w-full pl-8 pr-2 py-1.5 text-[12px] bg-[#f8f9ff] border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] uppercase font-mono"
                   />
                 </div>
                 <button
                   id="apply-coupon-btn"
                   type="submit"
-                  className="px-3 py-1.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold rounded-lg transition-colors cursor-pointer shrink-0 shadow-xs"
                 >
-                  {t('apply')}
+                  Apply Coupon
                 </button>
               </form>
             )}
             {couponError && (
-              <p id="cart-coupon-error" className="text-[11px] text-[#ba1a1a] mt-1 font-medium">{couponError}</p>
+              <div id="cart-coupon-error" className="text-[11px] text-[#ba1a1a] bg-[#fee2e2]/60 p-2 rounded-lg border border-[#fecaca] font-semibold">
+                {couponError}
+              </div>
+            )}
+            {couponFeedback && (
+              <div id="cart-coupon-feedback" className="text-[11px] text-[#15803d] bg-[#dcfce7]/70 p-2 rounded-lg border border-[#bbf7d0] font-semibold">
+                {couponFeedback}
+              </div>
             )}
           </div>
 
@@ -322,7 +462,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </span>
             </div>
 
-            {discount > 0 && activeCoupon && (
+            {discount > 0 && isQualified && activeCoupon && (
               <div className="flex justify-between text-[#006b2c] font-semibold">
                 <span>{t('discountCoupon')} ({activeCoupon.discountPercentage}% OFF)</span>
                 <span id="cart-drawer-discount" className="tabular-nums">-{formatINR(discount)}</span>

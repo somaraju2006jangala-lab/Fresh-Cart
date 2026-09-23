@@ -852,8 +852,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <thead>
                     <tr className="bg-[#f8fafc] text-[#64748b] border-b border-[#e2e8f0] text-[11px] font-bold uppercase tracking-wider">
                       <th className="py-3 px-4">{t('couponCodeLabel')}</th>
+                      <th className="py-3 px-4">Min Order Amount</th>
                       <th className="py-3 px-4">{t('discountPercentageLabel')}</th>
-                      <th className="py-3 px-4">{t('couponDescriptionLabel')}</th>
+                      <th className="py-3 px-4">{t('couponDescriptionLabel')} & Validity</th>
                       <th className="py-3 px-4">{t('couponStatusLabel')}</th>
                       <th className="py-3 px-4 text-right">{t('tableHeaderActions')}</th>
                     </tr>
@@ -872,6 +873,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </span>
                         </td>
 
+                        {/* Minimum Order Amount */}
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-[13px] text-[#0b1c30] tabular-nums">
+                            {formatINR(coupon.minOrderAmount || 0)}
+                          </span>
+                        </td>
+
                         {/* Discount Percentage */}
                         <td className="py-3 px-4">
                           <span className="font-extrabold text-[14px] text-[#0f172a] font-display tabular-nums">
@@ -879,9 +887,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </span>
                         </td>
 
-                        {/* Description */}
+                        {/* Description & Validity */}
                         <td className="py-3 px-4 text-[12px] text-[#565e74]">
-                          {coupon.description || '—'}
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-[#0b1c30]">{coupon.description || '—'}</span>
+                            {(coupon.startDate || coupon.expiryDate) && (
+                              <span className="text-[10.5px] text-[#64748b]">
+                                Validity: {coupon.startDate || 'Immediate'} to {coupon.expiryDate || 'No expiry'}
+                              </span>
+                            )}
+                            {coupon.maxUses && (
+                              <span className="text-[10.5px] text-[#006b2c] font-medium">
+                                Max uses: {coupon.maxUses}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Status Badge & Quick Toggle */}
