@@ -199,8 +199,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <div className="flex flex-wrap items-center gap-1.5 pt-3">
               <button
                 type="button"
+                id="hero-category-all"
                 onClick={() => onSelectCategory('all')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'all'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
@@ -210,8 +211,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
               <button
                 type="button"
+                id="hero-category-produce"
                 onClick={() => onSelectCategory('produce')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'produce'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
@@ -221,8 +223,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
               <button
                 type="button"
+                id="hero-category-dairy"
                 onClick={() => onSelectCategory('dairy')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'dairy'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
@@ -232,8 +235,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
               <button
                 type="button"
+                id="hero-category-bakery"
                 onClick={() => onSelectCategory('bakery')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'bakery'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
@@ -243,8 +247,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
               <button
                 type="button"
+                id="hero-category-beverages"
                 onClick={() => onSelectCategory('beverages')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'beverages'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
@@ -254,8 +259,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
               <button
                 type="button"
+                id="hero-category-grains"
                 onClick={() => onSelectCategory('grains')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
                   selectedCategory === 'grains'
                     ? 'bg-[#006b2c] text-white shadow-xs'
                     : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'

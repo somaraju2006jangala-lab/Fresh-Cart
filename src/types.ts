@@ -103,5 +103,5 @@ export interface Coupon {
   createdAt?: string;
 }
 
-export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search';
+export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category';
 

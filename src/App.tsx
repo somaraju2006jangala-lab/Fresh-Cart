@@ -19,6 +19,7 @@ import { CustomerDashboard } from './components/CustomerDashboard';
 import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { SearchResultsPage } from './components/SearchResultsPage';
+import { CategoryResultsPage } from './components/CategoryResultsPage';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { createLogTimestamp, formatLogDateTime } from './utils/date';
 
@@ -132,6 +133,16 @@ function FreshCartStore() {
     navigateToView('search', trimmed);
   };
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const handleCategorySelect = (catId: string) => {
+    if (catId === 'all') {
+      setSelectedCategory('all');
+      navigateToView('storefront');
+      return;
+    }
+    setSelectedCategory(catId);
+    navigateToView('category', catId);
+  };
   const [stockFilter, setStockFilter] = useState<'all' | 'organic' | 'quickPrep'>('all');
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [coupons, setCoupons] = useState<Coupon[]>(() => {
@@ -233,6 +244,22 @@ function FreshCartStore() {
               setSubmittedSearchQuery(decodedQuery);
             }
           }
+        } else if (hash.startsWith('#/category') || hash.startsWith('#category')) {
+          setCurrentView('category');
+          const rawHash = window.location.hash;
+          let catId = '';
+          const paramIndex = rawHash.indexOf('?c=');
+          if (paramIndex !== -1) {
+            catId = decodeURIComponent(rawHash.substring(paramIndex + 3).split('&')[0]);
+          } else {
+            const parts = rawHash.split('/');
+            if (parts.length >= 3) {
+              catId = decodeURIComponent(parts[2]);
+            }
+          }
+          if (catId) {
+            setSelectedCategory(catId);
+          }
         } else if (hash === '#/login' || hash === '#/register' || hash === '#login' || hash === '#register') {
           // Already logged in: redirect to storefront
           setCurrentView('storefront');
@@ -249,9 +276,9 @@ function FreshCartStore() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [currentUser, isLoading]);
 
-  const navigateToView = (view: ViewType, searchParam?: string) => {
-    // Route guard: if trying to open storefront, dashboard, or search without auth, redirect to login
-    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search')) {
+  const navigateToView = (view: ViewType, param?: string) => {
+    // Route guard: if trying to open storefront, dashboard, search, or category without auth, redirect to login
+    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search' || view === 'category')) {
       setCurrentView('login');
       window.location.hash = '#/login';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -266,8 +293,11 @@ function FreshCartStore() {
     if (view === 'storefront') {
       window.location.hash = '#/storefront';
     } else if (view === 'search') {
-      const q = searchParam !== undefined ? searchParam : (submittedSearchQuery || searchQuery);
+      const q = param !== undefined ? param : (submittedSearchQuery || searchQuery);
       window.location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
+    } else if (view === 'category') {
+      const c = param !== undefined ? param : selectedCategory;
+      window.location.hash = c && c !== 'all' ? `#/category?c=${encodeURIComponent(c)}` : '#/category';
     } else {
       window.location.hash = `#/${view}`;
     }
@@ -631,12 +661,7 @@ function FreshCartStore() {
         onSearchChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
         selectedCategory={selectedCategory}
-        onSelectCategory={(cat) => {
-          setSelectedCategory(cat);
-          if (currentView !== 'storefront') {
-            navigateToView('storefront');
-          }
-        }}
+        onSelectCategory={handleCategorySelect}
       />
 
       {/* Main Content Area */}
@@ -707,10 +732,27 @@ function FreshCartStore() {
               onOpenDetails={(p) => setActiveModalProduct(p)}
               onBackToStorefront={() => navigateToView('storefront')}
               onOpenAdmin={() => navigateToView('admin')}
-              onSelectCategory={(cat) => {
-                setSelectedCategory(cat);
-                navigateToView('storefront');
-              }}
+              onSelectCategory={handleCategorySelect}
+              onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
+              onOpenDashboard={() => navigateToView('dashboard')}
+            />
+          ) : (
+            <LoginPage
+              onNavigateToRegister={() => navigateToView('register')}
+              onLoginSuccess={() => navigateToView('storefront')}
+              onNavigateToAdmin={() => navigateToView('admin')}
+            />
+          )
+        ) : currentView === 'category' ? (
+          currentUser ? (
+            <CategoryResultsPage
+              selectedCategory={selectedCategory}
+              products={products}
+              onAddToCart={handleAddToCart}
+              onOpenDetails={(p) => setActiveModalProduct(p)}
+              onBackToStorefront={() => navigateToView('storefront')}
+              onSelectCategory={handleCategorySelect}
+              onOpenAdmin={() => navigateToView('admin')}
               onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
               onOpenDashboard={() => navigateToView('dashboard')}
             />
@@ -728,7 +770,7 @@ function FreshCartStore() {
             <HeroSection
               onSearch={handleSearchSubmit}
               selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
+              onSelectCategory={handleCategorySelect}
               onApplyCoupon={(code) => setAppliedCoupon(code)}
               appliedCoupon={appliedCoupon}
             />
@@ -736,7 +778,7 @@ function FreshCartStore() {
             {/* Curated Catalog Category Grid */}
             <CategoryGrid
               selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
+              onSelectCategory={handleCategorySelect}
             />
 
             {/* Featured Harvest & Daily Goods Section */}
@@ -832,10 +874,7 @@ function FreshCartStore() {
             {/* Footer */}
             <Footer
               onOpenAdmin={() => navigateToView('admin')}
-              onSelectCategory={(cat) => {
-                setSelectedCategory(cat);
-                navigateToView('storefront');
-              }}
+              onSelectCategory={handleCategorySelect}
               onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
               onOpenDashboard={() => navigateToView('dashboard')}
             />

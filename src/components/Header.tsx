@@ -60,6 +60,8 @@ export const Header: React.FC<HeaderProps> = ({
         return t('navNewAccount');
       case 'search':
         return 'Search Results';
+      case 'category':
+        return 'Category Catalog';
       default:
         return t('navRetailStorefront');
     }
@@ -311,7 +313,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Secondary Aisles Navigation Bar */}
-        {(currentView === 'storefront' || currentView === 'search') && (
+        {(currentView === 'storefront' || currentView === 'search' || currentView === 'category') && (
           <div className="flex items-center justify-between border-t border-[#e5eeff] pt-1.5 mt-2">
             <nav className="flex items-center gap-1.5 overflow-x-auto py-1 w-full text-[12px]">
               <button
