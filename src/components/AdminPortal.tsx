@@ -32,7 +32,79 @@ import {
   Calendar,
 } from 'lucide-react';
 
-export type OrderTimeFilter = 'all' | '1w' | '1m' | '3m' | '6m' | '1y' | 'custom';
+export interface ParsedHistoryPeriod {
+  type: 'all' | 'relative';
+  value?: number;
+  unit?: 'day' | 'week' | 'month' | 'year';
+  displayMessage: string;
+}
+
+export const parseHistoryPeriod = (input: string): ParsedHistoryPeriod | null => {
+  const clean = input.trim().toLowerCase();
+  if (!clean) return null;
+
+  if (clean === 'all') {
+    return {
+      type: 'all',
+      displayMessage: 'Showing all order history.',
+    };
+  }
+
+  const match = clean.match(/^(\d+)\s*(day|days|week|weeks|month|months|year|years)?$/);
+  if (!match) return null;
+
+  const count = parseInt(match[1], 10);
+  if (isNaN(count) || count <= 0) return null;
+
+  const rawUnit = match[2] || 'week';
+  let unit: 'day' | 'week' | 'month' | 'year' = 'week';
+  let unitText = '';
+
+  if (rawUnit.startsWith('day')) {
+    unit = 'day';
+    unitText = count === 1 ? '1 day' : `${count} days`;
+  } else if (rawUnit.startsWith('week')) {
+    unit = 'week';
+    unitText = count === 1 ? '1 week' : `${count} weeks`;
+  } else if (rawUnit.startsWith('month')) {
+    unit = 'month';
+    unitText = count === 1 ? '1 month' : `${count} months`;
+  } else if (rawUnit.startsWith('year')) {
+    unit = 'year';
+    unitText = count === 1 ? '1 year' : `${count} years`;
+  }
+
+  return {
+    type: 'relative',
+    value: count,
+    unit,
+    displayMessage: `Showing orders from the last ${unitText}.`,
+  };
+};
+
+export const getCutoffDate = (period: ParsedHistoryPeriod): Date | null => {
+  if (period.type === 'all' || !period.value || !period.unit) {
+    return null;
+  }
+  const now = new Date();
+  if (period.unit === 'day') {
+    return new Date(now.getTime() - period.value * 24 * 60 * 60 * 1000);
+  }
+  if (period.unit === 'week') {
+    return new Date(now.getTime() - period.value * 7 * 24 * 60 * 60 * 1000);
+  }
+  if (period.unit === 'month') {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - period.value);
+    return d;
+  }
+  if (period.unit === 'year') {
+    const d = new Date(now);
+    d.setFullYear(d.getFullYear() - period.value);
+    return d;
+  }
+  return null;
+};
 
 export const parseOrderDate = (createdAt?: string | Date | number): Date | null => {
   if (!createdAt) return null;
@@ -120,10 +192,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders'>('inventory');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
-  const [orderTimeFilter, setOrderTimeFilter] = useState<OrderTimeFilter>('all');
-  const [customWeeks, setCustomWeeks] = useState<number | null>(null);
-  const [customWeeksInput, setCustomWeeksInput] = useState<string>('');
-  const [customWeeksError, setCustomWeeksError] = useState<string | null>(null);
+  const [historySearchInput, setHistorySearchInput] = useState<string>('');
+  const [activeHistoryPeriod, setActiveHistoryPeriod] = useState<ParsedHistoryPeriod | null>(null);
+  const [historySearchError, setHistorySearchError] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [tempPrice, setTempPrice] = useState<number>(0);
@@ -192,53 +263,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     };
   };
 
-  const handleSelectPresetTimeFilter = (filter: OrderTimeFilter) => {
-    setOrderTimeFilter(filter);
-    setCustomWeeks(null);
-    setCustomWeeksError(null);
-  };
-
-  const handleCustomWeeksSearch = (e?: React.FormEvent) => {
+  const handleCustomHistorySearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const trimmed = customWeeksInput.trim();
-    if (!/^[1-9]\d*$/.test(trimmed)) {
-      setCustomWeeksError('Please enter a valid positive whole number (e.g. 1, 2, 3).');
+    const trimmed = historySearchInput.trim();
+    if (!trimmed) {
+      setHistorySearchError("Please enter a period, e.g. '1 week', '3 months', '6 months', '1 year', or 'all'.");
       return;
     }
-    const weeks = parseInt(trimmed, 10);
-    if (isNaN(weeks) || weeks <= 0) {
-      setCustomWeeksError('Please enter a valid positive whole number (e.g. 1, 2, 3).');
+    const parsed = parseHistoryPeriod(trimmed);
+    if (!parsed) {
+      setHistorySearchError("Invalid period. Please enter e.g. '1 week', '2 weeks', '3 months', '6 months', '1 year', or 'all'.");
       return;
     }
-    setCustomWeeksError(null);
-    setCustomWeeks(weeks);
-    setOrderTimeFilter('custom');
+    setHistorySearchError(null);
+    setActiveHistoryPeriod(parsed);
   };
 
-  const handleClearTimeFilter = () => {
-    setOrderTimeFilter('all');
-    setCustomWeeks(null);
-    setCustomWeeksInput('');
-    setCustomWeeksError(null);
+  const handleClearHistorySearch = () => {
+    setHistorySearchInput('');
+    setActiveHistoryPeriod(null);
+    setHistorySearchError(null);
   };
 
-  let periodDisplayMessage: string | null = null;
-  if (orderTimeFilter === '1w') {
-    periodDisplayMessage = 'Showing orders from the last 1 week.';
-  } else if (orderTimeFilter === '1m') {
-    periodDisplayMessage = 'Showing orders from the last 1 month.';
-  } else if (orderTimeFilter === '3m') {
-    periodDisplayMessage = 'Showing orders from the last 3 months.';
-  } else if (orderTimeFilter === '6m') {
-    periodDisplayMessage = 'Showing orders from the last 6 months.';
-  } else if (orderTimeFilter === '1y') {
-    periodDisplayMessage = 'Showing orders from the last 1 year.';
-  } else if (orderTimeFilter === 'custom' && customWeeks !== null) {
-    periodDisplayMessage =
-      customWeeks === 1
-        ? 'Showing orders from the last 1 week.'
-        : `Showing orders from the last ${customWeeks} weeks.`;
-  }
+  const periodDisplayMessage = activeHistoryPeriod ? activeHistoryPeriod.displayMessage : null;
 
   const filteredOrders = customerOrders
     .filter((order) => {
@@ -255,33 +302,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         orderStatusFilter === 'all' ||
         order.status.toLowerCase() === orderStatusFilter.toLowerCase();
 
-      if (orderTimeFilter !== 'all') {
-        const orderDate = parseOrderDate(order.createdAt);
-        if (!orderDate) return false;
-
-        const now = new Date();
-        let cutoff: Date | null = null;
-
-        if (orderTimeFilter === '1w') {
-          cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        } else if (orderTimeFilter === '1m') {
-          cutoff = new Date(now);
-          cutoff.setMonth(cutoff.getMonth() - 1);
-        } else if (orderTimeFilter === '3m') {
-          cutoff = new Date(now);
-          cutoff.setMonth(cutoff.getMonth() - 3);
-        } else if (orderTimeFilter === '6m') {
-          cutoff = new Date(now);
-          cutoff.setMonth(cutoff.getMonth() - 6);
-        } else if (orderTimeFilter === '1y') {
-          cutoff = new Date(now);
-          cutoff.setFullYear(cutoff.getFullYear() - 1);
-        } else if (orderTimeFilter === 'custom' && customWeeks !== null) {
-          cutoff = new Date(now.getTime() - customWeeks * 7 * 24 * 60 * 60 * 1000);
-        }
-
-        if (cutoff && orderDate.getTime() < cutoff.getTime()) {
-          return false;
+      if (activeHistoryPeriod) {
+        const cutoff = getCutoffDate(activeHistoryPeriod);
+        if (cutoff) {
+          const orderDate = parseOrderDate(order.createdAt);
+          if (!orderDate) return false;
+          if (orderDate.getTime() < cutoff.getTime()) {
+            return false;
+          }
         }
       }
 
@@ -1164,96 +1192,77 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
-            {/* Order History Filter & Custom Weeks Search */}
-            <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-3.5 sm:p-4 space-y-3">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                {/* Preset Filter Buttons: [ All ] [ 1 Week ] [ 1 Month ] [ 3 Months ] [ 6 Months ] [ 1 Year ] */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[12px] font-bold text-[#475569] mr-1 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-[#006b2c]" />
-                    <span>Order History:</span>
-                  </span>
-                  {[
-                    { id: 'order-filter-all', key: 'all' as const, label: 'All' },
-                    { id: 'order-filter-1w', key: '1w' as const, label: '1 Week' },
-                    { id: 'order-filter-1m', key: '1m' as const, label: '1 Month' },
-                    { id: 'order-filter-3m', key: '3m' as const, label: '3 Months' },
-                    { id: 'order-filter-6m', key: '6m' as const, label: '6 Months' },
-                    { id: 'order-filter-1y', key: '1y' as const, label: '1 Year' },
-                  ].map((btn) => {
-                    const isActive = orderTimeFilter === btn.key;
-                    return (
-                      <button
-                        key={btn.key}
-                        type="button"
-                        id={btn.id}
-                        data-filter={btn.key}
-                        data-period={btn.label}
-                        onClick={() => handleSelectPresetTimeFilter(btn.key)}
-                        className={`px-3 py-1.5 rounded-lg text-[12px] transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-[#006b2c] text-white font-bold shadow-xs'
-                            : 'bg-white text-[#475569] hover:bg-[#e2e8f0]/60 hover:text-[#0b1c30] border border-[#cbd5e1] font-medium'
-                        }`}
-                      >
-                        [ <span>{btn.label}</span> ]
-                      </button>
-                    );
-                  })}
+            {/* Custom History Search: ONLY ONE INPUT BOX AND ONE SEARCH BUTTON */}
+            <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg px-3 py-2 space-y-2">
+              <form
+                onSubmit={handleCustomHistorySearch}
+                className="flex flex-wrap sm:flex-nowrap items-center gap-2"
+              >
+                <label
+                  htmlFor="admin-order-custom-history-input"
+                  className="text-[12px] font-bold text-[#334155] flex items-center gap-1 shrink-0 whitespace-nowrap"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-[#006b2c]" />
+                  <span>Order History:</span>
+                </label>
+
+                <div className="relative flex-1 max-w-[390px]">
+                  <input
+                    type="text"
+                    id="admin-order-custom-history-input"
+                    value={historySearchInput}
+                    onChange={(e) => {
+                      setHistorySearchInput(e.target.value);
+                      if (historySearchError) setHistorySearchError(null);
+                    }}
+                    placeholder="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
+                    aria-label="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
+                    className={`w-full h-8 pl-2.5 pr-7 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
+                      historySearchError
+                        ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
+                        : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
+                    }`}
+                  />
+                  {historySearchInput && (
+                    <button
+                      type="button"
+                      onClick={() => setHistorySearchInput('')}
+                      className="absolute right-2 top-2 text-[#94a3b8] hover:text-[#0b1c30]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Custom History Search: Weeks Input + Search Button */}
-                <form
-                  onSubmit={handleCustomWeeksSearch}
-                  className="flex flex-wrap sm:flex-nowrap items-center gap-2"
-                >
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="admin-order-custom-weeks-input"
-                      value={customWeeksInput}
-                      onChange={(e) => {
-                        setCustomWeeksInput(e.target.value);
-                        if (customWeeksError) setCustomWeeksError(null);
-                      }}
-                      placeholder="Number of weeks (e.g. 2)"
-                      aria-label="Enter number of weeks"
-                      className={`w-44 sm:w-48 px-3 py-1.5 border rounded-lg text-[12px] bg-white text-[#0b1c30] focus:outline-hidden focus:ring-2 ${
-                        customWeeksError
-                          ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
-                          : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
-                      }`}
-                    />
-                  </div>
-
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="submit"
-                    id="admin-order-custom-weeks-search-btn"
-                    className="px-3.5 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-bold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                    id="admin-order-custom-history-search-btn"
+                    className="h-8 px-3 py-1 rounded-md bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
                   >
-                    <Search className="w-3.5 h-3.5" />
+                    <Search className="w-3 h-3" />
                     <span>Search</span>
                   </button>
 
-                  {orderTimeFilter === 'custom' && (
+                  {activeHistoryPeriod && (
                     <button
                       type="button"
-                      id="admin-order-custom-weeks-clear-btn"
-                      onClick={handleClearTimeFilter}
-                      title="Reset to all orders"
-                      className="px-2.5 py-1.5 rounded-lg bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-semibold transition-colors cursor-pointer"
+                      id="admin-order-custom-history-clear-btn"
+                      onClick={handleClearHistorySearch}
+                      title="Clear period filter"
+                      className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
                     >
                       Reset
                     </button>
                   )}
-                </form>
-              </div>
+                </div>
+              </form>
 
               {/* Validation Error Message */}
-              {customWeeksError && (
-                <div className="text-[12px] text-[#dc2626] font-medium flex items-center gap-1.5 pl-1">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{customWeeksError}</span>
+              {historySearchError && (
+                <div className="text-[11px] text-[#dc2626] font-medium flex items-center gap-1 pl-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span>{historySearchError}</span>
                 </div>
               )}
 
@@ -1261,10 +1270,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               {periodDisplayMessage && (
                 <div
                   id="order-period-display"
-                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#e8f5e9] border border-[#a7f3d0] text-[12px] text-[#065f46] font-medium"
+                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-[#e8f5e9] border border-[#a7f3d0] text-[11px] text-[#065f46] font-medium"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
                     <span className="font-semibold">{periodDisplayMessage}</span>
                   </div>
                   <span className="text-[11px] text-[#047857] font-bold">
@@ -1279,10 +1288,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <div className="py-16 text-center text-[#94a3b8]">
                 <ShoppingBag className="w-12 h-12 mx-auto mb-2 opacity-30 text-[#006b2c]" />
                 <p className="text-[14px] font-semibold text-[#475569]">
-                  {orderTimeFilter !== 'all' ? 'No orders found for this period.' : t('noOrdersFound')}
+                  {activeHistoryPeriod ? 'No orders found for this period.' : t('noOrdersFound')}
                 </p>
                 <p className="text-[12px] text-[#94a3b8] mt-1">
-                  {orderTimeFilter !== 'all'
+                  {activeHistoryPeriod
                     ? 'No orders found for this period.'
                     : 'Orders placed by customers from the Customer Portal will appear here automatically.'}
                 </p>
