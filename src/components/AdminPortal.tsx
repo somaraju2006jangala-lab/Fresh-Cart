@@ -1153,122 +1153,134 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
-            {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-              <div className="relative w-full sm:w-80 lg:w-96">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#94a3b8]" />
-                <input
-                  type="text"
-                  id="admin-order-search"
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder={t('filterOrdersPlaceholder')}
-                  className="w-full pl-9 pr-8 py-2 border border-[#cbd5e1] rounded-lg text-[13px] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
-                />
-                {orderSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setOrderSearch('')}
-                    className="absolute right-2.5 top-2.5 text-[#94a3b8] hover:text-[#0b1c30]"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Right Column: "All Order Statuses" dropdown and "Order History" directly below */}
-              <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
-                <select
-                  id="admin-order-status-filter"
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="w-full sm:w-auto px-3 py-2 border border-[#cbd5e1] rounded-lg text-[13px] bg-white text-[#334155] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
+            {/* Filter and Search Bar: Single Horizontal Row */}
+            <div className="space-y-2">
+              <div className="overflow-x-auto py-0.5">
+                <div
+                  className="grid items-center gap-4 w-full min-w-[840px]"
+                  style={{ gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' }}
                 >
-                  <option value="all">{t('allOrderStatuses')}</option>
-                  <option value="Ordered">Ordered</option>
-                  <option value="Picking at Pod #104">Picking at Pod #104</option>
-                  <option value="Cold-Chain En Route">Cold-Chain En Route</option>
-                  <option value="Delivered">Delivered</option>
-                </select>
-
-                {/* Custom History Search: ONLY ONE INPUT BOX WITH EMBEDDED SEARCH ICON */}
-                <form
-                  onSubmit={handleCustomHistorySearch}
-                  className="flex flex-wrap sm:flex-nowrap items-center justify-start sm:justify-end gap-2"
-                >
-                  <label
-                    htmlFor="admin-order-custom-history-input"
-                    className="text-[12px] font-bold text-[#334155] flex items-center gap-1 shrink-0 whitespace-nowrap"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-[#006b2c]" />
-                    <span>Order History:</span>
-                  </label>
-
-                  <div className="relative w-72 sm:w-[300px]">
-                    <input
-                      type="text"
-                      id="admin-order-custom-history-input"
-                      value={historySearchInput}
-                      onChange={(e) => {
-                        setHistorySearchInput(e.target.value);
-                        if (historySearchError) setHistorySearchError(null);
-                      }}
-                      placeholder="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
-                      aria-label="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
-                      className={`w-full h-8 pl-2.5 pr-8 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
-                        historySearchError
-                          ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
-                          : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
-                      }`}
-                    />
-                    <button
-                      type="submit"
-                      id="admin-order-custom-history-search-btn"
-                      title="Search"
-                      aria-label="Search order history"
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
-                    >
-                      <Search className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {activeHistoryPeriod && (
-                    <button
-                      type="button"
-                      id="admin-order-custom-history-clear-btn"
-                      onClick={handleClearHistorySearch}
-                      title="Clear period filter"
-                      className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </form>
-
-                {/* Validation Error Message */}
-                {historySearchError && (
-                  <div className="text-[11px] text-[#dc2626] font-medium flex items-center gap-1 self-start sm:self-end">
-                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                    <span>{historySearchError}</span>
-                  </div>
-                )}
-
-                {/* Selected Period Display Badge */}
-                {periodDisplayMessage && (
-                  <div
-                    id="order-period-display"
-                    className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-[#e8f5e9] border border-[#a7f3d0] text-[11px] text-[#065f46] font-medium self-start sm:self-end"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-                      <span className="font-semibold">{periodDisplayMessage}</span>
+                  {/* 1. Main Search Orders input on the LEFT */}
+                  <div className="justify-self-start w-full max-w-[280px]">
+                    <div className="relative w-full">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <input
+                        type="text"
+                        id="admin-order-search"
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                        placeholder={t('filterOrdersPlaceholder')}
+                        className="w-full h-8 pl-8 pr-7 py-1 border border-[#cbd5e1] rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
+                      />
+                      {orderSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setOrderSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#0b1c30]"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <span className="text-[11px] text-[#047857] font-bold ml-2">
-                      {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
-                    </span>
                   </div>
-                )}
+
+                  {/* 2. All Order Statuses dropdown horizontally CENTERED in available area */}
+                  <div className="justify-self-center">
+                    <select
+                      id="admin-order-status-filter"
+                      value={orderStatusFilter}
+                      onChange={(e) => setOrderStatusFilter(e.target.value)}
+                      className="w-[170px] h-8 px-2.5 py-1 border border-[#cbd5e1] rounded-md text-[12px] bg-white text-[#334155] focus:outline-hidden focus:ring-1.5 focus:ring-[#006b2c]/30 focus:border-[#006b2c] cursor-pointer"
+                    >
+                      <option value="all">{t('allOrderStatuses')}</option>
+                      <option value="Ordered">Ordered</option>
+                      <option value="Picking at Pod #104">Picking at Pod #104</option>
+                      <option value="Cold-Chain En Route">Cold-Chain En Route</option>
+                      <option value="Delivered">Delivered</option>
+                    </select>
+                  </div>
+
+                  {/* 3. Order History on the RIGHT side with 1:2 width ratio (170px dropdown : 340px input) */}
+                  <div className="justify-self-end">
+                    <form
+                      onSubmit={handleCustomHistorySearch}
+                      className="flex items-center gap-2 shrink-0"
+                    >
+                      <label
+                        htmlFor="admin-order-custom-history-input"
+                        className="text-[12px] font-bold text-[#334155] flex items-center gap-1 shrink-0 whitespace-nowrap"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-[#006b2c]" />
+                        <span>Order History:</span>
+                      </label>
+
+                      <div className="relative w-[340px]">
+                        <input
+                          type="text"
+                          id="admin-order-custom-history-input"
+                          value={historySearchInput}
+                          onChange={(e) => {
+                            setHistorySearchInput(e.target.value);
+                            if (historySearchError) setHistorySearchError(null);
+                          }}
+                          placeholder="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
+                          aria-label="Enter period, e.g. 1 week, 3 months, 6 months, 1 year, all"
+                          className={`w-full h-8 pl-2.5 pr-8 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
+                            historySearchError
+                              ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
+                              : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
+                          }`}
+                        />
+                        <button
+                          type="submit"
+                          id="admin-order-custom-history-search-btn"
+                          title="Search"
+                          aria-label="Search order history"
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {activeHistoryPeriod && (
+                        <button
+                          type="button"
+                          id="admin-order-custom-history-clear-btn"
+                          onClick={handleClearHistorySearch}
+                          title="Clear period filter"
+                          className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </form>
+                  </div>
+                </div>
               </div>
+
+              {/* Validation Error Message */}
+              {historySearchError && (
+                <div className="text-[11px] text-[#dc2626] font-medium flex items-center gap-1 justify-end pl-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span>{historySearchError}</span>
+                </div>
+              )}
+
+              {/* Selected Period Display Badge */}
+              {periodDisplayMessage && (
+                <div
+                  id="order-period-display"
+                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-[#e8f5e9] border border-[#a7f3d0] text-[11px] text-[#065f46] font-medium self-end ml-auto max-w-fit"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+                    <span className="font-semibold">{periodDisplayMessage}</span>
+                  </div>
+                  <span className="text-[11px] text-[#047857] font-bold ml-2">
+                    {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Orders List / Cards */}
