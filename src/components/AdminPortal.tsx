@@ -1206,7 +1206,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span>Order History:</span>
                 </label>
 
-                <div className="relative flex-1 max-w-[390px]">
+                <div className="relative w-72 sm:w-[300px]">
                   <input
                     type="text"
                     id="admin-order-custom-history-input"
