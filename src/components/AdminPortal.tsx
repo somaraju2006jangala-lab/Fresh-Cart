@@ -34,6 +34,7 @@ import {
   Unlock,
   KeyRound,
   Percent,
+  Truck,
 } from 'lucide-react';
 import { verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
 
@@ -166,6 +167,8 @@ interface AdminPortalProps {
   onClearInventoryLogs?: () => void;
   onUpdateOrderStatus?: (orderId: string, status: string, extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }) => void;
   onDeleteCustomerOrder?: (orderId: string) => void;
+  deliveryCharges?: number;
+  onUpdateDeliveryCharges?: (charge: number) => Promise<void> | void;
   taxAndPackingPercentage?: number;
   onUpdateTaxAndPacking?: (percentage: number) => Promise<void> | void;
 }
@@ -191,7 +194,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onClearInventoryLogs,
   onUpdateOrderStatus,
   onDeleteCustomerOrder,
-  taxAndPackingPercentage = 0,
+  deliveryCharges = 50,
+  onUpdateDeliveryCharges,
+  taxAndPackingPercentage,
   onUpdateTaxAndPacking,
 }) => {
   const { t } = useLanguage();
@@ -199,56 +204,61 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
-  const [taxPackingInput, setTaxPackingInput] = useState<string>(String(taxAndPackingPercentage));
-  const [taxPackingError, setTaxPackingError] = useState<string>('');
-  const [taxPackingSuccess, setTaxPackingSuccess] = useState<string>('');
-  const [isSavingTaxPacking, setIsSavingTaxPacking] = useState<boolean>(false);
+
+  const activeDeliveryCharge = typeof deliveryCharges === 'number'
+    ? deliveryCharges
+    : typeof taxAndPackingPercentage === 'number'
+    ? taxAndPackingPercentage
+    : 50;
+
+  const [deliveryChargesInput, setDeliveryChargesInput] = useState<string>(String(activeDeliveryCharge));
+  const [deliveryChargesError, setDeliveryChargesError] = useState<string>('');
+  const [deliveryChargesSuccess, setDeliveryChargesSuccess] = useState<string>('');
+  const [isSavingDeliveryCharges, setIsSavingDeliveryCharges] = useState<boolean>(false);
 
   React.useEffect(() => {
-    setTaxPackingInput(String(taxAndPackingPercentage));
-  }, [taxAndPackingPercentage]);
+    setDeliveryChargesInput(String(activeDeliveryCharge));
+  }, [activeDeliveryCharge]);
 
-  const handleSaveTaxPacking = async (e?: React.FormEvent) => {
+  const handleSaveDeliveryCharges = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setTaxPackingError('');
-    setTaxPackingSuccess('');
+    setDeliveryChargesError('');
+    setDeliveryChargesSuccess('');
 
-    const trimmed = taxPackingInput.trim();
+    const trimmed = deliveryChargesInput.trim();
     if (!trimmed) {
-      setTaxPackingError(t('invalidPercentageError') || 'Please enter a valid percentage number.');
+      setDeliveryChargesError('Please enter a valid delivery charge.');
       return;
     }
 
     const num = Number(trimmed);
     if (isNaN(num)) {
-      setTaxPackingError(t('invalidPercentageError') || 'Please enter a valid percentage number.');
+      setDeliveryChargesError('Please enter a valid number.');
       return;
     }
 
     if (num < 0) {
-      setTaxPackingError(t('negativePercentageError') || 'Percentage cannot be negative.');
+      setDeliveryChargesError('Delivery charge cannot be negative.');
       return;
     }
 
-    if (num > 100) {
-      setTaxPackingError(t('maxPercentageError') || 'Percentage cannot exceed 100%.');
-      return;
-    }
-
-    setIsSavingTaxPacking(true);
+    setIsSavingDeliveryCharges(true);
     try {
       const rounded = Math.round(num * 100) / 100;
-      await onUpdateTaxAndPacking?.(rounded);
-      setTaxPackingInput(String(rounded));
-      setTaxPackingSuccess(
-        t('settingSavedSuccess', { value: rounded }) ||
-          `Estimated Taxes & Packing setting saved successfully to ${rounded}%!`
+      if (onUpdateDeliveryCharges) {
+        await onUpdateDeliveryCharges(rounded);
+      } else if (onUpdateTaxAndPacking) {
+        await onUpdateTaxAndPacking(rounded);
+      }
+      setDeliveryChargesInput(String(rounded));
+      setDeliveryChargesSuccess(
+        `Delivery Charges setting saved successfully to ${rounded > 0 ? formatINR(rounded) : 'FREE'}!`
       );
-      setTimeout(() => setTaxPackingSuccess(''), 4000);
+      setTimeout(() => setDeliveryChargesSuccess(''), 4000);
     } catch {
-      setTaxPackingError('Failed to save setting. Please try again.');
+      setDeliveryChargesError('Failed to save setting. Please try again.');
     } finally {
-      setIsSavingTaxPacking(false);
+      setIsSavingDeliveryCharges(false);
     }
   };
 
@@ -577,16 +587,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {/* Language Selector in Admin Portal */}
             <LanguageSelector variant="dark" idPrefix="admin-lang" />
 
-            {/* Quick Tax & Packing Rate in Admin Header */}
+            {/* Quick Delivery Charges in Admin Header */}
             <button
               type="button"
-              id="admin-header-tax-btn"
+              id="admin-header-delivery-btn"
               onClick={() => setActiveTab('settings')}
               className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#475569] text-white hover:bg-[#334155] text-[12px] font-medium transition-colors cursor-pointer"
-              title="Configure Estimated Taxes & Packing"
+              title="Configure Delivery Charges"
             >
-              <Percent className="w-3.5 h-3.5 text-[#7ffc97]" />
-              <span>Tax & Packing: <strong className="text-[#7ffc97]">{taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : 'FREE'}</strong></span>
+              <Truck className="w-3.5 h-3.5 text-[#7ffc97]" />
+              <span>Delivery Charges: <strong className="text-[#7ffc97]">{activeDeliveryCharge > 0 ? formatINR(activeDeliveryCharge) : 'FREE'}</strong></span>
             </button>
 
             <button
@@ -750,8 +760,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
             }`}
           >
-            <Percent className="w-4 h-4" />
-            <span>{t('tabSettings') || 'Estimated Taxes & Packing'}</span>
+            <Truck className="w-4 h-4" />
+            <span>{t('tabSettings') || 'Delivery Charges'}</span>
           </button>
         </div>
 
@@ -1202,19 +1212,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
-            {/* Associated Tax & Packing Banner */}
+            {/* Associated Delivery Charges Banner */}
             <div className="flex items-center justify-between p-3 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] text-[12px]">
               <div className="flex items-center gap-2 text-[#565e74]">
-                <Percent className="w-4 h-4 text-[#006b2c]" />
-                <span>Storefront Estimated Taxes & Packing Rate: <strong className="text-[#0b1c30]">{taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : '0% (FREE)'}</strong></span>
+                <Truck className="w-4 h-4 text-[#006b2c]" />
+                <span>Storefront Delivery Charges: <strong className="text-[#0b1c30]">{activeDeliveryCharge > 0 ? formatINR(activeDeliveryCharge) : 'FREE'}</strong></span>
               </div>
               <button
                 type="button"
-                id="coupons-goto-tax-settings-btn"
+                id="coupons-goto-delivery-settings-btn"
                 onClick={() => setActiveTab('settings')}
                 className="text-[#006b2c] font-bold hover:underline cursor-pointer flex items-center gap-1"
               >
-                <span>Configure Taxes & Packing</span>
+                <span>Configure Delivery Charges</span>
               </button>
             </div>
 
@@ -1908,62 +1918,61 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           )
         )}
 
-        {/* Tab 5: Settings - Estimated Taxes & Packing */}
+        {/* Tab 5: Settings - Delivery Charges */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
             {/* Header */}
             <div className="pb-4 border-b border-[#e2e8f0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-[18px] font-bold text-[#0f172a] font-display flex items-center gap-2">
-                  <Percent className="w-5 h-5 text-[#006b2c]" />
-                  <span>Estimated Taxes & Packing</span>
+                  <Truck className="w-5 h-5 text-[#006b2c]" />
+                  <span>Delivery Charges</span>
                 </h3>
                 <p className="text-[12px] text-[#565e74] mt-0.5">
-                  {t('taxAndPackingSettingDesc') ||
-                    'Configure the percentage charged on customer cart subtotal for taxes and cold-chain packing.'}
+                  {t('deliveryChargesSettingDesc') ||
+                    'Configure the delivery charges applied to customer orders.'}
                 </p>
               </div>
 
               <div className="flex items-center gap-2 bg-[#f8fafc] px-3.5 py-2 rounded-xl border border-[#e2e8f0]">
                 <span className="text-[12px] font-semibold text-[#64748b]">Current Active Setting:</span>
                 <span className="text-[14px] font-extrabold text-[#006b2c]">
-                  {taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : '0% (FREE)'}
+                  {activeDeliveryCharge > 0 ? formatINR(activeDeliveryCharge) : 'FREE (₹0)'}
                 </span>
               </div>
             </div>
 
             {/* Settings Form */}
-            <form onSubmit={handleSaveTaxPacking} className="max-w-xl space-y-5">
+            <form onSubmit={handleSaveDeliveryCharges} className="max-w-xl space-y-5">
               <div>
                 <label
-                  htmlFor="admin-tax-packing-input"
+                  htmlFor="admin-delivery-charges-input"
                   className="block text-[13px] font-bold text-[#0f172a] mb-1.5"
                 >
-                  {t('taxAndPackingRateLabel') || 'Tax & Packing Percentage (%)'}
+                  {t('deliveryChargesLabel') || 'Delivery Charges (₹)'}
                 </label>
                 <div className="relative">
-                  <input
-                    id="admin-tax-packing-input"
-                    name="taxAndPackingPercentage"
-                    type="number"
-                    step="any"
-                    min="0"
-                    max="100"
-                    value={taxPackingInput}
-                    onChange={(e) => {
-                      setTaxPackingInput(e.target.value);
-                      if (taxPackingError) setTaxPackingError('');
-                      if (taxPackingSuccess) setTaxPackingSuccess('');
-                    }}
-                    placeholder="Enter percentage (e.g. 0, 2.5, 3, 5, 10)"
-                    className="w-full px-3.5 py-2.5 text-[14px] font-semibold bg-[#f8fafc] border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] focus:bg-white transition-all pr-10"
-                  />
-                  <span className="absolute right-3.5 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
-                    %
+                  <span className="absolute left-3.5 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                    ₹
                   </span>
+                  <input
+                    id="admin-delivery-charges-input"
+                    name="deliveryCharges"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={deliveryChargesInput}
+                    onChange={(e) => {
+                      setDeliveryChargesInput(e.target.value);
+                      if (deliveryChargesError) setDeliveryChargesError('');
+                      if (deliveryChargesSuccess) setDeliveryChargesSuccess('');
+                    }}
+                    placeholder="Enter delivery charge (e.g. 50, 0 for FREE)"
+                    className="w-full pl-8 pr-3.5 py-2.5 text-[14px] font-semibold bg-[#f8fafc] border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] focus:bg-white transition-all"
+                  />
                 </div>
                 <p className="text-[11px] text-[#64748b] mt-1.5">
-                  Enter 0 for FREE. Decimals like 2.5% are supported (range: 0% to 100%).
+                  Enter 0 for FREE delivery. (Default: ₹50). Orders of ₹499 or more unlock Free Express Delivery.
                 </p>
               </div>
 
@@ -1974,23 +1983,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { label: '0% (FREE)', value: 0 },
-                    { label: '2%', value: 2 },
-                    { label: '3%', value: 3 },
-                    { label: '5%', value: 5 },
-                    { label: '10%', value: 10 },
+                    { label: 'FREE (₹0)', value: 0 },
+                    { label: '₹30', value: 30 },
+                    { label: '₹40', value: 40 },
+                    { label: '₹50', value: 50 },
+                    { label: '₹70', value: 70 },
                   ].map((preset) => (
                     <button
                       key={preset.value}
                       type="button"
-                      id={`preset-tax-${preset.value}`}
+                      id={`preset-delivery-${preset.value}`}
                       onClick={() => {
-                        setTaxPackingInput(String(preset.value));
-                        if (taxPackingError) setTaxPackingError('');
-                        if (taxPackingSuccess) setTaxPackingSuccess('');
+                        setDeliveryChargesInput(String(preset.value));
+                        if (deliveryChargesError) setDeliveryChargesError('');
+                        if (deliveryChargesSuccess) setDeliveryChargesSuccess('');
                       }}
                       className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all cursor-pointer border ${
-                        taxPackingInput === String(preset.value)
+                        deliveryChargesInput === String(preset.value)
                           ? 'bg-[#006b2c] text-white border-[#006b2c] shadow-xs'
                           : 'bg-[#f1f5f9] text-[#334155] border-[#cbd5e1] hover:bg-[#e2e8f0]'
                       }`}
@@ -2004,27 +2013,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               {/* Live Preview Box */}
               <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-2">
                 <span className="text-[11px] font-bold uppercase text-[#64748b] tracking-wider block">
-                  Live Calculation Example (Cart Subtotal: ₹1,000)
+                  Live Calculation Example (Cart Subtotal: ₹69)
                 </span>
                 {(() => {
-                  const previewVal = parseFloat(taxPackingInput);
-                  const validVal = !isNaN(previewVal) && previewVal >= 0 && previewVal <= 100 ? previewVal : 0;
-                  const previewAmount = Math.round(((1000 * validVal) / 100) * 100) / 100;
-                  const previewTotal = 1000 + previewAmount;
+                  const previewVal = parseFloat(deliveryChargesInput);
+                  const validVal = !isNaN(previewVal) && previewVal >= 0 ? previewVal : 0;
+                  const previewTotal = 69 + validVal;
                   return (
                     <div className="text-[12px] space-y-1 text-[#334155]">
                       <div className="flex justify-between">
                         <span>Cart Subtotal:</span>
-                        <span className="font-semibold text-[#0f172a]">₹1,000</span>
+                        <span className="font-semibold text-[#0f172a]">₹69</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Estimated Taxes & Packing ({validVal}%):</span>
-                        <span className={`font-semibold ${previewAmount > 0 ? 'text-[#0f172a]' : 'text-[#006b2c]'}`}>
-                          {previewAmount > 0 ? formatINR(previewAmount) : 'FREE'}
+                        <span>Delivery Charges:</span>
+                        <span className={`font-semibold ${validVal > 0 ? 'text-[#0f172a]' : 'text-[#006b2c]'}`}>
+                          {validVal > 0 ? formatINR(validVal) : 'FREE'}
                         </span>
                       </div>
                       <div className="flex justify-between pt-1 border-t border-[#e2e8f0] font-bold text-[13px]">
-                        <span>Estimated Total:</span>
+                        <span>Total:</span>
                         <span className="text-[#006b2c] font-display">{formatINR(previewTotal)}</span>
                       </div>
                     </div>
@@ -2033,23 +2041,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
 
               {/* Validation Error / Success */}
-              {taxPackingError && (
+              {deliveryChargesError && (
                 <div
-                  id="admin-tax-packing-error"
+                  id="admin-delivery-charges-error"
                   className="p-3 bg-[#fee2e2] text-[#ba1a1a] rounded-xl text-[12px] font-semibold border border-[#fecaca] flex items-center gap-2"
                 >
                   <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{taxPackingError}</span>
+                  <span>{deliveryChargesError}</span>
                 </div>
               )}
 
-              {taxPackingSuccess && (
+              {deliveryChargesSuccess && (
                 <div
-                  id="admin-tax-packing-success"
+                  id="admin-delivery-charges-success"
                   className="p-3 bg-[#dcfce7] text-[#15803d] rounded-xl text-[12px] font-semibold border border-[#86efac] flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4 shrink-0" />
-                  <span>{taxPackingSuccess}</span>
+                  <span>{deliveryChargesSuccess}</span>
                 </div>
               )}
 
@@ -2057,11 +2065,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <div className="pt-2 flex items-center gap-3">
                 <button
                   type="submit"
-                  id="admin-save-tax-packing-btn"
-                  disabled={isSavingTaxPacking}
+                  id="admin-save-delivery-charges-btn"
+                  disabled={isSavingDeliveryCharges}
                   className="px-5 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {isSavingTaxPacking ? (
+                  {isSavingDeliveryCharges ? (
                     <span>Saving...</span>
                   ) : (
                     <>
@@ -2072,11 +2080,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </button>
                 <button
                   type="button"
-                  id="admin-reset-tax-packing-btn"
+                  id="admin-reset-delivery-charges-btn"
                   onClick={() => {
-                    setTaxPackingInput(String(taxAndPackingPercentage));
-                    setTaxPackingError('');
-                    setTaxPackingSuccess('');
+                    setDeliveryChargesInput(String(activeDeliveryCharge));
+                    setDeliveryChargesError('');
+                    setDeliveryChargesSuccess('');
                   }}
                   className="px-4 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
                 >

@@ -1,9 +1,11 @@
 export interface AppSettings {
-  taxAndPackingPercentage: number;
+  deliveryCharges: number;
+  taxAndPackingPercentage?: number;
 }
 
 const STORAGE_SETTINGS_KEY = 'freshcart_app_settings_v1';
 const DEFAULT_SETTINGS: AppSettings = {
+  deliveryCharges: 50,
   taxAndPackingPercentage: 0,
 };
 
@@ -15,9 +17,10 @@ export const getStoredSettings = (): AppSettings => {
     const raw = localStorage.getItem(STORAGE_SETTINGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (typeof parsed?.taxAndPackingPercentage === 'number' && !isNaN(parsed.taxAndPackingPercentage)) {
+      if (typeof parsed?.deliveryCharges === 'number' && !isNaN(parsed.deliveryCharges)) {
         return {
-          taxAndPackingPercentage: Math.max(0, Math.min(100, parsed.taxAndPackingPercentage)),
+          deliveryCharges: Math.max(0, parsed.deliveryCharges),
+          taxAndPackingPercentage: 0,
         };
       }
     }
@@ -35,9 +38,13 @@ export const fetchServerSettings = async (): Promise<AppSettings> => {
     const res = await fetch('/api/settings');
     if (res.ok) {
       const data = await res.json();
-      if (data?.success && typeof data?.settings?.taxAndPackingPercentage === 'number') {
+      if (data?.success) {
+        const val = typeof data?.settings?.deliveryCharges === 'number'
+          ? data.settings.deliveryCharges
+          : 50;
         const settings: AppSettings = {
-          taxAndPackingPercentage: Math.max(0, Math.min(100, data.settings.taxAndPackingPercentage)),
+          deliveryCharges: Math.max(0, val),
+          taxAndPackingPercentage: 0,
         };
         try {
           localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(settings));
@@ -59,10 +66,11 @@ export const fetchServerSettings = async (): Promise<AppSettings> => {
 export const updateServerSettings = async (settings: Partial<AppSettings>): Promise<AppSettings> => {
   const current = getStoredSettings();
   const nextSettings: AppSettings = {
-    taxAndPackingPercentage:
-      typeof settings.taxAndPackingPercentage === 'number' && !isNaN(settings.taxAndPackingPercentage)
-        ? Math.max(0, Math.min(100, Math.round(settings.taxAndPackingPercentage * 100) / 100))
-        : current.taxAndPackingPercentage,
+    deliveryCharges:
+      typeof settings.deliveryCharges === 'number' && !isNaN(settings.deliveryCharges)
+        ? Math.max(0, Math.round(settings.deliveryCharges * 100) / 100)
+        : current.deliveryCharges,
+    taxAndPackingPercentage: 0,
   };
 
   // Immediate local cache update
@@ -81,9 +89,10 @@ export const updateServerSettings = async (settings: Partial<AppSettings>): Prom
     });
     if (res.ok) {
       const data = await res.json();
-      if (data?.success && typeof data?.settings?.taxAndPackingPercentage === 'number') {
+      if (data?.success && typeof data?.settings?.deliveryCharges === 'number') {
         return {
-          taxAndPackingPercentage: data.settings.taxAndPackingPercentage,
+          deliveryCharges: data.settings.deliveryCharges,
+          taxAndPackingPercentage: 0,
         };
       }
     }
@@ -93,3 +102,4 @@ export const updateServerSettings = async (settings: Partial<AppSettings>): Prom
 
   return nextSettings;
 };
+

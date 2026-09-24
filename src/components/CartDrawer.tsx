@@ -28,6 +28,7 @@ interface CartDrawerProps {
   onApplyCoupon: (code: string) => void;
   onRemoveCoupon: () => void;
   coupons?: Coupon[];
+  deliveryCharges?: number;
   taxAndPackingPercentage?: number;
 }
 
@@ -42,7 +43,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyCoupon,
   onRemoveCoupon,
   coupons = [],
-  taxAndPackingPercentage = 0,
+  deliveryCharges = 50,
+  taxAndPackingPercentage,
 }) => {
   const { t } = useLanguage();
   const [couponInput, setCouponInput] = useState('');
@@ -88,13 +90,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const discountPercent = isQualified && activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
 
-  // Admin-controlled Estimated Taxes & Packing
-  // Formula: Cart Subtotal × Tax & Packing Percentage ÷ 100
-  const taxAndPackingAmount = items.length > 0 && subtotal > 0
-    ? Math.round(((subtotal * taxAndPackingPercentage) / 100) * 100) / 100
+  // Delivery Charges calculation
+  // Free delivery if cart qualifies for Free Express Delivery Goal (₹499)
+  // Otherwise, standard Delivery Charges apply (default ₹50 or admin-configured)
+  const deliveryChargesAmount = items.length > 0 && subtotal > 0
+    ? (subtotal >= freeDeliveryThreshold ? 0 : Math.max(0, deliveryCharges))
     : 0;
 
-  const total = Math.max(0, Math.round((subtotal - discount + taxAndPackingAmount) * 100) / 100);
+  const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
   // Dynamic cart total revalidation when subtotal changes
   const prevSubtotalRef = React.useRef(subtotal);
@@ -466,9 +469,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             )}
 
             <div className="flex justify-between text-[#565e74]">
-              <span>{t('estimatedTaxes')}</span>
-              <span id="cart-drawer-taxes" className={`tabular-nums ${taxAndPackingAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
-                {taxAndPackingAmount > 0 ? formatINR(taxAndPackingAmount) : t('free')}
+              <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
+              <span id="cart-drawer-taxes" data-testid="cart-drawer-delivery-charges" className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
+                {deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : t('free')}
               </span>
             </div>
 

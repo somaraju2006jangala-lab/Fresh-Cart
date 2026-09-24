@@ -133,24 +133,26 @@ apiRouter.get('/api/otp/provider-config', (_req: Request, res: Response) => {
 
 const SETTINGS_FILE = path.resolve(process.cwd(), '.data/app_settings.json');
 
-function loadAppSettings(): { taxAndPackingPercentage: number } {
+function loadAppSettings(): { deliveryCharges: number; taxAndPackingPercentage?: number } {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
       const data = JSON.parse(raw);
-      if (typeof data?.taxAndPackingPercentage === 'number' && !isNaN(data.taxAndPackingPercentage)) {
-        return {
-          taxAndPackingPercentage: Math.max(0, Math.min(100, data.taxAndPackingPercentage)),
-        };
-      }
+      const deliveryCharges = typeof data?.deliveryCharges === 'number' && !isNaN(data.deliveryCharges)
+        ? Math.max(0, data.deliveryCharges)
+        : 50;
+      return {
+        deliveryCharges,
+        taxAndPackingPercentage: 0,
+      };
     }
   } catch {
     // fallback
   }
-  return { taxAndPackingPercentage: 0 };
+  return { deliveryCharges: 50, taxAndPackingPercentage: 0 };
 }
 
-function saveAppSettings(settings: { taxAndPackingPercentage: number }): void {
+function saveAppSettings(settings: { deliveryCharges: number; taxAndPackingPercentage?: number }): void {
   try {
     const dir = path.dirname(SETTINGS_FILE);
     if (!fs.existsSync(dir)) {
@@ -164,7 +166,7 @@ function saveAppSettings(settings: { taxAndPackingPercentage: number }): void {
 
 /**
  * GET /api/settings
- * Retrieves app settings, including Admin-configured Tax & Packing percentage.
+ * Retrieves app settings, including Admin-configured Delivery Charges.
  */
 apiRouter.get('/api/settings', (_req: Request, res: Response) => {
   const settings = loadAppSettings();
@@ -173,25 +175,26 @@ apiRouter.get('/api/settings', (_req: Request, res: Response) => {
 
 /**
  * POST /api/settings
- * Updates app settings, including Tax & Packing percentage with validation.
+ * Updates app settings, including Delivery Charges with validation.
  */
 apiRouter.post('/api/settings', (req: Request, res: Response) => {
   try {
-    const { taxAndPackingPercentage } = req.body;
+    const { deliveryCharges, taxAndPackingPercentage } = req.body;
+    const rawVal = deliveryCharges !== undefined ? deliveryCharges : taxAndPackingPercentage;
 
-    if (taxAndPackingPercentage === undefined || taxAndPackingPercentage === null) {
+    if (rawVal === undefined || rawVal === null) {
       sendJson(res, 400, {
         success: false,
-        error: 'taxAndPackingPercentage is required.',
+        error: 'deliveryCharges is required.',
       });
       return;
     }
 
-    const num = Number(taxAndPackingPercentage);
+    const num = Number(rawVal);
     if (isNaN(num)) {
       sendJson(res, 400, {
         success: false,
-        error: 'Tax & packing percentage must be a valid number.',
+        error: 'Delivery charge must be a valid number.',
       });
       return;
     }
@@ -199,25 +202,17 @@ apiRouter.post('/api/settings', (req: Request, res: Response) => {
     if (num < 0) {
       sendJson(res, 400, {
         success: false,
-        error: 'Percentage cannot be negative.',
-      });
-      return;
-    }
-
-    if (num > 100) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Percentage cannot exceed 100%.',
+        error: 'Delivery charge cannot be negative.',
       });
       return;
     }
 
     const sanitized = Math.round(num * 100) / 100;
-    saveAppSettings({ taxAndPackingPercentage: sanitized });
+    saveAppSettings({ deliveryCharges: sanitized, taxAndPackingPercentage: 0 });
 
     sendJson(res, 200, {
       success: true,
-      settings: { taxAndPackingPercentage: sanitized },
+      settings: { deliveryCharges: sanitized, taxAndPackingPercentage: 0 },
     });
   } catch (err: any) {
     sendJson(res, 500, {

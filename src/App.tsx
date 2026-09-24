@@ -234,22 +234,22 @@ function FreshCartStore() {
     setCustomerOrders(getCustomerOrders());
   }, [currentUser]);
 
-  // Admin-controlled Estimated Taxes & Packing Percentage Setting
-  const [taxAndPackingPercentage, setTaxAndPackingPercentage] = useState<number>(() => {
-    return getStoredSettings().taxAndPackingPercentage;
+  // Admin-controlled Delivery Charges Setting
+  const [deliveryCharges, setDeliveryCharges] = useState<number>(() => {
+    return getStoredSettings().deliveryCharges;
   });
 
   useEffect(() => {
     fetchServerSettings().then((s) => {
-      if (typeof s?.taxAndPackingPercentage === 'number') {
-        setTaxAndPackingPercentage(s.taxAndPackingPercentage);
+      if (typeof s?.deliveryCharges === 'number') {
+        setDeliveryCharges(s.deliveryCharges);
       }
     });
   }, []);
 
-  const handleUpdateTaxAndPacking = async (newPct: number) => {
-    setTaxAndPackingPercentage(newPct);
-    await updateServerSettings({ taxAndPackingPercentage: newPct });
+  const handleUpdateDeliveryCharges = async (newCharge: number) => {
+    setDeliveryCharges(newCharge);
+    await updateServerSettings({ deliveryCharges: newCharge });
   };
 
   // Synchronize URL Hash routing with currentView and enforce route protection
@@ -736,8 +736,8 @@ function FreshCartStore() {
             onToggleCoupon={handleToggleCouponStatus}
             onDeleteInventoryLog={handleDeleteInventoryLog}
             onClearInventoryLogs={handleClearInventoryLogs}
-            taxAndPackingPercentage={taxAndPackingPercentage}
-            onUpdateTaxAndPacking={handleUpdateTaxAndPacking}
+            deliveryCharges={deliveryCharges}
+            onUpdateDeliveryCharges={handleUpdateDeliveryCharges}
           />
         ) : currentView === 'login' ? (
           <LoginPage
@@ -955,7 +955,7 @@ function FreshCartStore() {
           onApplyCoupon={(code) => setAppliedCoupon(code)}
           onRemoveCoupon={() => setAppliedCoupon(null)}
           coupons={coupons}
-          taxAndPackingPercentage={taxAndPackingPercentage}
+          deliveryCharges={deliveryCharges}
         />
       )}
 
@@ -981,7 +981,7 @@ function FreshCartStore() {
           coupons={coupons}
           onApplyCoupon={(code) => setAppliedCoupon(code)}
           onRemoveCoupon={() => setAppliedCoupon(null)}
-          taxAndPackingPercentage={taxAndPackingPercentage}
+          deliveryCharges={deliveryCharges}
         />
       )}
     </div>

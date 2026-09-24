@@ -29,6 +29,7 @@ interface CheckoutModalProps {
   coupons?: Coupon[];
   onApplyCoupon?: (code: string) => void;
   onRemoveCoupon?: () => void;
+  deliveryCharges?: number;
   taxAndPackingPercentage?: number;
 }
 
@@ -43,7 +44,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   coupons = [],
   onApplyCoupon,
   onRemoveCoupon,
-  taxAndPackingPercentage = 0,
+  deliveryCharges = 50,
+  taxAndPackingPercentage,
 }) => {
   const { currentUser, addOrder } = useAuth();
   const { t } = useLanguage();
@@ -79,12 +81,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
 
-  // Admin-controlled Estimated Taxes & Packing
-  const taxAndPackingAmount = items.length > 0 && subtotal > 0
-    ? Math.round(((subtotal * taxAndPackingPercentage) / 100) * 100) / 100
+  const freeDeliveryThreshold = 499.0;
+  // Delivery Charges calculation
+  // Free delivery if cart qualifies for Free Express Delivery Goal (₹499)
+  // Otherwise, standard Delivery Charges apply (default ₹50 or admin-configured)
+  const deliveryChargesAmount = items.length > 0 && subtotal > 0
+    ? (subtotal >= freeDeliveryThreshold ? 0 : Math.max(0, deliveryCharges))
     : 0;
 
-  const total = Math.max(0, Math.round((subtotal - discount + taxAndPackingAmount) * 100) / 100);
+  const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
   const handleApplyCheckoutCoupon = () => {
     const code = checkoutCouponInput.trim().toUpperCase();
@@ -355,9 +360,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 )}
                 <div className="flex justify-between text-[#565e74]">
-                  <span>{t('estimatedTaxes')}</span>
-                  <span id="checkout-tax-packing-amount" className={`tabular-nums ${taxAndPackingAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
-                    {taxAndPackingAmount > 0 ? formatINR(taxAndPackingAmount) : t('free')}
+                  <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
+                  <span id="checkout-tax-packing-amount" data-testid="checkout-delivery-charges" className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
+                    {deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : t('free')}
                   </span>
                 </div>
                 <div className="flex justify-between font-bold text-[14px] text-[#0b1c30] pt-1 border-t border-[#e2e8f0]">
