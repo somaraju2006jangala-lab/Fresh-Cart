@@ -374,6 +374,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   const handleVerifyOtp = async (order: CustomerOrder) => {
+    if (order.status === 'Delivered') {
+      return;
+    }
     const enteredOtp = (orderOtpInputs[order.id] || '').trim();
     if (!enteredOtp || enteredOtp.length !== 6) {
       setOrderOtpFeedback((prev) => ({
@@ -442,6 +445,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   const handleResendOtp = async (order: CustomerOrder) => {
+    if (order.status === 'Delivered') {
+      return;
+    }
     setOrderResending((prev) => ({ ...prev, [order.id]: true }));
     try {
       const res = await resendOrderOtp(
@@ -1827,16 +1833,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </button>
 
                           {/* Small "OTP" button to open separate OTP Verification page */}
-                          <button
-                            type="button"
-                            id={`order-otp-btn-${order.id}`}
-                            onClick={() => setSelectedOtpOrderId(order.id)}
-                            title={`Open OTP Verification page for ${displayOrderId}`}
-                            className="px-2.5 py-1 text-[11px] font-bold text-[#006b2c] hover:text-[#005221] bg-[#dcfce7]/70 hover:bg-[#dcfce7] border border-[#86efac] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                          >
-                            <ShieldCheck className="w-3.5 h-3.5 text-[#16a34a]" />
-                            <span>OTP</span>
-                          </button>
+                          {order.status === 'Picking' && (
+                            <button
+                              type="button"
+                              id={`order-otp-btn-${order.id}`}
+                              onClick={() => setSelectedOtpOrderId(order.id)}
+                              title={`Open OTP Verification page for ${displayOrderId}`}
+                              className="px-2.5 py-1 text-[11px] font-bold text-[#006b2c] hover:text-[#005221] bg-[#dcfce7]/70 hover:bg-[#dcfce7] border border-[#86efac] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-[#16a34a]" />
+                              <span>OTP</span>
+                            </button>
+                          )}
 
                           {/* Automatic read-only status display — manual status control removed */}
                           <div
