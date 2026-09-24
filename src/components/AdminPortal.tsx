@@ -34,6 +34,7 @@ import {
   Lock,
   Unlock,
   KeyRound,
+  Percent,
 } from 'lucide-react';
 import { verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
 
@@ -166,6 +167,8 @@ interface AdminPortalProps {
   onClearInventoryLogs?: () => void;
   onUpdateOrderStatus?: (orderId: string, status: string, extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }) => void;
   onDeleteCustomerOrder?: (orderId: string) => void;
+  taxAndPackingPercentage?: number;
+  onUpdateTaxAndPacking?: (percentage: number) => Promise<void> | void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -189,12 +192,67 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onClearInventoryLogs,
   onUpdateOrderStatus,
   onDeleteCustomerOrder,
+  taxAndPackingPercentage = 0,
+  onUpdateTaxAndPacking,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
+  const [taxPackingInput, setTaxPackingInput] = useState<string>(String(taxAndPackingPercentage));
+  const [taxPackingError, setTaxPackingError] = useState<string>('');
+  const [taxPackingSuccess, setTaxPackingSuccess] = useState<string>('');
+  const [isSavingTaxPacking, setIsSavingTaxPacking] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    setTaxPackingInput(String(taxAndPackingPercentage));
+  }, [taxAndPackingPercentage]);
+
+  const handleSaveTaxPacking = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setTaxPackingError('');
+    setTaxPackingSuccess('');
+
+    const trimmed = taxPackingInput.trim();
+    if (!trimmed) {
+      setTaxPackingError(t('invalidPercentageError') || 'Please enter a valid percentage number.');
+      return;
+    }
+
+    const num = Number(trimmed);
+    if (isNaN(num)) {
+      setTaxPackingError(t('invalidPercentageError') || 'Please enter a valid percentage number.');
+      return;
+    }
+
+    if (num < 0) {
+      setTaxPackingError(t('negativePercentageError') || 'Percentage cannot be negative.');
+      return;
+    }
+
+    if (num > 100) {
+      setTaxPackingError(t('maxPercentageError') || 'Percentage cannot exceed 100%.');
+      return;
+    }
+
+    setIsSavingTaxPacking(true);
+    try {
+      const rounded = Math.round(num * 100) / 100;
+      await onUpdateTaxAndPacking?.(rounded);
+      setTaxPackingInput(String(rounded));
+      setTaxPackingSuccess(
+        t('settingSavedSuccess', { value: rounded }) ||
+          `Estimated Taxes & Packing setting saved successfully to ${rounded}%!`
+      );
+      setTimeout(() => setTaxPackingSuccess(''), 4000);
+    } catch {
+      setTaxPackingError('Failed to save setting. Please try again.');
+    } finally {
+      setIsSavingTaxPacking(false);
+    }
+  };
+
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [historySearchInput, setHistorySearchInput] = useState<string>('');
@@ -514,6 +572,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {/* Language Selector in Admin Portal */}
             <LanguageSelector variant="dark" idPrefix="admin-lang" />
 
+            {/* Quick Tax & Packing Rate in Admin Header */}
+            <button
+              type="button"
+              id="admin-header-tax-btn"
+              onClick={() => setActiveTab('settings')}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#475569] text-white hover:bg-[#334155] text-[12px] font-medium transition-colors cursor-pointer"
+              title="Configure Estimated Taxes & Packing"
+            >
+              <Percent className="w-3.5 h-3.5 text-[#7ffc97]" />
+              <span>Tax & Packing: <strong className="text-[#7ffc97]">{taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : 'FREE'}</strong></span>
+            </button>
+
             <button
               type="button"
               onClick={handleTriggerPulse}
@@ -682,6 +752,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <ShoppingBag className="w-4 h-4" />
             <span>{t('tabCustomerOrders', { count: customerOrders.length }) || `Customer Orders (${customerOrders.length})`}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-settings"
+            onClick={() => setActiveTab('settings')}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'settings'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <Percent className="w-4 h-4" />
+            <span>{t('tabSettings') || 'Estimated Taxes & Packing'}</span>
           </button>
         </div>
 
@@ -1130,6 +1213,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span>{t('createCouponBtn')}</span>
                 </button>
               </div>
+            </div>
+
+            {/* Associated Tax & Packing Banner */}
+            <div className="flex items-center justify-between p-3 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] text-[12px]">
+              <div className="flex items-center gap-2 text-[#565e74]">
+                <Percent className="w-4 h-4 text-[#006b2c]" />
+                <span>Storefront Estimated Taxes & Packing Rate: <strong className="text-[#0b1c30]">{taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : '0% (FREE)'}</strong></span>
+              </div>
+              <button
+                type="button"
+                id="coupons-goto-tax-settings-btn"
+                onClick={() => setActiveTab('settings')}
+                className="text-[#006b2c] font-bold hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <span>Configure Taxes & Packing</span>
+              </button>
             </div>
 
             {/* Coupons Table */}
@@ -1818,6 +1917,185 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             )}
           </div>
           )
+        )}
+
+        {/* Tab 5: Settings - Estimated Taxes & Packing */}
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
+            {/* Header */}
+            <div className="pb-4 border-b border-[#e2e8f0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[18px] font-bold text-[#0f172a] font-display flex items-center gap-2">
+                  <Percent className="w-5 h-5 text-[#006b2c]" />
+                  <span>Estimated Taxes & Packing</span>
+                </h3>
+                <p className="text-[12px] text-[#565e74] mt-0.5">
+                  {t('taxAndPackingSettingDesc') ||
+                    'Configure the percentage charged on customer cart subtotal for taxes and cold-chain packing.'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 bg-[#f8fafc] px-3.5 py-2 rounded-xl border border-[#e2e8f0]">
+                <span className="text-[12px] font-semibold text-[#64748b]">Current Active Setting:</span>
+                <span className="text-[14px] font-extrabold text-[#006b2c]">
+                  {taxAndPackingPercentage > 0 ? `${taxAndPackingPercentage}%` : '0% (FREE)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Settings Form */}
+            <form onSubmit={handleSaveTaxPacking} className="max-w-xl space-y-5">
+              <div>
+                <label
+                  htmlFor="admin-tax-packing-input"
+                  className="block text-[13px] font-bold text-[#0f172a] mb-1.5"
+                >
+                  {t('taxAndPackingRateLabel') || 'Tax & Packing Percentage (%)'}
+                </label>
+                <div className="relative">
+                  <input
+                    id="admin-tax-packing-input"
+                    name="taxAndPackingPercentage"
+                    type="number"
+                    step="any"
+                    min="0"
+                    max="100"
+                    value={taxPackingInput}
+                    onChange={(e) => {
+                      setTaxPackingInput(e.target.value);
+                      if (taxPackingError) setTaxPackingError('');
+                      if (taxPackingSuccess) setTaxPackingSuccess('');
+                    }}
+                    placeholder="Enter percentage (e.g. 0, 2.5, 3, 5, 10)"
+                    className="w-full px-3.5 py-2.5 text-[14px] font-semibold bg-[#f8fafc] border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] focus:bg-white transition-all pr-10"
+                  />
+                  <span className="absolute right-3.5 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                    %
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#64748b] mt-1.5">
+                  Enter 0 for FREE. Decimals like 2.5% are supported (range: 0% to 100%).
+                </p>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">
+                  Quick Presets:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: '0% (FREE)', value: 0 },
+                    { label: '2%', value: 2 },
+                    { label: '3%', value: 3 },
+                    { label: '5%', value: 5 },
+                    { label: '10%', value: 10 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      id={`preset-tax-${preset.value}`}
+                      onClick={() => {
+                        setTaxPackingInput(String(preset.value));
+                        if (taxPackingError) setTaxPackingError('');
+                        if (taxPackingSuccess) setTaxPackingSuccess('');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all cursor-pointer border ${
+                        taxPackingInput === String(preset.value)
+                          ? 'bg-[#006b2c] text-white border-[#006b2c] shadow-xs'
+                          : 'bg-[#f1f5f9] text-[#334155] border-[#cbd5e1] hover:bg-[#e2e8f0]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-2">
+                <span className="text-[11px] font-bold uppercase text-[#64748b] tracking-wider block">
+                  Live Calculation Example (Cart Subtotal: ₹1,000)
+                </span>
+                {(() => {
+                  const previewVal = parseFloat(taxPackingInput);
+                  const validVal = !isNaN(previewVal) && previewVal >= 0 && previewVal <= 100 ? previewVal : 0;
+                  const previewAmount = Math.round(((1000 * validVal) / 100) * 100) / 100;
+                  const previewTotal = 1000 + previewAmount;
+                  return (
+                    <div className="text-[12px] space-y-1 text-[#334155]">
+                      <div className="flex justify-between">
+                        <span>Cart Subtotal:</span>
+                        <span className="font-semibold text-[#0f172a]">₹1,000</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Estimated Taxes & Packing ({validVal}%):</span>
+                        <span className={`font-semibold ${previewAmount > 0 ? 'text-[#0f172a]' : 'text-[#006b2c]'}`}>
+                          {previewAmount > 0 ? formatINR(previewAmount) : 'FREE'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-[#e2e8f0] font-bold text-[13px]">
+                        <span>Estimated Total:</span>
+                        <span className="text-[#006b2c] font-display">{formatINR(previewTotal)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Validation Error / Success */}
+              {taxPackingError && (
+                <div
+                  id="admin-tax-packing-error"
+                  className="p-3 bg-[#fee2e2] text-[#ba1a1a] rounded-xl text-[12px] font-semibold border border-[#fecaca] flex items-center gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{taxPackingError}</span>
+                </div>
+              )}
+
+              {taxPackingSuccess && (
+                <div
+                  id="admin-tax-packing-success"
+                  className="p-3 bg-[#dcfce7] text-[#15803d] rounded-xl text-[12px] font-semibold border border-[#86efac] flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{taxPackingSuccess}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="submit"
+                  id="admin-save-tax-packing-btn"
+                  disabled={isSavingTaxPacking}
+                  className="px-5 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingTaxPacking ? (
+                    <span>Saving...</span>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>{t('saveSettingBtn') || 'Save Setting'}</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  id="admin-reset-tax-packing-btn"
+                  onClick={() => {
+                    setTaxPackingInput(String(taxAndPackingPercentage));
+                    setTaxPackingError('');
+                    setTaxPackingSuccess('');
+                  }}
+                  className="px-4 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+          </div>
         )}
       </div>
 

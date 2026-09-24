@@ -379,4 +379,15 @@ export const en = {
   // Language switcher
   selectLanguage: 'Select Language',
   language: 'Language',
+
+  // Settings & Taxes
+  tabSettings: 'Estimated Taxes & Packing',
+  taxAndPackingSettingTitle: 'Estimated Taxes & Packing',
+  taxAndPackingSettingDesc: 'Configure the percentage charged on customer cart subtotal for taxes and cold-chain packing.',
+  taxAndPackingRateLabel: 'Tax & Packing Percentage (%)',
+  saveSettingBtn: 'Save Setting',
+  settingSavedSuccess: 'Estimated Taxes & Packing setting saved successfully to {value}%!',
+  invalidPercentageError: 'Please enter a valid percentage number.',
+  negativePercentageError: 'Percentage cannot be negative.',
+  maxPercentageError: 'Percentage cannot exceed 100%.',
 };

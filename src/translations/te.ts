@@ -381,4 +381,15 @@ export const te: typeof en = {
   // Language switcher
   selectLanguage: 'భాషను ఎంచుకోండి',
   language: 'భాష',
+
+  // Settings & Taxes
+  tabSettings: 'అంచనా వేసిన పన్నులు & ప్యాకింగ్',
+  taxAndPackingSettingTitle: 'అంచనా వేసిన పన్నులు & ప్యాకింగ్',
+  taxAndPackingSettingDesc: 'పన్నులు మరియు కోల్డ్-చైన్ ప్యాకింగ్ కోసం కస్టమర్ కార్ట్ ఉప-మొత్తంపై వర్తించే శాతాన్ని కాన్ఫిగర్ చేయండి.',
+  taxAndPackingRateLabel: 'పన్ను & ప్యాకింగ్ శాతం (%)',
+  saveSettingBtn: 'సెట్టింగ్‌ను సేవ్ చేయండి',
+  settingSavedSuccess: 'అంచనా వేసిన పన్నులు & ప్యాకింగ్ సెట్టింగ్ విజయవంతంగా {value}% కు సేవ్ చేయబడింది!',
+  invalidPercentageError: 'దయచేసి సరైన శాతం సంఖ్యను నమోదు చేయండి.',
+  negativePercentageError: 'శాతం రుణాత్మకం కాకూడదు.',
+  maxPercentageError: 'శాతం 100% మించకూడదు.',
 };

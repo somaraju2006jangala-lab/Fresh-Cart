@@ -29,6 +29,7 @@ interface CheckoutModalProps {
   coupons?: Coupon[];
   onApplyCoupon?: (code: string) => void;
   onRemoveCoupon?: () => void;
+  taxAndPackingPercentage?: number;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -42,6 +43,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   coupons = [],
   onApplyCoupon,
   onRemoveCoupon,
+  taxAndPackingPercentage = 0,
 }) => {
   const { currentUser, addOrder } = useAuth();
   const { t } = useLanguage();
@@ -76,7 +78,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     : null;
   const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
-  const total = Math.max(0, subtotal - discount);
+
+  // Admin-controlled Estimated Taxes & Packing
+  const taxAndPackingAmount = items.length > 0 && subtotal > 0
+    ? Math.round(((subtotal * taxAndPackingPercentage) / 100) * 100) / 100
+    : 0;
+
+  const total = Math.max(0, Math.round((subtotal - discount + taxAndPackingAmount) * 100) / 100);
 
   const handleApplyCheckoutCoupon = () => {
     const code = checkoutCouponInput.trim().toUpperCase();
@@ -346,6 +354,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <span id="checkout-discount-amount" className="tabular-nums">-{formatINR(discount)}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-[#565e74]">
+                  <span>{t('estimatedTaxes')}</span>
+                  <span id="checkout-tax-packing-amount" className={`tabular-nums ${taxAndPackingAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
+                    {taxAndPackingAmount > 0 ? formatINR(taxAndPackingAmount) : t('free')}
+                  </span>
+                </div>
                 <div className="flex justify-between font-bold text-[14px] text-[#0b1c30] pt-1 border-t border-[#e2e8f0]">
                   <span>{t('total')}</span>
                   <span id="checkout-final-total" className="text-[#006b2c] font-display tabular-nums">{formatINR(total)}</span>

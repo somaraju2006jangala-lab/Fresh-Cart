@@ -381,4 +381,15 @@ export const hi: typeof en = {
   // Language switcher
   selectLanguage: 'भाषा चुनें',
   language: 'भाषा',
+
+  // Settings & Taxes
+  tabSettings: 'अनुमानित कर और पैकिंग',
+  taxAndPackingSettingTitle: 'अनुमानित कर और पैकिंग',
+  taxAndPackingSettingDesc: 'कर और कोल्ड-चेन पैकिंग के लिए ग्राहक कार्ट उप-योग पर लगाया जाने वाला प्रतिशत निर्धारित करें।',
+  taxAndPackingRateLabel: 'कर और पैकिंग प्रतिशत (%)',
+  saveSettingBtn: 'सेटिंग सहेजें',
+  settingSavedSuccess: 'अनुमानित कर और पैकिंग सेटिंग सफलतापूर्वक {value}% पर सहेजी गई!',
+  invalidPercentageError: 'कृपया एक मान्य प्रतिशत संख्या दर्ज करें।',
+  negativePercentageError: 'प्रतिशत ऋणात्मक नहीं हो सकता।',
+  maxPercentageError: 'प्रतिशत 100% से अधिक नहीं हो सकता।',
 };

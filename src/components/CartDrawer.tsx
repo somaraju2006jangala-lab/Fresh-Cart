@@ -28,6 +28,7 @@ interface CartDrawerProps {
   onApplyCoupon: (code: string) => void;
   onRemoveCoupon: () => void;
   coupons?: Coupon[];
+  taxAndPackingPercentage?: number;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -41,6 +42,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyCoupon,
   onRemoveCoupon,
   coupons = [],
+  taxAndPackingPercentage = 0,
 }) => {
   const { t } = useLanguage();
   const [couponInput, setCouponInput] = useState('');
@@ -85,7 +87,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const isQualified = Boolean(activeCoupon && subtotal >= (activeCoupon.minOrderAmount || 0));
   const discountPercent = isQualified && activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
-  const total = Math.max(0, subtotal - discount);
+
+  // Admin-controlled Estimated Taxes & Packing
+  // Formula: Cart Subtotal × Tax & Packing Percentage ÷ 100
+  const taxAndPackingAmount = items.length > 0 && subtotal > 0
+    ? Math.round(((subtotal * taxAndPackingPercentage) / 100) * 100) / 100
+    : 0;
+
+  const total = Math.max(0, Math.round((subtotal - discount + taxAndPackingAmount) * 100) / 100);
 
   // Dynamic cart total revalidation when subtotal changes
   const prevSubtotalRef = React.useRef(subtotal);
@@ -458,7 +467,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
             <div className="flex justify-between text-[#565e74]">
               <span>{t('estimatedTaxes')}</span>
-              <span className="text-[#006b2c] font-medium">{t('free')}</span>
+              <span id="cart-drawer-taxes" className={`tabular-nums ${taxAndPackingAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
+                {taxAndPackingAmount > 0 ? formatINR(taxAndPackingAmount) : t('free')}
+              </span>
             </div>
 
             <div className="flex justify-between text-[15px] font-bold text-[#0b1c30] pt-1 border-t border-[#e5eeff]">

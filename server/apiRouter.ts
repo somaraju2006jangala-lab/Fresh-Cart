@@ -131,6 +131,102 @@ apiRouter.get('/api/otp/provider-config', (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
 });
 
+const SETTINGS_FILE = path.resolve(process.cwd(), '.data/app_settings.json');
+
+function loadAppSettings(): { taxAndPackingPercentage: number } {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (typeof data?.taxAndPackingPercentage === 'number' && !isNaN(data.taxAndPackingPercentage)) {
+        return {
+          taxAndPackingPercentage: Math.max(0, Math.min(100, data.taxAndPackingPercentage)),
+        };
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return { taxAndPackingPercentage: 0 };
+}
+
+function saveAppSettings(settings: { taxAndPackingPercentage: number }): void {
+  try {
+    const dir = path.dirname(SETTINGS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * GET /api/settings
+ * Retrieves app settings, including Admin-configured Tax & Packing percentage.
+ */
+apiRouter.get('/api/settings', (_req: Request, res: Response) => {
+  const settings = loadAppSettings();
+  sendJson(res, 200, { success: true, settings });
+});
+
+/**
+ * POST /api/settings
+ * Updates app settings, including Tax & Packing percentage with validation.
+ */
+apiRouter.post('/api/settings', (req: Request, res: Response) => {
+  try {
+    const { taxAndPackingPercentage } = req.body;
+
+    if (taxAndPackingPercentage === undefined || taxAndPackingPercentage === null) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'taxAndPackingPercentage is required.',
+      });
+      return;
+    }
+
+    const num = Number(taxAndPackingPercentage);
+    if (isNaN(num)) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Tax & packing percentage must be a valid number.',
+      });
+      return;
+    }
+
+    if (num < 0) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Percentage cannot be negative.',
+      });
+      return;
+    }
+
+    if (num > 100) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Percentage cannot exceed 100%.',
+      });
+      return;
+    }
+
+    const sanitized = Math.round(num * 100) / 100;
+    saveAppSettings({ taxAndPackingPercentage: sanitized });
+
+    sendJson(res, 200, {
+      success: true,
+      settings: { taxAndPackingPercentage: sanitized },
+    });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err.message || 'Failed to save settings.',
+    });
+  }
+});
+
 /**
  * Internal developer test endpoint (only active when NODE_ENV !== 'production'):
  * Allows local test validation when telecom carrier credentials are not set in .env.
