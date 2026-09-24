@@ -144,8 +144,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     Math.round((subtotal / freeDeliveryThreshold) * 100)
   );
 
-  const handleApplyCouponSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleApplyCouponSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setCouponError('');
     setCouponFeedback('');
 
@@ -416,38 +416,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleApplyCouponSubmit} className="flex gap-1.5">
-                <div className="relative flex-1">
-                  <Tag className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#6e7b6c]" />
-                  <input
-                    id="cart-coupon-input"
-                    type="text"
-                    value={couponInput}
-                    onChange={(e) => {
-                      setCouponInput(e.target.value.toUpperCase());
-                      if (couponError) setCouponError('');
-                      if (couponFeedback) setCouponFeedback('');
-                    }}
-                    placeholder="Enter coupon code (e.g. SAVE10)"
-                    className="w-full pl-8 pr-2 py-1.5 text-[12px] bg-[#f8f9ff] border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] uppercase font-mono"
-                  />
-                </div>
+              <div className="flex justify-center">
                 <button
                   id="apply-coupon-btn"
-                  type="submit"
-                  className="px-3.5 py-1.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold rounded-lg transition-colors cursor-pointer shrink-0 shadow-xs"
+                  type="button"
+                  onClick={() => handleApplyCouponSubmit()}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                 >
-                  Apply Coupon
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Apply Coupon</span>
                 </button>
-              </form>
+              </div>
             )}
             {couponError && (
-              <div id="cart-coupon-error" className="text-[11px] text-[#ba1a1a] bg-[#fee2e2]/60 p-2 rounded-lg border border-[#fecaca] font-semibold">
+              <div id="cart-coupon-error" className="text-[11px] text-[#ba1a1a] bg-[#fee2e2]/60 p-2 rounded-lg border border-[#fecaca] font-semibold text-center">
                 {couponError}
               </div>
             )}
             {couponFeedback && (
-              <div id="cart-coupon-feedback" className="text-[11px] text-[#15803d] bg-[#dcfce7]/70 p-2 rounded-lg border border-[#bbf7d0] font-semibold">
+              <div id="cart-coupon-feedback" className="text-[11px] text-[#15803d] bg-[#dcfce7]/70 p-2 rounded-lg border border-[#bbf7d0] font-semibold text-center">
                 {couponFeedback}
               </div>
             )}
