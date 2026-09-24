@@ -16,6 +16,7 @@ import {
   Tag,
   Zap,
 } from 'lucide-react';
+import { generateOrderOtp } from '../services/otpClientService';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -103,8 +104,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setTimeout(() => {
       setIsSubmitting(false);
       const orderNum = Math.floor(1000 + Math.random() * 9000);
-      const generatedOrder = `#${orderNum}`;
+      const generatedOrder = `#FC-${orderNum}`;
       setOrderNumber(String(orderNum));
+
+      const customerPhone = currentUser?.phone || '9876541234';
 
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
@@ -112,15 +115,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customerId: currentUser?.id || 'guest_user',
         customerName: currentUser?.name || 'Guest Customer',
         customerEmail: currentUser?.email,
+        customerPhone,
         deliveryAddress: address,
         deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
-        estimatedDeliveryTime: 'Arriving in ~22 minutes',
+        estimatedDeliveryTime: 'Picking in progress',
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: 'Ordered',
+        status: 'Picking',
         createdAt: new Date().toISOString(),
         paymentMethod:
           paymentMethod === 'apple_pay'
@@ -130,6 +134,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             : 'Cash on Delivery',
       };
       addOrder(newCustomerOrder);
+
+      // Trigger backend OTP generation & isolated SMS provider dispatch
+      generateOrderOtp(
+        generatedOrder,
+        newCustomerOrder.customerId || 'guest_user',
+        customerPhone
+      );
 
       onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');

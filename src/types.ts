@@ -53,6 +53,7 @@ export interface Order {
   customerName: string;
   customerId?: string;
   customerEmail?: string;
+  customerPhone?: string;
   deliveryAddress: string;
   deliveryTimeSlot: string;
   items: CartItem[];
@@ -60,8 +61,10 @@ export interface Order {
   discount: number;
   total: number;
   couponCode?: string;
-  status: 'Ordered' | 'Pending' | 'Picking at Pod #104' | 'Cold-Chain En Route' | 'Delivered' | string;
+  status: 'Picking' | 'Ordered' | 'Pending' | 'Picking at Pod #104' | 'Cold-Chain En Route' | 'Delivered' | string;
   createdAt: string;
+  otpVerifiedAt?: string;
+  handoverReleased?: boolean;
 }
 
 export interface CustomerAddress {

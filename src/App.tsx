@@ -430,8 +430,8 @@ function FreshCartStore() {
     }
   };
 
-  const handleUpdateOrderStatus = (orderId: string, status: string) => {
-    updateOrderStatus(orderId, status);
+  const handleUpdateOrderStatus = (orderId: string, status: string, extraMeta?: any) => {
+    updateOrderStatus(orderId, status, extraMeta);
     setCustomerOrders(getCustomerOrders());
   };
 

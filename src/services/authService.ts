@@ -31,10 +31,47 @@ export function generateSalt(length = 16): string {
 // Initial seed orders for demo customers
 const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
   {
+    id: '#FC-1005',
+    customerId: 'rahul123',
+    customerName: 'Rahul',
+    customerEmail: 'rahul@example.com',
+    customerPhone: '9876541234',
+    deliveryAddress: 'Flat 402, Green Meadows, Bengaluru 560001',
+    deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
+    estimatedDeliveryTime: 'Picking in progress',
+    items: [
+      {
+        product: {
+          ...INITIAL_PRODUCTS[8], // prod-9: Basmati Rice
+          title: 'Basmati Rice',
+          price: 120,
+          unit: '1 kg',
+        },
+        quantity: 2,
+      },
+      {
+        product: {
+          ...INITIAL_PRODUCTS[1], // prod-2: Milk
+          title: 'Milk',
+          price: 30,
+          unit: '500 ml',
+        },
+        quantity: 2,
+      },
+    ],
+    subtotal: 300,
+    discount: 0,
+    total: 300,
+    status: 'Picking',
+    createdAt: new Date().toISOString(),
+    paymentMethod: 'Cash on Delivery',
+  },
+  {
     id: '#1001',
     customerId: 'rahul123',
     customerName: 'Rahul',
     customerEmail: 'rahul@example.com',
+    customerPhone: '9876541234',
     deliveryAddress: 'Flat 402, Green Meadows, Bengaluru 560001',
     deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
     estimatedDeliveryTime: 'Arriving in ~20 minutes',
@@ -61,7 +98,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     subtotal: 300,
     discount: 0,
     total: 300,
-    status: 'Ordered',
+    status: 'Picking',
     createdAt: '2026-09-23T10:42:00.000Z',
     paymentMethod: 'Cash on Delivery',
   },
@@ -70,6 +107,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     customerId: 'cust-demo-1',
     customerName: 'Alex Morgan',
     customerEmail: DEMO_CUSTOMER_EMAIL,
+    customerPhone: '(555) 234-1234',
     deliveryAddress: '742 Evergreen Terrace, Apt 4B, Springfield, OR 97477',
     deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
     estimatedDeliveryTime: 'Arriving in ~18 minutes',
@@ -80,7 +118,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     subtotal: 217,
     discount: 0,
     total: 217,
-    status: 'Ordered',
+    status: 'Picking',
     createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
     paymentMethod: '⚡ Express Pay',
   },
@@ -169,7 +207,65 @@ export async function initializeAuthStore(): Promise<void> {
         ],
       };
 
-      localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify([demoCustomer]));
+      const rahulCustomer: Customer = {
+        id: 'rahul123',
+        name: 'Rahul',
+        email: 'rahul@example.com',
+        phone: '9876541234',
+        address: 'Flat 402, Green Meadows, Bengaluru 560001',
+        passwordSalt: demoSalt,
+        passwordHash: demoHash,
+        createdAt: '2026-01-10T10:00:00.000Z',
+        avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul&backgroundColor=006b2c',
+        loyaltyTier: 'Fresh Gold Member (5% Cashback)',
+        savedAddresses: [
+          {
+            id: 'addr-rahul-1',
+            label: 'Home',
+            street: 'Flat 402, Green Meadows',
+            city: 'Bengaluru',
+            state: 'KA',
+            zip: '560001',
+            isDefault: true,
+          },
+        ],
+      };
+
+      localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify([demoCustomer, rahulCustomer]));
+    } else {
+      try {
+        const parsedCust: Customer[] = JSON.parse(existing);
+        if (!parsedCust.some((c) => c.id === 'rahul123')) {
+          const demoSalt = 'freshcart_salt_demo_9921';
+          const demoHash = await hashPassword(DEMO_CUSTOMER_PASSWORD, demoSalt);
+          parsedCust.push({
+            id: 'rahul123',
+            name: 'Rahul',
+            email: 'rahul@example.com',
+            phone: '9876541234',
+            address: 'Flat 402, Green Meadows, Bengaluru 560001',
+            passwordSalt: demoSalt,
+            passwordHash: demoHash,
+            createdAt: '2026-01-10T10:00:00.000Z',
+            avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Rahul&backgroundColor=006b2c',
+            loyaltyTier: 'Fresh Gold Member (5% Cashback)',
+            savedAddresses: [
+              {
+                id: 'addr-rahul-1',
+                label: 'Home',
+                street: 'Flat 402, Green Meadows',
+                city: 'Bengaluru',
+                state: 'KA',
+                zip: '560001',
+                isDefault: true,
+              },
+            ],
+          });
+          localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify(parsedCust));
+        }
+      } catch {
+        // Ignore
+      }
     }
 
     const existingOrders = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
@@ -178,10 +274,20 @@ export async function initializeAuthStore(): Promise<void> {
     } else {
       try {
         const parsed: CustomerOrder[] = JSON.parse(existingOrders);
-        if (!parsed.some((o) => o.id === '#1001' || o.id === '1001')) {
+        if (!parsed.some((o) => o.id === '#FC-1005' || o.id === 'FC-1005')) {
           parsed.unshift(INITIAL_DEMO_ORDERS[0]);
-          localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(parsed));
         }
+        parsed.forEach((o) => {
+          if (o.id === '#FC-1005' || o.id === 'FC-1005' || o.id === '#1001') {
+            if (!o.customerPhone) o.customerPhone = '9876541234';
+            if (o.status === 'Ordered') o.status = 'Picking';
+          }
+          if (o.id === '#FC-94821') {
+            if (!o.customerPhone) o.customerPhone = '(555) 234-1234';
+            if (o.status === 'Ordered') o.status = 'Picking';
+          }
+        });
+        localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(parsed));
       } catch {
         localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(INITIAL_DEMO_ORDERS));
       }
@@ -483,11 +589,23 @@ export function saveOrderForCustomer(order: CustomerOrder): void {
 /**
  * Updates the status of an existing customer order.
  */
-export function updateOrderStatus(orderId: string, newStatus: string): void {
+export function updateOrderStatus(
+  orderId: string,
+  newStatus: string,
+  extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }
+): void {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
     const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
-    const updated = orders.map((o) => (o.id === orderId ? { ...o, status: newStatus as any } : o));
+    const updated = orders.map((o) =>
+      o.id === orderId
+        ? {
+            ...o,
+            status: newStatus as any,
+            ...(extraMeta || {}),
+          }
+        : o
+    );
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to update order status:', err);
