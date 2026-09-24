@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { dispatchOtpSms, getSmsProviderConfig, SmsDeliveryResult } from './smsProvider.ts';
+import { dispatchOtpSms, getSmsProviderConfig, type SmsDeliveryResult } from './smsProvider.ts';
 
 export interface StoredOtpRecord {
   orderId: string;
@@ -241,8 +241,8 @@ export function verifyOrderOtp(
 
     return {
       success: false,
-      error: 'Invalid OTP. Order cannot be handed over.',
-      message: 'Invalid OTP. Order cannot be handed over.',
+      error: 'Invalid OTP.',
+      message: 'Invalid OTP.',
       status: 'Picking',
       remainingAttempts: remaining,
     };
