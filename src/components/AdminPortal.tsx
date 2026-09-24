@@ -1518,22 +1518,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
-                          {/* Status changer */}
-                          {onUpdateOrderStatus && (
-                            <select
-                              value={order.status}
-                              onChange={(e) => onUpdateOrderStatus(order.id, e.target.value)}
-                              className="px-2.5 py-1 text-[11px] font-bold border border-[#cbd5e1] rounded-lg bg-white text-[#0f172a] focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] cursor-pointer"
-                            >
-                              <option value="Picking">Status: Picking</option>
-                              <option value="Ordered">Status: Ordered</option>
-                              <option value="Picking at Pod #104">Status: Picking at Pod #104</option>
-                              <option value="Cold-Chain En Route">Status: In Transit</option>
-                              <option value="Delivered" disabled={order.status === 'Picking'}>
-                                {order.status === 'Picking' ? 'Status: Delivered (Requires OTP)' : 'Status: Delivered'}
-                              </option>
-                            </select>
-                          )}
+                          {/* Automatic read-only status display — manual status control removed */}
+                          <div
+                            id={`order-status-display-${order.id}`}
+                            className={`px-2.5 py-1 text-[11px] font-bold border rounded-lg select-none cursor-default ${
+                              order.status === 'Picking'
+                                ? 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
+                                : order.status === 'Delivered'
+                                ? 'bg-[#eff4ff] text-[#1d4ed8] border-[#bfdbfe]'
+                                : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'
+                            }`}
+                          >
+                            Status: {order.status}
+                          </div>
                         </div>
                       </div>
 
