@@ -10,7 +10,6 @@ import { EditProductModal } from './EditProductModal';
 import { CouponModal } from './CouponModal';
 import {
   Package,
-  Thermometer,
   Users,
   Activity,
   ArrowLeft,
@@ -632,7 +631,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
         {/* KPI Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[12px] text-[#64748b] font-medium block">
@@ -648,24 +647,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#eff4ff] text-[#006b2c] flex items-center justify-center">
               <Package className="w-6 h-6 text-[#006b2c]" />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#e2e8f0] shadow-xs flex items-center justify-between">
-            <div>
-              <span className="text-[12px] text-[#64748b] font-medium block">
-                {t('coldChainPodTemp')}
-              </span>
-              <span className="text-[28px] font-extrabold text-[#0f172a] font-display tabular-nums">
-                3.8°C
-              </span>
-              <div className="text-[11px] text-[#16a34a] font-semibold mt-1 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#16a34a]" />
-                <span>{t('optimalTempRange')}</span>
-              </div>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-[#fef3c7] text-[#825100] flex items-center justify-center">
-              <Thermometer className="w-6 h-6 text-[#825100]" />
             </div>
           </div>
 
