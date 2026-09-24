@@ -1335,9 +1335,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     >
                       <option value="all">{t('allOrderStatuses')}</option>
                       <option value="Picking">Picking</option>
-                      <option value="Ordered">Ordered</option>
-                      <option value="Picking at Pod #104">Picking at Pod #104</option>
-                      <option value="Cold-Chain En Route">Cold-Chain En Route</option>
                       <option value="Delivered">Delivered</option>
                     </select>
                   </div>
