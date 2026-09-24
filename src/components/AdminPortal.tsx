@@ -710,7 +710,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>{t('tabLiveInventory', { count: products.length })}</span>
+            <span>{t('tabLiveInventory')}</span>
           </button>
           <button
             type="button"
@@ -735,7 +735,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <Tag className="w-4 h-4" />
-            <span>{t('tabCoupons', { count: coupons.length })}</span>
+            <span>{t('tabCoupons')}</span>
           </button>
           <button
             type="button"
@@ -751,7 +751,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>{t('tabCustomerOrders', { count: customerOrders.length }) || `Customer Orders (${customerOrders.length})`}</span>
+            <span>{t('tabCustomerOrders') || 'Customer Orders'}</span>
           </button>
           <button
             type="button"

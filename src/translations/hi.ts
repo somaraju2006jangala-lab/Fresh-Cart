@@ -249,7 +249,7 @@ export const hi: typeof en = {
   stockWarningDetail: '{low} कम स्टॉक · {out} स्टॉक समाप्त',
   activePickersRunners: 'सक्रिय पिकर्स और राइडर्स',
   avgPackTime: 'औसत पैकिंग समय: 5.4 मिनट',
-  tabLiveInventory: 'लाइव इन्वेंटरी प्रबंधन ({count})',
+  tabLiveInventory: 'लाइव इन्वेंटरी प्रबंधन',
   tabCdcLogs: 'CDC ऑडिट और डिस्पैच लॉग',
   filterSkuPlaceholder: 'SKU, वस्तु या आपूर्तिकर्ता फ़िल्टर करें...',
   allStockStatuses: 'सभी स्टॉक स्थितियां',
@@ -312,7 +312,7 @@ export const hi: typeof en = {
   imageUploadHint: 'डिवाइस से अपलोड करें या छवि URL दर्ज करें',
 
   // Coupons Management
-  tabCoupons: 'कूपन ({count})',
+  tabCoupons: 'कूपन',
   couponsManagementTitle: 'प्रचार छूट कूपन',
   couponsManagementSubtitle: 'ग्राहक ऑर्डर के लिए छूट कूपन कोड बनाएं, संपादित करें, सक्रिय या अक्षम करें।',
   createCouponBtn: '+ नया कूपन बनाएं',
@@ -337,7 +337,7 @@ export const hi: typeof en = {
   presetDiscountLabel: 'त्वरित छूट प्रीसेट:',
 
   // Customer Orders
-  tabCustomerOrders: 'ग्राहक के ऑर्डर ({count})',
+  tabCustomerOrders: 'ग्राहक के ऑर्डर',
   customerOrdersHeading: 'ग्राहक ऑर्डर बहीखाता',
   customerOrdersSubheading: 'ग्राहकों द्वारा दिए गए ऑर्डरों का रीयल-टाइम रिकॉर्ड, ग्राहक आईडी, आइटम और डिलीवरी स्थिति के साथ।',
   filterOrdersPlaceholder: 'ऑर्डर आईडी, ग्राहक, यूज़र आईडी या उत्पाद द्वारा खोजें...',

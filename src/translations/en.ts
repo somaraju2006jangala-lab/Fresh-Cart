@@ -247,7 +247,7 @@ export const en = {
   stockWarningDetail: '{low} Low · {out} Out of Stock',
   activePickersRunners: 'Active Pickers & Runners',
   avgPackTime: 'Avg pack time: 5.4 mins',
-  tabLiveInventory: 'Live Inventory Management ({count})',
+  tabLiveInventory: 'Live Inventory Management',
   tabCdcLogs: 'CDC Audit & Dispatch Logs',
   filterSkuPlaceholder: 'Filter SKU, item, or farm supplier...',
   allStockStatuses: 'All Stock Statuses',
@@ -310,7 +310,7 @@ export const en = {
   imageUploadHint: 'Upload from device or enter image URL',
 
   // Coupons Management
-  tabCoupons: 'Coupons ({count})',
+  tabCoupons: 'Coupons',
   couponsManagementTitle: 'Promotional Discount Coupons',
   couponsManagementSubtitle: 'Create, edit, activate, or disable discount coupon codes for customer orders.',
   createCouponBtn: '+ Create Coupon',
@@ -335,7 +335,7 @@ export const en = {
   presetDiscountLabel: 'Quick Preset Discounts:',
 
   // Customer Orders
-  tabCustomerOrders: 'Customer Orders ({count})',
+  tabCustomerOrders: 'Customer Orders',
   customerOrdersHeading: 'Customer Orders Ledger',
   customerOrdersSubheading: 'Real-time record of customer orders placed on FreshCart with customer IDs, items, and delivery status.',
   filterOrdersPlaceholder: 'Search by Order ID, Customer, User ID, or Product...',

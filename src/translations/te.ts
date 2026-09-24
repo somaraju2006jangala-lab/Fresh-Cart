@@ -249,7 +249,7 @@ export const te: typeof en = {
   stockWarningDetail: '{low} తక్కువ స్టాక్ · {out} స్టాక్ అయిపోయింది',
   activePickersRunners: 'యాక్టివ్ ప్యాకర్లు & రైడర్లు',
   avgPackTime: 'సగటు ప్యాకింగ్ సమయం: 5.4 నిమిషాలు',
-  tabLiveInventory: 'లైవ్ ఇన్వెంటరీ నిర్వహణ ({count})',
+  tabLiveInventory: 'లైవ్ ఇన్వెంటరీ నిర్వహణ',
   tabCdcLogs: 'CDC ఆడిట్ & డిస్పాచ్ లాగ్స్',
   filterSkuPlaceholder: 'SKU, వస్తువు లేదా రైతు సరఫరాదారుని వెతకండి...',
   allStockStatuses: 'అన్ని స్టాక్ స్థితులు',
@@ -312,7 +312,7 @@ export const te: typeof en = {
   imageUploadHint: 'డివైస్ నుండి అప్‌లోడ్ చేయండి లేదా చిత్రం URL నమోదు చేయండి',
 
   // Coupons Management
-  tabCoupons: 'కూపన్లు ({count})',
+  tabCoupons: 'కూపన్లు',
   couponsManagementTitle: 'ప్రమోషనల్ డిస్కౌంట్ కూపన్లు',
   couponsManagementSubtitle: 'కస్టమర్ ఆర్డర్ల కోసం డిస్కౌంట్ కూపన్ కోడ్‌లను సృష్టించండి, సవరించండి, యాక్టివేట్ లేదా డిసేబుల్ చేయండి.',
   createCouponBtn: '+ కొత్త కూపన్ సృష్టించండి',
@@ -337,7 +337,7 @@ export const te: typeof en = {
   presetDiscountLabel: 'త్వరిత డిస్కౌంట్ ప్రీసెట్లు:',
 
   // Customer Orders
-  tabCustomerOrders: 'కస్టమర్ ఆర్డర్లు ({count})',
+  tabCustomerOrders: 'కస్టమర్ ఆర్డర్లు',
   customerOrdersHeading: 'కస్టమర్ ఆర్డర్ల రిజిస్టర్',
   customerOrdersSubheading: 'కస్టమర్ల ఆర్డర్లు, కస్టమర్ ఐడీలు, వస్తువులు మరియు డెలివరీ స్థితితో కూడిన రియల్-టైమ్ రికార్డు.',
   filterOrdersPlaceholder: 'ఆర్డర్ ఐడీ, కస్టమర్, యూజర్ ఐడీ లేదా ఉత్పత్తి ద్వారా వెతకండి...',
