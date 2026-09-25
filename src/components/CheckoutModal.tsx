@@ -7,7 +7,6 @@ import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../serv
 import {
   CheckCircle,
   X,
-  CreditCard,
   Banknote,
   MapPin,
   Clock,
@@ -57,7 +56,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     currentUser?.address || '742 Evergreen Terrace, Apt 4B'
   );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'apple_pay' | 'cash'>('apple_pay');
+  const [paymentMethod, setPaymentMethod] = useState<'cash'>('cash');
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
@@ -147,12 +146,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         couponCode: appliedCoupon || undefined,
         status: 'Picking',
         createdAt: new Date().toISOString(),
-        paymentMethod:
-          paymentMethod === 'apple_pay'
-            ? '⚡ Express Pay'
-            : paymentMethod === 'card'
-            ? 'Credit Card'
-            : 'Cash on Delivery',
+        paymentMethod: 'Cash on Delivery',
       };
       addOrder(newCustomerOrder);
 
@@ -249,32 +243,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Payment Method Selector */}
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-[#0b1c30] flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-[#006b2c]" />
+                <Banknote className="w-3.5 h-3.5 text-[#006b2c]" />
                 {t('paymentMethod')}
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('apple_pay')}
-                  className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                    paymentMethod === 'apple_pay'
-                      ? 'border-[#006b2c] bg-[#eff4ff] text-[#006b2c] ring-2 ring-[#006b2c]/20'
-                      : 'border-[#e2e8f0] bg-white text-[#565e74] hover:bg-[#f8f9ff]'
-                  }`}
-                >
-                  {t('payApplePay')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                    paymentMethod === 'card'
-                      ? 'border-[#006b2c] bg-[#eff4ff] text-[#006b2c] ring-2 ring-[#006b2c]/20'
-                      : 'border-[#e2e8f0] bg-white text-[#565e74] hover:bg-[#f8f9ff]'
-                  }`}
-                >
-                  {t('payCard')}
-                </button>
+              <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('cash')}
