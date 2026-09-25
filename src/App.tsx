@@ -21,6 +21,7 @@ import { TrustBanner } from './components/TrustBanner';
 import { Footer } from './components/Footer';
 import { SearchResultsPage } from './components/SearchResultsPage';
 import { CategoryResultsPage } from './components/CategoryResultsPage';
+import { CursorReactiveBackground } from './components/CursorReactiveBackground';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { createLogTimestamp, formatLogDateTime } from './utils/date';
 
@@ -700,8 +701,9 @@ function FreshCartStore() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]">
-        <div className="flex flex-col items-center gap-3">
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff] relative overflow-hidden">
+        <CursorReactiveBackground />
+        <div className="relative z-10 flex flex-col items-center gap-3 bg-white/80 backdrop-blur-xl p-8 rounded-3xl border border-white/80 shadow-xl">
           <span className="w-8 h-8 border-3 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
           <span className="text-[13px] font-semibold text-[#565e74]">{t('loading')}</span>
         </div>
@@ -710,7 +712,10 @@ function FreshCartStore() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f8f9ff] text-[#0b1c30]">
+    <div className="min-h-screen flex flex-col bg-[#f8f9ff] text-[#0b1c30] relative overflow-hidden">
+      {/* Interactive Cursor-Reactive Glassmorphism Background */}
+      <CursorReactiveBackground />
+
       {/* Universal Header with View Navigation & Customer Authentication */}
       <Header
         currentView={currentView}
@@ -725,7 +730,7 @@ function FreshCartStore() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 pt-24 sm:pt-28">
+      <main className="flex-1 pt-24 sm:pt-28 relative z-10">
         {currentView === 'admin' ? (
           <AdminPortal
             products={products}
@@ -859,11 +864,11 @@ function FreshCartStore() {
                 </div>
 
                 {/* Filter Chips */}
-                <div className="flex items-center gap-1 bg-[#eff4ff] p-1 rounded-xl border border-[#e2e8f0]/60">
+                <div className="flex items-center gap-1 bg-white/70 backdrop-blur-md p-1.5 rounded-2xl border border-white/80 shadow-2xs">
                   <button
                     type="button"
                     onClick={() => setStockFilter('all')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'all'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -874,7 +879,7 @@ function FreshCartStore() {
                   <button
                     type="button"
                     onClick={() => setStockFilter('organic')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'organic'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -885,7 +890,7 @@ function FreshCartStore() {
                   <button
                     type="button"
                     onClick={() => setStockFilter('quickPrep')}
-                    className={`px-3 py-1 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'quickPrep'
                         ? 'bg-white text-[#0b1c30] shadow-xs'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
@@ -898,7 +903,7 @@ function FreshCartStore() {
 
               {/* Products Grid */}
               {filteredProducts.length === 0 ? (
-                <div className="text-center py-16 bg-white rounded-2xl border border-[#e2e8f0] p-8">
+                <div className="text-center py-16 bg-white/80 backdrop-blur-xl rounded-3xl border border-white/80 p-8 shadow-md">
                   <Sparkles className="w-10 h-10 text-[#006b2c] mx-auto mb-3 opacity-60" />
                   <h3 className="text-[18px] font-bold text-[#0b1c30]">
                     {t('noItemsFound')}
@@ -913,7 +918,7 @@ function FreshCartStore() {
                       setSelectedCategory('all');
                       setStockFilter('all');
                     }}
-                    className="mt-4 px-4 py-2 bg-[#006b2c] text-white text-[12px] font-semibold rounded-lg hover:bg-[#00873a] transition-colors cursor-pointer"
+                    className="mt-4 px-5 py-2.5 bg-[#006b2c] text-white text-[12px] font-semibold rounded-xl hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 cursor-pointer shadow-xs"
                   >
                     {t('resetAllFilters')}
                   </button>

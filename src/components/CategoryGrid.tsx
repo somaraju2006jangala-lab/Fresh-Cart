@@ -83,21 +83,21 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
               id={`category-card-${cat.id}`}
               type="button"
               onClick={() => onSelectCategory(cat.id)}
-              className={`p-4 rounded-2xl transition-all text-center flex flex-col items-center justify-center gap-2 border cursor-pointer ${
+              className={`p-4 rounded-2xl transition-all duration-300 text-center flex flex-col items-center justify-center gap-2 border cursor-pointer hover:-translate-y-1 group ${
                 isSelected
-                  ? 'bg-[#eff4ff] border-[#006b2c] shadow-md ring-2 ring-[#006b2c]/20'
-                  : 'bg-white hover:bg-[#eff4ff]/50 border-[#e2e8f0] shadow-xs hover:shadow-md'
+                  ? 'bg-white/95 backdrop-blur-xl border-[#006b2c] shadow-md ring-2 ring-[#006b2c]/20'
+                  : 'bg-white/70 backdrop-blur-md hover:bg-white/95 border-white/80 shadow-xs hover:shadow-md hover:border-white'
               }`}
             >
               <div
-                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform hover:scale-105 ${
-                  isSelected ? 'bg-white shadow-xs' : 'bg-[#eff4ff]'
+                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 shadow-2xs ${
+                  isSelected ? 'bg-white shadow-xs' : 'bg-[#eff4ff]/80 backdrop-blur-xs'
                 }`}
               >
                 {getCategoryIcon(cat.id)}
               </div>
               <div className="text-center">
-                <h3 className="text-[14px] font-semibold text-[#0b1c30] leading-tight">
+                <h3 className="text-[14px] font-semibold text-[#0b1c30] leading-tight group-hover:text-[#006b2c] transition-colors">
                   {getCategoryName(cat.id, cat.name)}
                 </h3>
                 <span className="text-[11px] text-[#565e74] mt-0.5 block">

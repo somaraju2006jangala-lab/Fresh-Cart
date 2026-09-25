@@ -90,7 +90,7 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
     <div className="flex flex-col w-full min-h-[calc(100vh-6rem)]">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto flex-1">
         {/* Navigation & Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#e2e8f0]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/70">
           <div>
             <button
               type="button"
@@ -102,7 +102,7 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
               <span>{t('backToStorefrontBtn')}</span>
             </button>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#eff4ff] flex items-center justify-center text-[#006b2c]">
+              <div className="w-8 h-8 rounded-xl bg-white/70 backdrop-blur-md flex items-center justify-center text-[#006b2c] shadow-2xs border border-white/80">
                 <Search className="w-4 h-4" />
               </div>
               <h1 className="text-[24px] sm:text-[30px] font-bold text-[#0b1c30] font-display">
@@ -113,7 +113,7 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
               <p className="text-[14px] text-[#565e74] mt-1">
                 Showing results for <span className="font-semibold text-[#0b1c30]">"{searchQuery}"</span>
                 {matchingProducts.length > 0 && (
-                  <span className="ml-2 px-2 py-0.5 rounded-full bg-[#eff4ff] text-[#006b2c] text-[12px] font-semibold">
+                  <span className="ml-2 px-2.5 py-0.5 rounded-full bg-white/70 backdrop-blur-xs text-[#006b2c] text-[12px] font-semibold border border-white/80 shadow-2xs">
                     {matchingProducts.length} {matchingProducts.length === 1 ? 'item' : 'items'}
                   </span>
                 )}
@@ -125,7 +125,7 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
             type="button"
             id="return-to-storefront-top-btn"
             onClick={onBackToStorefront}
-            className="self-start sm:self-auto px-4 py-2 bg-white text-[#006b2c] border border-[#cbd5e1] text-[12px] font-semibold rounded-lg hover:bg-[#eff4ff] transition-colors shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+            className="self-start sm:self-auto px-4 py-2 bg-white/80 backdrop-blur-md text-[#006b2c] border border-white/90 text-[12px] font-semibold rounded-xl hover:bg-white hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to Storefront</span>
@@ -135,8 +135,8 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
         {/* Results Container */}
         {matchingProducts.length === 0 ? (
           /* Empty State: Display "No products found" */
-          <div className="text-center py-16 bg-white rounded-2xl border border-[#e2e8f0] p-8 max-w-xl mx-auto shadow-xs my-8">
-            <div className="w-16 h-16 rounded-full bg-[#f8f9ff] flex items-center justify-center mx-auto mb-4 text-[#565e74]">
+          <div className="text-center py-16 bg-white/80 backdrop-blur-xl rounded-3xl border border-white/80 p-8 max-w-xl mx-auto shadow-md my-8">
+            <div className="w-16 h-16 rounded-full bg-[#eff4ff] flex items-center justify-center mx-auto mb-4 text-[#565e74] shadow-inner">
               <PackageSearch className="w-8 h-8 text-[#006b2c]" />
             </div>
             <h2 id="no-products-found-message" className="text-[22px] font-bold text-[#0b1c30] mb-2 font-display">
@@ -151,7 +151,7 @@ export const SearchResultsPage: React.FC<SearchResultsPageProps> = ({
               type="button"
               id="return-to-storefront-empty-btn"
               onClick={onBackToStorefront}
-              className="px-5 py-2.5 bg-[#006b2c] text-white text-[13px] font-semibold rounded-xl hover:bg-[#00873a] transition-all shadow-xs cursor-pointer inline-flex items-center gap-2 active:scale-98"
+              className="px-5 py-2.5 bg-[#006b2c] text-white text-[13px] font-semibold rounded-xl hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 shadow-xs cursor-pointer inline-flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Return to Storefront</span>

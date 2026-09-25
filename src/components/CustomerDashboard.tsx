@@ -178,9 +178,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       </div>
 
       {/* Welcome Banner Card */}
-      <div className="mt-6 rounded-2xl bg-linear-to-r from-[#006b2c] via-[#007832] to-[#044c21] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
+      <div className="mt-6 rounded-3xl bg-linear-to-r from-[#006b2c]/95 via-[#007832]/95 to-[#044c21]/95 backdrop-blur-xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-white/20">
         {/* Subtle decorative circles */}
-        <div className="absolute right-0 top-0 w-80 h-80 bg-white/5 rounded-full blur-2xl pointer-events-none transform translate-x-20 -translate-y-20" />
+        <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-2xl pointer-events-none transform translate-x-20 -translate-y-20" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
@@ -190,11 +190,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUser.name)}&backgroundColor=006b2c`
               }
               alt={currentUser.name}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover ring-4 ring-white/20 bg-white/10"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover ring-4 ring-white/20 bg-white/10 shadow-md"
             />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider bg-[#7ffc97] text-[#002109] px-2.5 py-0.5 rounded-full">
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-[#7ffc97] text-[#002109] px-2.5 py-0.5 rounded-full shadow-2xs">
                   {currentUser.loyaltyTier || t('verifiedCustomer')}
                 </span>
                 <span className="text-white/70 text-[12px] hidden sm:inline">
@@ -223,7 +223,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="flex items-center gap-3 sm:gap-4 bg-black/15 backdrop-blur-md p-3 rounded-xl border border-white/10">
+          <div className="flex items-center gap-3 sm:gap-4 bg-black/20 backdrop-blur-md p-3 rounded-2xl border border-white/15 shadow-sm">
             <div className="text-center px-2 sm:px-3">
               <div className="text-[20px] font-bold font-display text-white">
                 {activeOrders.length}
@@ -252,7 +252,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Navigation Sidebar */}
         <aside className="lg:col-span-1 space-y-1.5">
-          <div className="bg-white rounded-2xl border border-[#e2e8f0] p-2.5 shadow-xs">
+          <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white/80 p-2.5 shadow-md">
             <button
               type="button"
               id="tab-btn-orders"

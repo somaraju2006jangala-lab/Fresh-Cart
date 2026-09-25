@@ -6,6 +6,7 @@
     color: #0b1c30;
     background-color: #f8f9ff;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -21,18 +22,293 @@
   font-family: 'Inter', sans-serif;
 }
 
+/* ==========================================================================
+   GLASSMORPHISM DESIGN SYSTEM
+   ========================================================================== */
+
+/* Base semi-transparent glass panel */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 8px 32px 0 rgba(11, 28, 48, 0.04);
+}
+
+/* Elevated glass surface (modals, drawers, hero banners) */
+.glass-panel-elevated {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 16px 48px -8px rgba(11, 28, 48, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+/* Product & content glass card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 6px 24px -2px rgba(11, 28, 48, 0.03);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 36px -6px rgba(0, 107, 44, 0.08), 0 0 24px -4px rgba(16, 185, 129, 0.08);
+}
+
+/* Glass Pill / Chip */
+.glass-pill {
+  background: rgba(239, 244, 255, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-pill:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+/* Glass Header */
+.glass-header {
+  background: rgba(248, 249, 255, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(229, 238, 255, 0.75);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+}
+
+/* ==========================================================================
+   INTERACTIVE BUTTON & HOVER ELEVATIONS
+   - Smoothly change elevation/shadow
+   - Slightly brighten glass surface
+   - Subtle hover movement (no excessive bouncing)
+   ========================================================================== */
+
+.glass-button {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.25s ease,
+              background-color 0.25s ease;
+}
+
+.glass-button:hover {
+  transform: translateY(-1.5px);
+  filter: brightness(1.03);
+}
+
+.glass-button:active {
+  transform: translateY(0px) scale(0.99);
+}
+
+/* Primary emerald button enhancement */
+.btn-emerald-glass {
+  background: #006b2c;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.25s ease;
+}
+
+.btn-emerald-glass:hover {
+  background: #00873a;
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px -2px rgba(0, 107, 44, 0.35);
+}
+
+.btn-emerald-glass:active {
+  transform: translateY(0px) scale(0.985);
+}
+
+/* ==========================================================================
+   CART ICON HOVER INTERACTIONS
+   - Subtle emerald glow
+   - Slightly lift the icon
+   - Smooth transition
+   ========================================================================== */
+
+.cart-icon-glow {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.3s ease;
+}
+
+.cart-icon-glow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px -2px rgba(0, 107, 44, 0.35),
+              0 0 14px 1px rgba(127, 252, 151, 0.45);
+  filter: brightness(1.05);
+}
+
+.cart-icon-glow:active {
+  transform: translateY(0px) scale(0.97);
+}
+
+/* Floating cart toggle button glow & lift */
+.cart-floating-glow {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.3s ease;
+}
+
+.cart-floating-glow:hover {
+  transform: translateY(-2.5px) scale(1.04);
+  box-shadow: 0 16px 36px -4px rgba(11, 28, 48, 0.4),
+              0 0 20px 2px rgba(127, 252, 151, 0.3);
+  filter: brightness(1.06);
+}
+
+.cart-floating-glow:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+/* ==========================================================================
+   PRODUCT CARD 3D PARALLAX & GLASS SPECULAR
+   ========================================================================== */
+
+.product-card-3d-wrap {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.product-card-3d-inner {
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+/* ==========================================================================
+   AMBIENT ORB & PARTICLE KEYFRAME ANIMATIONS
+   ========================================================================== */
+
+@keyframes ambientFloat1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -24px, 0) scale(1.04);
+  }
+}
+
+@keyframes ambientFloat2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-24px, 18px, 0) scale(0.96);
+  }
+}
+
+@keyframes ambientFloat3 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(16px, 20px, 0) scale(1.03);
+  }
+}
+
+@keyframes floatParticle1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate3d(18px, -32px, 0) scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+@keyframes floatParticle2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(-24px, -40px, 0) scale(0.85);
+    opacity: 0.65;
+  }
+}
+
+@keyframes floatParticle3 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translate3d(25px, -30px, 0) scale(1.15);
+    opacity: 0.6;
+  }
+}
+
+.animate-ambient-float-1 {
+  animation: ambientFloat1 18s ease-in-out infinite;
+}
+
+.animate-ambient-float-2 {
+  animation: ambientFloat2 22s ease-in-out infinite;
+}
+
+.animate-ambient-float-3 {
+  animation: ambientFloat3 20s ease-in-out infinite;
+}
+
+.animate-float-particle-1 {
+  animation: floatParticle1 infinite ease-in-out;
+}
+
+.animate-float-particle-2 {
+  animation: floatParticle2 infinite ease-in-out;
+}
+
+.animate-float-particle-3 {
+  animation: floatParticle3 infinite ease-in-out;
+}
+
+/* ==========================================================================
+   PERFORMANCE & ACCESSIBILITY: PREFERS-REDUCED-MOTION
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .product-card-3d-inner {
+    transform: none !important;
+  }
+
+  .animate-ambient-float-1,
+  .animate-ambient-float-2,
+  .animate-ambient-float-3,
+  .animate-float-particle-1,
+  .animate-float-particle-2,
+  .animate-float-particle-3 {
+    animation: none !important;
+  }
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(241, 245, 249, 0.6);
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(203, 213, 225, 0.8);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(148, 163, 184, 0.9);
 }

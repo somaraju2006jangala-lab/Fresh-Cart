@@ -169,12 +169,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#e2e8f0] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-md">
+      <div className="bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-white/80 flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#e5eeff] bg-[#eff4ff]/50">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#e5eeff]/80 bg-white/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#006b2c] text-white flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-[#006b2c] text-white flex items-center justify-center shadow-2xs">
               <Zap className="w-4 h-4 text-[#7ffc97]" />
             </div>
             <div>
@@ -356,7 +356,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3 rounded-xl bg-[#006b2c] text-white font-semibold text-[14px] hover:bg-[#00873a] active:scale-98 shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 rounded-xl bg-[#006b2c] text-white font-semibold text-[14px] hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105 active:translate-y-0 active:scale-98 shadow-md transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2">
@@ -464,7 +464,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     handleDone();
                     onNavigateToDashboard();
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-[#eff4ff] text-[#006b2c] border border-[#d3e4fe] text-[13px] font-semibold hover:bg-[#dce9ff] transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl bg-[#eff4ff] text-[#006b2c] border border-[#d3e4fe] text-[13px] font-semibold hover:bg-[#dce9ff] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer"
                 >
                   {t('trackInDashboard')}
                 </button>
@@ -473,7 +473,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 type="button"
                 id="checkout-continue-shopping-btn"
                 onClick={handleDone}
-                className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 cursor-pointer"
               >
                 {t('continueShopping')}
               </button>

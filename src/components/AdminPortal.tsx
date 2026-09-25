@@ -722,15 +722,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#f8fafc] text-[#0b1c30] pb-16">
+    <div className="w-full min-h-screen bg-transparent text-[#0b1c30] pb-16 relative z-10">
       {/* Top Admin Action Bar */}
-      <div className="bg-[#1e293b] text-white py-3 px-4 sm:px-6 shadow-md border-b border-[#334155]">
+      <div className="bg-[#1e293b]/92 backdrop-blur-xl text-white py-3 px-4 sm:px-6 shadow-md border-b border-[#334155]/80">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onBackToStorefront}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-[12px] font-semibold transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#334155]/80 hover:bg-[#475569] text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>{t('backToStorefrontBtn')}</span>
@@ -763,7 +763,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <button
               type="button"
               onClick={handleTriggerPulse}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 cursor-pointer"
               title="Simulate incoming order sale and live stock countdown"
             >
               <Radio className="w-3.5 h-3.5 text-[#7ffc97] animate-pulse" />

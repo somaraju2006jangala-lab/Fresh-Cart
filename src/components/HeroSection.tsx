@@ -64,7 +64,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       {showBanner && (
         <div
           id="promo-ribbon"
-          className="w-full bg-[#00873a] text-[#f7fff2] py-2 px-4 sm:px-6 flex items-center justify-between shadow-xs relative"
+          className="w-full bg-[#00873a]/92 backdrop-blur-md text-[#f7fff2] py-2 px-4 sm:px-6 flex items-center justify-between shadow-xs relative border-b border-emerald-600/30"
         >
           <div className="flex items-center gap-2 mx-auto text-[12px] sm:text-[13px] flex-wrap justify-center">
             <ShoppingBag className="w-4 h-4 text-[#7ffc97] shrink-0" />
@@ -93,14 +93,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>{' '}
               {t('promoDiscountText')}
             </span>
-            <span className="hidden md:inline-flex items-center gap-1 text-[11px] bg-[#006b2c] text-white px-2 py-0.5 rounded-full font-semibold ml-1">
+            <span className="hidden md:inline-flex items-center gap-1 text-[11px] bg-[#006b2c] text-white px-2 py-0.5 rounded-full font-semibold ml-1 shadow-2xs">
               {t('promoMinOrder')}
             </span>
           </div>
           <button
             type="button"
             onClick={() => setShowBanner(false)}
-            className="text-white hover:opacity-75 transition-opacity"
+            className="text-white hover:opacity-75 transition-opacity cursor-pointer"
             title="Dismiss announcement"
           >
             <X className="w-4 h-4" />
@@ -109,7 +109,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       )}
 
       {/* Real-time Inventory Sync Status Ticker */}
-      <div className="w-full bg-[#eff4ff]/60 border-b border-[#e5eeff] py-1.5 px-4 sm:px-6">
+      <div className="w-full bg-white/50 backdrop-blur-md border-b border-white/60 py-1.5 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-[12px]">
           <div className="flex items-center gap-2 text-[#3e4a3d]">
             <span className="relative flex h-2 w-2">
@@ -138,7 +138,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left Text & Search Block */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#e5eeff] text-[#131b2e] text-[12px] font-semibold">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 backdrop-blur-md text-[#131b2e] text-[12px] font-semibold border border-white/80 shadow-2xs">
               <Sprout className="w-4 h-4 text-[#006b2c]" />
               <span>{t('heroBadge')}</span>
             </div>
@@ -154,7 +154,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Quick Hero Search Input */}
             <div className="relative w-full max-w-xl pt-1">
-              <form onSubmit={handleHeroSubmit} className="relative flex items-center bg-white rounded-xl shadow-md border border-[#e2e8f0]">
+              <form onSubmit={handleHeroSubmit} className="relative flex items-center bg-white/85 backdrop-blur-xl rounded-2xl shadow-md border border-white/90 hover:border-slate-300 transition-all">
                 <span className="pl-3.5 text-[#6e7b6c]">
                   <Zap className="w-5 h-5 text-[#006b2c]" />
                 </span>
@@ -169,7 +169,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <button
                   type="submit"
                   id="hero-search-find-btn"
-                  className="absolute right-1.5 top-1.5 bottom-1.5 px-4 rounded-lg bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  className="absolute right-1.5 top-1.5 bottom-1.5 px-4 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>{t('find')}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -201,10 +201,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-all"
                 onClick={() => onSelectCategory('all')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'all'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('allAisles')}
@@ -213,10 +213,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-produce"
                 onClick={() => onSelectCategory('produce')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'produce'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('catProduce')}
@@ -225,10 +225,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-dairy"
                 onClick={() => onSelectCategory('dairy')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'dairy'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('catDairy')}
@@ -237,10 +237,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-bakery"
                 onClick={() => onSelectCategory('bakery')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'bakery'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('catBakery')}
@@ -249,10 +249,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-beverages"
                 onClick={() => onSelectCategory('beverages')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'beverages'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('catBeverages')}
@@ -261,10 +261,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 type="button"
                 id="hero-category-grains"
                 onClick={() => onSelectCategory('grains')}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'grains'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#eff4ff] text-[#3e4a3d] hover:bg-[#e5eeff]'
+                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
                 }`}
               >
                 {t('catGrains')}
@@ -274,17 +274,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           {/* Right Hero Image Card with Cold-Chain Speed Hub */}
           <div className="lg:col-span-5 relative">
-            <div className="relative rounded-2xl overflow-hidden shadow-xl bg-white border border-[#e2e8f0]/80">
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-white/80 backdrop-blur-xl border border-white/80 group">
               <img
                 src={HERO_IMAGE_URL}
                 alt="Farm fresh organic vegetables and milk"
-                className="w-full h-80 object-cover"
+                className="w-full h-80 object-cover transition-transform duration-700 group-hover:scale-104"
               />
 
               {/* Floating Speed Hub Banner */}
-              <div className="absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur-md rounded-xl p-3.5 shadow-lg border border-[#e2e8f0]/70 flex items-center justify-between">
+              <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur-xl rounded-2xl p-3.5 shadow-xl border border-white/80 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#eff4ff] flex items-center justify-center text-[#006b2c] shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-[#eff4ff] flex items-center justify-center text-[#006b2c] shrink-0 shadow-2xs">
                     <Zap className="w-5 h-5 text-[#006b2c]" />
                   </div>
                   <div>
@@ -292,7 +292,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     <p className="text-[11px] text-[#565e74]">Packed within 7 mins at 4°C</p>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold">
+                <span className="px-2.5 py-1 rounded-full bg-[#7ffc97] text-[#002109] text-[11px] font-bold shadow-2xs">
                   Live Status: Fast
                 </span>
               </div>

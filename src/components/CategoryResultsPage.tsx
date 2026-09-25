@@ -143,10 +143,10 @@ export const CategoryResultsPage: React.FC<CategoryResultsPageProps> = ({
         </div>
 
         {/* Selected Category Header Banner */}
-        <div className="bg-white rounded-2xl border border-[#e2e8f0] p-6 shadow-xs mb-6">
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white/80 p-6 shadow-md mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-[#eff4ff] flex items-center justify-center shrink-0 shadow-xs border border-[#dce9ff]">
+              <div className="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-md flex items-center justify-center shrink-0 shadow-xs border border-white/90">
                 {getCategoryIcon(currentNormId)}
               </div>
               <div>
@@ -154,7 +154,7 @@ export const CategoryResultsPage: React.FC<CategoryResultsPageProps> = ({
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#006b2c]">
                     Product Category
                   </span>
-                  <span className="px-2 py-0.5 rounded-full bg-[#eff4ff] text-[#006b2c] text-[11px] font-bold">
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/80 backdrop-blur-xs text-[#006b2c] text-[11px] font-bold border border-white/90 shadow-2xs">
                     {categoryProducts.length} {categoryProducts.length === 1 ? 'Product' : 'Products'}
                   </span>
                 </div>

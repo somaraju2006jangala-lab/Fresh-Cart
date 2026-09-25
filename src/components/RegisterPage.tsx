@@ -115,10 +115,10 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
       </div>
 
       {/* Main Register Card */}
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-[#e2e8f0] overflow-hidden">
+      <div className="w-full max-w-lg bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/80 overflow-hidden">
         {/* Header */}
-        <div className="bg-linear-to-b from-[#f0f7f2] to-white p-6 sm:p-7 text-center border-b border-[#e5eeff]/80">
-          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white shadow-xs border border-[#e2e8f0] mb-3">
+        <div className="bg-linear-to-b from-white/90 to-white/60 backdrop-blur-md p-6 sm:p-7 text-center border-b border-white/70">
+          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/90 shadow-2xs border border-white/80 mb-3">
             <img
               src={BRAND_LOGO_URL}
               alt="FreshCart Logo"
@@ -132,7 +132,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             Unlock fast 30-min neighborhood delivery, order history, and exclusive organic perks
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-semibold">
+          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#dcfce7]/90 text-[#15803d] text-[11px] font-semibold border border-emerald-200 shadow-2xs">
             <Sparkles className="w-3 h-3 text-[#16a34a]" />
             <span>New Member Bonus: 10% Off Your First Order</span>
           </div>
@@ -363,7 +363,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             type="submit"
             id="register-submit-btn"
             disabled={isSubmitting}
-            className="w-full py-3 rounded-xl bg-[#006b2c] hover:bg-[#00873a] active:scale-[0.99] text-white font-semibold text-[14px] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
+            className="w-full py-3 rounded-xl bg-[#006b2c] hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105 active:translate-y-0 active:scale-[0.99] text-white font-semibold text-[14px] shadow-md transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
           >
             {isSubmitting ? (
               <div className="flex items-center gap-2">
@@ -380,7 +380,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
         </form>
 
         {/* Existing account link */}
-        <div className="bg-[#f8fafc] px-6 sm:px-7 py-4 border-t border-[#e2e8f0] text-center">
+        <div className="bg-white/50 backdrop-blur-sm px-6 sm:px-7 py-4 border-t border-white/70 text-center">
           <p className="text-[13px] text-[#565e74]">
             Already have an account?{' '}
             <button

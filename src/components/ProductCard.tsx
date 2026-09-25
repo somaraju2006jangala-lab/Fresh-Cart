@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Product } from '../types';
 import { formatINR } from '../utils/currency';
 import { Plus, Minus, ShoppingCart, Check } from 'lucide-react';
@@ -18,6 +18,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const { t } = useLanguage();
   const [qty, setQty] = useState(1);
   const [addedAnim, setAddedAnim] = useState(false);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   const isOutOfStock = product.stock <= 0;
 
@@ -43,30 +46,70 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     setTimeout(() => setAddedAnim(false), 1200);
   };
 
+  // Cursor-reactive 3D parallax tilt & glass specular highlight
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const normX = (x / rect.width) * 2 - 1;
+    const normY = (y / rect.height) * 2 - 1;
+
+    // Subtle 3D tilt: max 4.5 degrees
+    const rotateX = (-normY * 4.5).toFixed(2);
+    const rotateY = (normX * 4.5).toFixed(2);
+
+    cardRef.current.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-4px)`;
+
+    if (highlightRef.current) {
+      highlightRef.current.style.opacity = '1';
+      highlightRef.current.style.background = `radial-gradient(320px circle at ${x}px ${y}px, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1) 40%, transparent 70%)`;
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (cardRef.current) {
+      cardRef.current.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0px)';
+    }
+    if (highlightRef.current) {
+      highlightRef.current.style.opacity = '0';
+    }
+  };
+
   return (
     <div
+      ref={cardRef}
       id={`product-card-${product.id}`}
-      className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden border border-[#e2e8f0]/80 group ${
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className={`relative bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm hover:shadow-[0_16px_36px_-6px_rgba(0,107,44,0.12)] transition-[transform,box-shadow,border-color] duration-300 ease-out flex flex-col justify-between overflow-hidden border border-white/80 hover:border-white group will-change-transform ${
         isOutOfStock ? 'opacity-85' : ''
       }`}
     >
+      {/* Specular glass reflection overlay following cursor */}
       <div
-        className="cursor-pointer"
+        ref={highlightRef}
+        className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-300 z-10"
+        aria-hidden="true"
+      />
+
+      <div
+        className="cursor-pointer relative z-0"
         onClick={() => onOpenDetails(product)}
       >
-        <div className="relative h-48 w-full bg-[#eff4ff] overflow-hidden">
+        <div className="relative h-48 w-full bg-[#eff4ff]/70 overflow-hidden">
           <img
             src={product.image}
             alt={product.title}
-            className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-106 ${
               isOutOfStock ? 'grayscale' : ''
             }`}
             loading="lazy"
           />
 
-
-          {/* Badge */}
-          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 backdrop-blur-xs text-[11px] text-[#0b1c30] font-medium shadow-xs border border-[#e2e8f0]/60">
+          {/* Badge with glass styling */}
+          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-lg bg-white/90 backdrop-blur-md text-[11px] text-[#0b1c30] font-semibold shadow-xs border border-white/80 transition-transform group-hover:scale-102">
             {product.badge}
           </span>
         </div>
@@ -75,7 +118,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <span className="text-[11px] text-[#565e74] font-medium tracking-wide">
             {product.supplier} · {product.sku}
           </span>
-          <h3 className="text-[16px] leading-snug text-[#0b1c30] font-semibold mt-1 hover:text-[#006b2c] transition-colors line-clamp-1">
+          <h3 className="text-[16px] leading-snug text-[#0b1c30] font-semibold mt-1 group-hover:text-[#006b2c] transition-colors line-clamp-1">
             {product.title}
           </h3>
           <div className="mt-2 flex items-baseline gap-1">
@@ -87,25 +130,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
       </div>
 
-      <div className="p-4 pt-0">
+      <div className="p-4 pt-0 relative z-0">
         {isOutOfStock ? (
           <button
             id={`add-to-cart-${product.id}`}
             type="button"
             disabled
-            className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed border border-[#e2e8f0]"
+            className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-[#f1f5f9]/80 backdrop-blur-xs text-[#94a3b8] cursor-not-allowed border border-[#e2e8f0]"
           >
             <span>{t('unavailable')}</span>
           </button>
         ) : (
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-[#eff4ff] rounded-lg p-0.5 border border-[#e2e8f0]">
+            <div className="flex items-center bg-white/70 backdrop-blur-md rounded-lg p-0.5 border border-[#e2e8f0]/80 shadow-2xs">
               <button
                 type="button"
                 title="Decrease quantity"
                 onClick={handleDecrement}
                 disabled={qty <= 1}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/90 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
@@ -117,7 +160,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 title="Increase quantity"
                 onClick={handleIncrement}
                 disabled={qty >= product.stock}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#e5eeff] text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/90 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -127,10 +170,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               id={`add-to-cart-${product.id}`}
               type="button"
               onClick={handleAdd}
-              className={`flex-1 py-2 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-98 cursor-pointer ${
+              className={`flex-1 py-2 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-98 cursor-pointer ${
                 addedAnim
-                  ? 'bg-[#15803d] text-white'
-                  : 'bg-[#006b2c] text-white hover:bg-[#00873a]'
+                  ? 'bg-[#15803d] text-white shadow-[#15803d]/30'
+                  : 'bg-[#006b2c] hover:bg-[#00873a] text-white hover:brightness-105 shadow-[#006b2c]/20'
               }`}
             >
               {addedAnim ? (

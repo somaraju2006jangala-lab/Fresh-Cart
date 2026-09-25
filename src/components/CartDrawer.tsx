@@ -249,13 +249,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             onClick={onToggle}
             aria-label={t('cart')}
             title={t('cart')}
-            className="relative flex items-center justify-center bg-[#213145] text-[#7ffc97] p-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#565e74]/30"
+            className="relative flex items-center justify-center bg-[#213145]/90 backdrop-blur-md text-[#7ffc97] p-3.5 rounded-2xl shadow-2xl active:scale-95 cursor-pointer border border-[#565e74]/40 cart-floating-glow"
           >
-            <ShoppingCart className="w-6 h-6" />
+            <ShoppingCart className="w-6 h-6 transition-transform group-hover:scale-105" />
             {totalItemCount > 0 && (
               <span
                 id="floating-cart-badge"
-                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-[#213145]"
+                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-[#213145] shadow-xs"
               >
                 {totalItemCount}
               </span>
@@ -268,12 +268,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       {isOpen && (
         <div
           id="cart-drawer-panel"
-          className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] max-w-md bg-white rounded-2xl shadow-2xl p-5 sm:p-6 border border-[#e2e8f0] flex flex-col transition-all max-h-[88vh] overflow-hidden"
+          className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] max-w-md bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-white/80 flex flex-col transition-all max-h-[88vh] overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-[#e5eeff]">
+          <div className="flex items-center justify-between pb-3 border-b border-[#e5eeff]/80">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#eff4ff] flex items-center justify-center text-[#006b2c]">
+              <div className="w-8 h-8 rounded-xl bg-[#eff4ff] flex items-center justify-center text-[#006b2c] shadow-2xs">
                 <ShoppingBag className="w-4 h-4 text-[#006b2c]" />
               </div>
               <h3 className="text-[18px] font-bold text-[#0b1c30] font-display">
@@ -284,7 +284,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <button
               type="button"
               onClick={onToggle}
-              className="w-8 h-8 rounded-lg bg-[#eff4ff] hover:bg-[#e5eeff] flex items-center justify-center text-[#565e74] hover:text-[#0b1c30] transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-xl bg-white/70 hover:bg-white flex items-center justify-center text-[#565e74] hover:text-[#0b1c30] transition-all hover:scale-105 border border-slate-200/50 cursor-pointer shadow-2xs"
             >
               <X className="w-4 h-4" />
             </button>
@@ -500,10 +500,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             type="button"
             disabled={items.length === 0}
             onClick={onOpenCheckout}
-            className={`w-full mt-3 py-2.5 rounded-xl text-[13px] font-semibold shadow-md transition-all flex items-center justify-center gap-2 ${
+            className={`w-full mt-3 py-2.5 rounded-xl text-[13px] font-semibold shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
               items.length === 0
                 ? 'bg-[#cbd5e1] text-[#64748b] cursor-not-allowed'
-                : 'bg-[#006b2c] text-white hover:bg-[#00873a] active:scale-98 cursor-pointer'
+                : 'bg-[#006b2c] text-white hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105 active:translate-y-0 active:scale-98 cursor-pointer'
             }`}
           >
             <span>{t('proceedToCheckout')}</span>

@@ -16,7 +16,7 @@ export const Footer: React.FC<FooterProps> = ({
 }) => {
   const { t } = useLanguage();
   return (
-    <footer className="w-full bg-[#eff4ff] mt-10 border-t border-[#e2e8f0]">
+    <footer className="w-full bg-white/60 backdrop-blur-xl mt-10 border-t border-white/70">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-12 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
           {/* Col 1: Brand */}

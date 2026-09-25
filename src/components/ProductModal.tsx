@@ -43,10 +43,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#e2e8f0] flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-md">
+      <div className="bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-white/80 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="relative h-64 w-full bg-[#eff4ff] overflow-hidden shrink-0">
+        <div className="relative h-64 w-full bg-[#eff4ff]/80 overflow-hidden shrink-0">
           <img
             src={product.image}
             alt={product.title}
@@ -55,7 +55,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-[#0b1c30] hover:bg-white shadow-md transition-all cursor-pointer"
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-[#0b1c30] hover:bg-white shadow-md transition-all duration-200 hover:scale-105 border border-white/80 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -151,13 +151,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </div>
 
         {/* Footer actions */}
-        <div className="p-4 sm:p-5 border-t border-[#e5eeff] bg-white flex items-center justify-between gap-4">
-          <div className="flex items-center bg-[#eff4ff] rounded-xl p-1 border border-[#e2e8f0]">
+        <div className="p-4 sm:p-5 border-t border-[#e5eeff]/80 bg-white/70 backdrop-blur-md flex items-center justify-between gap-4">
+          <div className="flex items-center bg-white/80 backdrop-blur-xs rounded-xl p-1 border border-white/90 shadow-2xs">
             <button
               type="button"
               disabled={qty <= 1}
               onClick={() => qty > 1 && setQty(qty - 1)}
-              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30] disabled:opacity-40"
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#eff4ff] text-[#0b1c30] transition-all duration-200 active:scale-95 disabled:opacity-40 cursor-pointer"
             >
               <Minus className="w-4 h-4" />
             </button>
@@ -168,7 +168,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               type="button"
               disabled={qty >= product.stock}
               onClick={() => qty < product.stock && setQty(qty + 1)}
-              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#e5eeff] text-[#0b1c30] disabled:opacity-40"
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#eff4ff] text-[#0b1c30] transition-all duration-200 active:scale-95 disabled:opacity-40 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -178,12 +178,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             type="button"
             disabled={isOutOfStock}
             onClick={handleAdd}
-            className={`flex-1 py-3 px-4 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 shadow-md transition-all ${
+            className={`flex-1 py-3 px-4 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 shadow-md transition-all duration-200 ${
               isOutOfStock
                 ? 'bg-[#cbd5e1] text-[#64748b] cursor-not-allowed'
                 : added
-                ? 'bg-[#15803d] text-white'
-                : 'bg-[#006b2c] text-white hover:bg-[#00873a] cursor-pointer'
+                ? 'bg-[#15803d] text-white shadow-emerald-700/20'
+                : 'bg-[#006b2c] text-white hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105 active:translate-y-0 active:scale-98 cursor-pointer'
             }`}
           >
             {added ? (
