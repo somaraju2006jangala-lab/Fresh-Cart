@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Product, InventoryLog, Coupon, CustomerOrder, DeliveryChargeRule, Transaction, ReturnStatus, ReturnDetails, PaymentStatus } from '../types';
+import React, { useState } from 'react';
+import { Product, InventoryLog, Coupon, CustomerOrder, DeliveryChargeRule } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
 import { formatLogDateTime, formatOrderDateTime } from '../utils/date';
@@ -36,19 +36,8 @@ import {
   KeyRound,
   Percent,
   Truck,
-  Landmark,
-  ArrowLeftRight,
-  AlertCircle,
-  CornerDownLeft,
 } from 'lucide-react';
 import { verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
-import {
-  fetchServerTransactions,
-  acceptOrderReturn,
-  markProductCollected,
-  processOrderRefund,
-} from '../services/paymentService';
-import { updateOrderReturnStatus } from '../services/authService';
 
 export interface ParsedHistoryPeriod {
   type: 'all' | 'relative';
@@ -219,114 +208,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'transactions' | 'settings'>('inventory');
-
-  // Transactions State
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [txnSearchQuery, setTxnSearchQuery] = useState('');
-  const [txnFilterStatus, setTxnFilterStatus] = useState<'ALL' | 'PAID' | 'PENDING' | 'FAILED' | 'CANCELLED' | 'REFUNDED'>('ALL');
-  const [isRefundingOrderId, setIsRefundingOrderId] = useState<string | null>(null);
-  const [adminReturnToast, setAdminReturnToast] = useState<string | null>(null);
-  const [ordersSubView, setOrdersSubView] = useState<'all' | 'returns'>('all');
-
-  const loadTransactions = useCallback(async () => {
-    try {
-      const data = await fetchServerTransactions();
-      setTransactions(data);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
-
-  const handleAdminAcceptReturn = async (orderId: string) => {
-    try {
-      await acceptOrderReturn({ orderId, adminName: 'Admin Desk' });
-      updateOrderReturnStatus(orderId, 'RETURN ACCEPTED', {
-        acceptedAt: new Date().toISOString(),
-        acceptedBy: 'Admin Desk',
-      });
-      loadTransactions();
-      setAdminReturnToast(`Return for Order ${orderId} accepted.`);
-      setTimeout(() => setAdminReturnToast(null), 3500);
-    } catch (err: any) {
-      alert(err.message || 'Failed to accept return');
-    }
-  };
-
-  const handleAdminMarkCollected = async (order: CustomerOrder) => {
-    try {
-      const retQty = order.returnDetails?.quantity || 1;
-      await markProductCollected({
-        orderId: order.id,
-        adminName: 'Store Hub Staff',
-        returnedQuantity: retQty,
-      });
-
-      updateOrderReturnStatus(order.id, 'PRODUCT COLLECTED', {
-        collectedAt: new Date().toISOString(),
-        collectedBy: 'Store Hub Staff',
-      });
-
-      // Update inventory according to existing FreshCart inventory system
-      if (order.returnDetails?.productId && onUpdateProductStock) {
-        const targetProd = products.find((p) => p.id === order.returnDetails?.productId);
-        if (targetProd) {
-          const newStock = targetProd.stock + retQty;
-          onUpdateProductStock(
-            targetProd.id,
-            newStock,
-            `RESTOCK: Customer return collected for order ${order.id} (+${retQty} ${targetProd.unit})`
-          );
-        }
-      }
-
-      loadTransactions();
-      setAdminReturnToast(`Product for Order ${order.id} marked collected and stock restored.`);
-      setTimeout(() => setAdminReturnToast(null), 3500);
-    } catch (err: any) {
-      alert(err.message || 'Failed to record product collection');
-    }
-  };
-
-  const handleAdminProcessRefund = async (order: CustomerOrder) => {
-    setIsRefundingOrderId(order.id);
-    try {
-      updateOrderReturnStatus(order.id, 'REFUND PROCESSING');
-      const res = await processOrderRefund({
-        orderId: order.id,
-        returnDetails: order.returnDetails,
-        paymentId: order.razorpayPaymentId,
-      });
-
-      if (res.success) {
-        updateOrderReturnStatus(
-          order.id,
-          'REFUNDED',
-          {
-            refundAmount: res.refundAmount,
-            refundId: res.razorpayRefundId,
-            refundedAt: res.refundDate,
-          },
-          'REFUNDED'
-        );
-        loadTransactions();
-        setAdminReturnToast(
-          `Razorpay refund of ${formatINR(res.refundAmount || order.total)} processed successfully! (Refund ID: ${res.razorpayRefundId})`
-        );
-        setTimeout(() => setAdminReturnToast(null), 5000);
-      } else {
-        alert(res.error || 'Refund failed on Razorpay backend.');
-      }
-    } catch (err: any) {
-      alert(err.message || 'Error processing Razorpay refund');
-    } finally {
-      setIsRefundingOrderId(null);
-    }
-  };
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
 
   // Customizable Delivery Charges Rules State
   const [rules, setRules] = useState<DeliveryChargeRule[]>(() => {
@@ -788,14 +670,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         order.items.some((it) => it.product.title.toLowerCase().includes(q));
 
       const matchesStatus =
-        orderStatusFilter === 'all'
-          ? ordersSubView === 'returns'
-            ? !!order.returnStatus
-            : true
-          : orderStatusFilter === 'returns'
-          ? !!order.returnStatus
-          : order.status.toLowerCase() === orderStatusFilter.toLowerCase() &&
-            (ordersSubView === 'returns' ? !!order.returnStatus : true);
+        orderStatusFilter === 'all' ||
+        order.status.toLowerCase() === orderStatusFilter.toLowerCase();
 
       if (activeHistoryPeriod) {
         const cutoff = getCutoffDate(activeHistoryPeriod);
@@ -815,46 +691,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       const timeB = parseOrderDate(b.createdAt)?.getTime() || 0;
       return timeB - timeA;
     });
-
-  // Filtered Verified Transactions & Metrics
-  const filteredTransactions = transactions
-    .filter((txn) => {
-      const q = txnSearchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        txn.id.toLowerCase().includes(q) ||
-        txn.orderId.toLowerCase().includes(q) ||
-        txn.customerName.toLowerCase().includes(q) ||
-        (txn.userId && txn.userId.toLowerCase().includes(q)) ||
-        (txn.razorpayPaymentId && txn.razorpayPaymentId.toLowerCase().includes(q)) ||
-        (txn.razorpayOrderId && txn.razorpayOrderId.toLowerCase().includes(q)) ||
-        (txn.razorpayRefundId && txn.razorpayRefundId.toLowerCase().includes(q));
-
-      const matchesStatus =
-        txnFilterStatus === 'ALL' ||
-        txn.paymentStatus.toUpperCase() === txnFilterStatus.toUpperCase() ||
-        (txnFilterStatus === 'REFUNDED' && (txn.returnStatus === 'REFUNDED' || txn.paymentStatus === 'REFUNDED'));
-
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.createdAt).getTime() || 0;
-      const timeB = new Date(b.createdAt).getTime() || 0;
-      return timeB - timeA;
-    });
-
-  // Displayed Total Received Revenue (FAILED and CANCELLED transactions are NOT counted as received money)
-  const displayedPaidTotal = filteredTransactions
-    .filter((t) => t.paymentStatus === 'PAID')
-    .reduce((sum, t) => sum + t.originalAmount, 0);
-
-  const displayedSettledTotal = filteredTransactions
-    .filter((t) => t.settlementStatus === 'SETTLED')
-    .reduce((sum, t) => sum + t.originalAmount, 0);
-
-  const displayedRefundTotal = filteredTransactions
-    .filter((t) => t.paymentStatus === 'REFUNDED' || t.returnStatus === 'REFUNDED')
-    .reduce((sum, t) => sum + (t.refundAmount || t.originalAmount), 0);
 
   const handleStartEditPrice = (product: Product) => {
     setEditingPriceId(product.id);
@@ -1020,23 +856,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
 
-        {/* Admin Return / Refund Alert Toast Banner */}
-        {adminReturnToast && (
-          <div className="bg-[#f0fdf4] border border-[#86efac] text-[#15803d] p-3.5 rounded-xl flex items-center justify-between shadow-xs animate-in fade-in">
-            <div className="flex items-center gap-2.5 text-[13px] font-bold">
-              <CheckCircle className="w-5 h-5 text-[#16a34a] shrink-0" />
-              <span>{adminReturnToast}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAdminReturnToast(null)}
-              className="text-[#15803d] hover:text-[#14532d] p-1 rounded-md cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
         {/* Tab Selection */}
         <div className="flex border-b border-[#e2e8f0] gap-4">
           <button
@@ -1090,23 +909,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }`}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Customer Orders / Returns</span>
-          </button>
-          <button
-            type="button"
-            id="admin-tab-transactions"
-            onClick={() => {
-              setActiveTab('transactions');
-              loadTransactions();
-            }}
-            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'transactions'
-                ? 'border-[#006b2c] text-[#006b2c]'
-                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
-            }`}
-          >
-            <Landmark className="w-4 h-4" />
-            <span>Transaction History</span>
+            <span>{t('tabCustomerOrders') || 'Customer Orders'}</span>
           </button>
           <button
             type="button"
@@ -1957,40 +1760,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span className="w-2 h-2 rounded-full bg-[#3b82f6]" />
                   Delivered: {customerOrders.filter((o) => o.status === 'Delivered').length}
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-[#fdf2f8] text-[#9d174d] text-[12px] font-bold flex items-center gap-1.5">
-                  <RotateCcw className="w-3.5 h-3.5 text-[#be185d]" />
-                  Returns: {customerOrders.filter((o) => !!o.returnStatus).length}
-                </span>
               </div>
-            </div>
-
-            {/* View Switcher: All Orders vs Return Requests */}
-            <div className="flex items-center gap-2 border-b border-[#e2e8f0] pb-2">
-              <button
-                type="button"
-                id="admin-orders-subview-all"
-                onClick={() => setOrdersSubView('all')}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer ${
-                  ordersSubView === 'all'
-                    ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-[#f1f5f9] text-[#475569] hover:bg-[#e2e8f0]'
-                }`}
-              >
-                All Customer Orders ({customerOrders.length})
-              </button>
-              <button
-                type="button"
-                id="admin-orders-subview-returns"
-                onClick={() => setOrdersSubView('returns')}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  ordersSubView === 'returns'
-                    ? 'bg-[#be185d] text-white shadow-xs'
-                    : 'bg-[#fdf2f8] text-[#9d174d] hover:bg-[#fce7f3]'
-                }`}
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Customer Return Requests ({customerOrders.filter((o) => !!o.returnStatus).length})</span>
-              </button>
             </div>
 
             {/* Filter and Search Bar: Single Horizontal Row */}
@@ -2035,7 +1805,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <option value="all">{t('allOrderStatuses')}</option>
                       <option value="Picking">Picking</option>
                       <option value="Delivered">Delivered</option>
-                      <option value="returns">Returns Only</option>
                     </select>
                   </div>
 
@@ -2292,242 +2061,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             })}
                           </ul>
                         </div>
-                        {/* Financial and Payment Breakdown */}
-                        <div className="pt-2 border-t border-[#e2e8f0] space-y-1">
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-[#64748b]">Cart Subtotal: </span>
-                            <span className="font-medium text-[#0b1c30]">
-                              {formatINR(order.items.reduce((s, it) => s + it.product.price * it.quantity, 0))}
-                            </span>
-                          </div>
-                          {order.discount ? (
-                            <div className="flex justify-between text-[#16a34a]">
-                              <span className="font-semibold">Coupon Discount: </span>
-                              <span className="font-medium">-{formatINR(order.discount)}</span>
-                            </div>
-                          ) : null}
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-[#64748b]">Delivery Charges: </span>
-                            <span className="font-medium text-[#0b1c30]">
-                              {order.deliveryCharge === 0 ? 'FREE' : formatINR(order.deliveryCharge ?? 40)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between pt-1 border-t border-[#f1f5f9] text-[14px]">
-                            <span className="font-bold text-[#64748b]">Final Total: </span>
-                            <span className="font-bold text-[#006b2c]">{formatINR(order.total)}</span>
-                          </div>
+                        <div className="pt-2 border-t border-[#e2e8f0]">
+                          <span className="font-semibold text-[#64748b]">Total: </span>
+                          <span className="font-bold text-[#006b2c]">{formatINR(order.total)}</span>
                         </div>
-
-                        {/* Verified Razorpay Payment Information */}
-                        <div className="pt-2 border-t border-[#e2e8f0] space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#64748b]">Payment Method: </span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#eff4ff] text-[#1d4ed8] border border-[#bfdbfe]">
-                              ● UPI
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#64748b]">Payment Status: </span>
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                                order.paymentStatus === 'PAID'
-                                  ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
-                                  : order.paymentStatus === 'REFUNDED'
-                                  ? 'bg-[#fdf2f8] text-[#be185d] border-[#fbcfe8]'
-                                  : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'
-                              }`}
-                            >
-                              {order.paymentStatus || 'PAID'}
-                            </span>
-                          </div>
-                          {order.razorpayPaymentId && (
-                            <div>
-                              <span className="font-semibold text-[#64748b]">Razorpay Payment ID: </span>
-                              <span className="font-mono text-[#0284c7] font-semibold">{order.razorpayPaymentId}</span>
-                            </div>
-                          )}
-                          {order.razorpayOrderId && (
-                            <div>
-                              <span className="font-semibold text-[#64748b]">Razorpay Order ID: </span>
-                              <span className="font-mono text-[#64748b]">{order.razorpayOrderId}</span>
-                            </div>
-                          )}
-                          <div>
-                            <span className="font-semibold text-[#64748b]">Settlement Status: </span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#f8fafc] text-[#334155] border border-[#cbd5e1]">
-                              {order.settlementStatus || 'NOT_SETTLED'}
-                            </span>
-                          </div>
-                        </div>
-
                         <div>
-                          <span className="font-semibold text-[#64748b]">Order Status: </span>
+                          <span className="font-semibold text-[#64748b]">Status: </span>
                           <span className="font-bold text-[#006b2c]">{order.status}</span>
                         </div>
                       </div>
-
-                      {/* Customer Return Request Box & Admin Action Controls */}
-                      {order.returnStatus && (
-                        <div className="bg-[#fff1f2] border-2 border-[#fecdd3] rounded-xl p-4 sm:p-5 space-y-3 font-sans shadow-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#fecdd3]">
-                            <div className="flex items-center gap-2">
-                              <RotateCcw className="w-4 h-4 text-[#e11d48]" />
-                              <h4 className="text-[14px] font-bold text-[#9f1239]">
-                                Customer Return Request
-                              </h4>
-                            </div>
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                                order.returnStatus === 'RETURN REQUESTED'
-                                  ? 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
-                                  : order.returnStatus === 'RETURN ACCEPTED'
-                                  ? 'bg-[#e0e7ff] text-[#3730a3] border-[#c7d2fe]'
-                                  : order.returnStatus === 'PRODUCT COLLECTED'
-                                  ? 'bg-[#dcfce7] text-[#166534] border-[#86efac]'
-                                  : order.returnStatus === 'REFUND PROCESSING'
-                                  ? 'bg-[#fef9c3] text-[#854d0e] border-[#fef08a]'
-                                  : 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
-                              }`}
-                            >
-                              ● {order.returnStatus}
-                            </span>
-                          </div>
-
-                          {/* Return Request Details */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px] font-mono bg-white/80 p-3 rounded-lg border border-[#ffe4e6]">
-                            <div>
-                              <span className="text-[#64748b]">Product: </span>
-                              <span className="font-bold text-[#0b1c30]">
-                                {order.returnDetails?.productTitle || (order.items[0]?.product.title ?? 'Item')}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[#64748b]">Quantity & Unit: </span>
-                              <span className="font-bold text-[#0b1c30]">
-                                {order.returnDetails?.quantity || 1} {order.returnDetails?.unit || order.items[0]?.product.unit || 'unit'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[#64748b]">Return Reason: </span>
-                              <span className="font-bold text-[#e11d48]">
-                                {order.returnDetails?.reason || 'Product not wanted'}
-                              </span>
-                            </div>
-                            {order.returnDetails?.reasonDescription && (
-                              <div>
-                                <span className="text-[#64748b]">Details: </span>
-                                <span className="text-[#334155]">{order.returnDetails.reasonDescription}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-[#64748b]">Requested At: </span>
-                              <span className="text-[#334155]">
-                                {order.returnDetails?.requestedAt
-                                  ? formatOrderDateTime(order.returnDetails.requestedAt)
-                                  : formattedDateTime}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-[#64748b]">Original Order Amount: </span>
-                              <span className="font-bold text-[#006b2c]">
-                                {formatINR(order.returnDetails?.originalOrderAmount || order.total)}
-                              </span>
-                            </div>
-                            {order.returnDetails?.acceptedAt && (
-                              <div>
-                                <span className="text-[#64748b]">Accepted At: </span>
-                                <span className="text-[#1e293b]">
-                                  {formatOrderDateTime(order.returnDetails.acceptedAt)} by {order.returnDetails.acceptedBy || 'Admin'}
-                                </span>
-                              </div>
-                            )}
-                            {order.returnDetails?.collectedAt && (
-                              <div>
-                                <span className="text-[#64748b]">Collected At: </span>
-                                <span className="text-[#16a34a] font-semibold">
-                                  {formatOrderDateTime(order.returnDetails.collectedAt)} by {order.returnDetails.collectedBy || 'Staff'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action Buttons for Return Lifecycle */}
-                          <div className="flex flex-wrap items-center gap-3 pt-2">
-                            {/* Step 1: Accept Return */}
-                            {order.returnStatus === 'RETURN REQUESTED' && (
-                              <button
-                                type="button"
-                                id={`admin-accept-return-${order.id}`}
-                                onClick={() => handleAdminAcceptReturn(order.id)}
-                                className="px-4 py-2 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[12px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                              >
-                                <Check className="w-4 h-4" />
-                                <span>Accept Return</span>
-                              </button>
-                            )}
-
-                            {/* Step 2: Mark Product Collected */}
-                            {order.returnStatus === 'RETURN ACCEPTED' && (
-                              <button
-                                type="button"
-                                id={`admin-collect-return-${order.id}`}
-                                onClick={() => handleAdminMarkCollected(order)}
-                                className="px-4 py-2 rounded-lg bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                              >
-                                <Package className="w-4 h-4" />
-                                <span>Mark Product Collected</span>
-                              </button>
-                            )}
-
-                            {/* Step 3: Process Razorpay Refund (strictly enabled ONLY after PRODUCT COLLECTED) */}
-                            {order.returnStatus === 'PRODUCT COLLECTED' && (
-                              <button
-                                type="button"
-                                id={`admin-refund-order-${order.id}`}
-                                onClick={() => handleAdminProcessRefund(order)}
-                                disabled={isRefundingOrderId === order.id}
-                                className="px-4 py-2 rounded-lg bg-[#e11d48] hover:bg-[#be185d] text-white text-[12px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                                <span>
-                                  {isRefundingOrderId === order.id ? 'Processing Refund...' : 'Process Refund'}
-                                </span>
-                              </button>
-                            )}
-
-                            {/* Step 4: Refund Processing */}
-                            {order.returnStatus === 'REFUND PROCESSING' && (
-                              <button
-                                type="button"
-                                disabled
-                                className="px-4 py-2 rounded-lg bg-[#fef08a] text-[#854d0e] text-[12px] font-bold flex items-center gap-1.5 cursor-not-allowed border border-[#fde047]"
-                              >
-                                <span className="inline-block w-3.5 h-3.5 border-2 border-[#854d0e] border-t-transparent rounded-full animate-spin" />
-                                <span>Refund Processing with Razorpay...</span>
-                              </button>
-                            )}
-
-                            {/* Step 5: Completed Refund Verified */}
-                            {order.returnStatus === 'REFUNDED' && (
-                              <div className="w-full bg-[#f0fdf4] border border-[#86efac] p-3 rounded-lg flex items-center justify-between gap-3 text-[12px]">
-                                <div className="flex items-center gap-2">
-                                  <CheckCircle className="w-4 h-4 text-[#16a34a] shrink-0" />
-                                  <span className="font-bold text-[#15803d]">
-                                    Razorpay Refund Completed —{' '}
-                                    {formatINR(order.returnDetails?.refundAmount || order.total)}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] font-mono text-[#64748b]">
-                                  Refund ID:{' '}
-                                  <span className="font-bold text-[#0b1c30]">
-                                    {order.returnDetails?.refundId || 'rfnd_verified'}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -2537,361 +2079,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           )
         )}
 
-        {/* Tab 5: Transaction History */}
-        {activeTab === 'transactions' && (
-          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
-            {/* Header & Refresh */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#e2e8f0]">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#eff4ff] text-[#006b2c] flex items-center justify-center">
-                    <Landmark className="w-4 h-4 text-[#006b2c]" />
-                  </div>
-                  <h3 className="text-[18px] font-bold text-[#0b1c30] font-display">
-                    Transaction History
-                  </h3>
-                </div>
-                <p className="text-[12px] text-[#64748b] mt-1">
-                  Verified Razorpay UPI payment transactions, returns, refunds, and merchant bank account settlements
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  id="admin-refresh-transactions-btn"
-                  onClick={loadTransactions}
-                  className="px-3 py-1.5 rounded-lg border border-[#cbd5e1] bg-white hover:bg-[#f8fafc] text-[#334155] text-[12px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-[#006b2c]" />
-                  <span>Refresh Transactions</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Razorpay Merchant Bank Settlement Architecture Banner */}
-            <div className="rounded-xl border border-[#bfdbfe] bg-gradient-to-r from-[#eff6ff] via-[#f0fdf4] to-[#f8fafc] p-4 sm:p-5 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Landmark className="w-5 h-5 text-[#2563eb]" />
-                  <h4 className="text-[13px] font-bold text-[#1e3a8a] uppercase tracking-wider">
-                    Razorpay Merchant Bank Account Settlement Architecture
-                  </h4>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#dbeafe] text-[#1d4ed8] border border-[#bfdbfe]">
-                  Zero Banking Credentials Stored in FreshCart
-                </span>
-              </div>
-
-              {/* Payment Flow Diagram */}
-              <div className="p-3 bg-white/90 rounded-lg border border-[#e2e8f0] text-[12px] font-mono text-[#334155] flex flex-wrap items-center gap-2 justify-center sm:justify-start">
-                <span className="font-bold text-[#0b1c30]">Customer</span>
-                <span className="text-[#94a3b8]">&rarr;</span>
-                <span className="px-2 py-0.5 rounded bg-[#f1f5f9] font-semibold text-[#0f172a]">FreshCart Checkout</span>
-                <span className="text-[#94a3b8]">&rarr;</span>
-                <span className="px-2 py-0.5 rounded bg-[#eff4ff] text-[#1d4ed8] font-bold">Razorpay UPI Payment</span>
-                <span className="text-[#94a3b8]">&rarr;</span>
-                <span className="px-2 py-0.5 rounded bg-[#dcfce7] text-[#15803d] font-bold">Razorpay Merchant Account</span>
-                <span className="text-[#94a3b8]">&rarr;</span>
-                <span className="px-2 py-0.5 rounded bg-[#fae8ff] text-[#86198f] font-bold">Razorpay Settlement</span>
-                <span className="text-[#94a3b8]">&rarr;</span>
-                <span className="px-2 py-0.5 rounded bg-[#fef3c7] text-[#92400e] font-bold">Admin Linked Bank Account</span>
-              </div>
-
-              {/* Key Security Principles */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[12px] text-[#475569]">
-                <div className="flex items-start gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Bank Account Security:</strong> The Admin/Business bank account is configured exclusively inside the Razorpay merchant dashboard. FreshCart never stores or requests Bank Account Numbers, IFSC, or UPI PINs.
-                  </span>
-                </div>
-                <div className="flex items-start gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Payment vs Settlement:</strong> <code className="text-[#166534] font-bold">PAID</code> indicates customer money was verified & captured by Razorpay. <code className="text-[#1e40af] font-bold">SETTLED</code> indicates Razorpay transferred the batch to the merchant's linked bank account.
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Summary KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-3.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">
-                  Displayed Txns
-                </span>
-                <span className="text-[22px] font-extrabold text-[#0b1c30] tabular-nums block mt-1">
-                  {filteredTransactions.length}
-                </span>
-                <span className="text-[11px] text-[#64748b]">Total transactions listed</span>
-              </div>
-
-              <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl p-3.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#166534] block">
-                  Received Total (PAID)
-                </span>
-                <span className="text-[22px] font-extrabold text-[#15803d] tabular-nums block mt-1">
-                  {formatINR(displayedPaidTotal)}
-                </span>
-                <span className="text-[11px] text-[#166534]">Verified UPI receipts</span>
-              </div>
-
-              <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-xl p-3.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1e40af] block">
-                  Bank Settled
-                </span>
-                <span className="text-[22px] font-extrabold text-[#1d4ed8] tabular-nums block mt-1">
-                  {formatINR(displayedSettledTotal)}
-                </span>
-                <span className="text-[11px] text-[#1e40af]">Settled to linked bank account</span>
-              </div>
-
-              <div className="bg-[#fff1f2] border border-[#fecdd3] rounded-xl p-3.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#9f1239] block">
-                  Total Refunded
-                </span>
-                <span className="text-[22px] font-extrabold text-[#e11d48] tabular-nums block mt-1">
-                  {formatINR(displayedRefundTotal)}
-                </span>
-                <span className="text-[11px] text-[#9f1239]">Returned via Razorpay API</span>
-              </div>
-            </div>
-
-            {/* Search and Filters Bar */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2">
-              {/* Search Input */}
-              <div className="relative w-full md:max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                <input
-                  type="text"
-                  id="admin-transaction-search"
-                  value={txnSearchQuery}
-                  onChange={(e) => setTxnSearchQuery(e.target.value)}
-                  placeholder="Search Transaction ID, Order ID, Customer, User ID, Razorpay IDs..."
-                  className="w-full h-9 pl-9 pr-8 text-[12px] bg-white border border-[#cbd5e1] rounded-lg text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
-                />
-                {txnSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setTxnSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#0b1c30]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Status Filter Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(['ALL', 'PAID', 'PENDING', 'FAILED', 'CANCELLED', 'REFUNDED'] as const).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    id={`admin-txn-filter-${st.toLowerCase()}`}
-                    onClick={() => setTxnFilterStatus(st)}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer ${
-                      txnFilterStatus === st
-                        ? st === 'PAID'
-                          ? 'bg-[#15803d] text-white shadow-xs'
-                          : st === 'FAILED'
-                          ? 'bg-[#dc2626] text-white shadow-xs'
-                          : st === 'CANCELLED'
-                          ? 'bg-[#475569] text-white shadow-xs'
-                          : st === 'REFUNDED'
-                          ? 'bg-[#be185d] text-white shadow-xs'
-                          : st === 'PENDING'
-                          ? 'bg-[#d97706] text-white shadow-xs'
-                          : 'bg-[#006b2c] text-white shadow-xs'
-                        : 'bg-[#f1f5f9] text-[#475569] hover:bg-[#e2e8f0]'
-                    }`}
-                  >
-                    {st === 'ALL' ? 'All' : st.charAt(0) + st.slice(1).toLowerCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Note on displayed total */}
-            <div className="text-[12px] text-[#64748b] flex flex-wrap items-center justify-between gap-2 border-b border-[#e2e8f0] pb-3">
-              <span>
-                Showing <strong>{filteredTransactions.length}</strong> transactions. FAILED and CANCELLED transactions are not counted as received money.
-              </span>
-              <span className="font-bold text-[#0b1c30]">
-                Active Filter Total: <span className="text-[#006b2c]">{formatINR(displayedPaidTotal)}</span>
-              </span>
-            </div>
-
-            {/* Transactions Ledger Table */}
-            <div className="overflow-x-auto rounded-xl border border-[#e2e8f0]">
-              <table className="w-full text-left border-collapse text-[12px] font-sans">
-                <thead>
-                  <tr className="bg-[#f8fafc] border-b border-[#e2e8f0] text-[#475569] uppercase font-bold text-[11px] tracking-wider">
-                    <th className="py-3 px-4">Transaction / Order</th>
-                    <th className="py-3 px-4">Customer & User ID</th>
-                    <th className="py-3 px-4">Method</th>
-                    <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Payment Status</th>
-                    <th className="py-3 px-4">Razorpay Reference IDs</th>
-                    <th className="py-3 px-4">Date & Time</th>
-                    <th className="py-3 px-4">Return / Refund</th>
-                    <th className="py-3 px-4">Bank Settlement</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e2e8f0] bg-white font-mono text-[12px]">
-                  {filteredTransactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-[#64748b] font-sans">
-                        No transactions found matching your search or filter.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredTransactions.map((txn) => (
-                      <tr key={txn.id} className="hover:bg-[#f8fafc] transition-colors">
-                        {/* Transaction ID & Order ID */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <div className="font-bold text-[#006b2c]">{txn.id}</div>
-                          <div className="text-[11px] text-[#64748b]">Order: {txn.orderId}</div>
-                        </td>
-
-                        {/* Customer & User ID */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <div className="font-bold text-[#0b1c30] font-sans">{txn.customerName}</div>
-                          <div className="text-[11px] text-[#64748b]">ID: {txn.userId}</div>
-                        </td>
-
-                        {/* Payment Method */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#eff4ff] text-[#1d4ed8] border border-[#bfdbfe]">
-                            ● {txn.paymentMethod || 'UPI'}
-                          </span>
-                        </td>
-
-                        {/* Amount */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <div className="font-bold text-[#0b1c30]">{formatINR(txn.originalAmount)}</div>
-                          {txn.refundAmount ? (
-                            <div className="text-[11px] text-[#e11d48] font-semibold">
-                              Refunded: {formatINR(txn.refundAmount)}
-                            </div>
-                          ) : null}
-                        </td>
-
-                        {/* Payment Status Badge */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border font-sans ${
-                              txn.paymentStatus === 'PAID'
-                                ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
-                                : txn.paymentStatus === 'REFUNDED'
-                                ? 'bg-[#fdf2f8] text-[#be185d] border-[#fbcfe8]'
-                                : txn.paymentStatus === 'PENDING'
-                                ? 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
-                                : txn.paymentStatus === 'FAILED'
-                                ? 'bg-[#fee2e2] text-[#b91c1c] border-[#fca5a5]'
-                                : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'
-                            }`}
-                          >
-                            ● {txn.paymentStatus}
-                          </span>
-                        </td>
-
-                        {/* Razorpay IDs */}
-                        <td className="py-3 px-4">
-                          <div className="space-y-0.5">
-                            {txn.razorpayPaymentId ? (
-                              <div className="text-[11px]">
-                                <span className="text-[#64748b]">Pay: </span>
-                                <span className="text-[#0284c7] font-semibold">{txn.razorpayPaymentId}</span>
-                              </div>
-                            ) : null}
-                            <div className="text-[11px]">
-                              <span className="text-[#64748b]">Order: </span>
-                              <span className="text-[#475569]">{txn.razorpayOrderId}</span>
-                            </div>
-                            {txn.razorpayRefundId ? (
-                              <div className="text-[11px]">
-                                <span className="text-[#64748b]">Refund: </span>
-                                <span className="text-[#e11d48] font-bold">{txn.razorpayRefundId}</span>
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-
-                        {/* Date & Time */}
-                        <td className="py-3 px-4 whitespace-nowrap font-sans text-[11px] text-[#334155]">
-                          <div>{formatOrderDateTime(txn.createdAt)}</div>
-                          {txn.refundCreatedAt && (
-                            <div className="text-[#e11d48] text-[10px]">
-                              Refunded: {formatOrderDateTime(txn.refundCreatedAt)}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Return Status */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          {txn.returnStatus ? (
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-sans ${
-                                txn.returnStatus === 'REFUNDED'
-                                  ? 'bg-[#fdf2f8] text-[#be185d]'
-                                  : txn.returnStatus === 'PRODUCT COLLECTED'
-                                  ? 'bg-[#dcfce7] text-[#166534]'
-                                  : txn.returnStatus === 'RETURN ACCEPTED'
-                                  ? 'bg-[#e0e7ff] text-[#3730a3]'
-                                  : 'bg-[#fef3c7] text-[#92400e]'
-                              }`}
-                            >
-                              {txn.returnStatus}
-                            </span>
-                          ) : (
-                            <span className="text-[#94a3b8] font-sans">-</span>
-                          )}
-                        </td>
-
-                        {/* Bank Settlement Status */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <div>
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-sans ${
-                                txn.settlementStatus === 'SETTLED'
-                                  ? 'bg-[#dcfce7] text-[#15803d]'
-                                  : txn.settlementStatus === 'PROCESSING'
-                                  ? 'bg-[#eff6ff] text-[#1d4ed8]'
-                                  : txn.settlementStatus === 'FAILED'
-                                  ? 'bg-[#fee2e2] text-[#b91c1c]'
-                                  : 'bg-[#f1f5f9] text-[#475569]'
-                              }`}
-                            >
-                              {txn.settlementStatus || 'NOT_SETTLED'}
-                            </span>
-                            {txn.settlementDate && (
-                              <div className="text-[10px] text-[#64748b] font-sans mt-0.5">
-                                {formatOrderDateTime(txn.settlementDate)}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Read-only Security Note */}
-            <div className="bg-[#f8fafc] border border-[#e2e8f0] p-3 rounded-xl text-[11px] text-[#64748b] flex items-center justify-between">
-              <span>
-                <strong>Compliance Note:</strong> Payment records and settlement statuses are cryptographically verified via Razorpay HMAC SHA-256 signatures. Manual alterations are strictly disabled.
-              </span>
-              <span className="font-semibold text-[#006b2c]">
-                FreshCart Secure Merchant Gateway
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 6: Settings - Customizable Delivery Charges Rules */}
+        {/* Tab 5: Settings - Customizable Delivery Charges Rules */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
             {/* Header */}

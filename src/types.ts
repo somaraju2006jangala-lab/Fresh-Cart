@@ -91,68 +91,10 @@ export interface Customer {
   loyaltyTier?: string;
 }
 
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
-
-export type ReturnStatus =
-  | 'RETURN REQUESTED'
-  | 'RETURN ACCEPTED'
-  | 'PRODUCT COLLECTED'
-  | 'REFUND PROCESSING'
-  | 'REFUNDED';
-
-export type SettlementStatus = 'NOT_SETTLED' | 'PROCESSING' | 'SETTLED' | 'FAILED';
-
-export interface ReturnDetails {
-  productId: string;
-  productTitle: string;
-  quantity: number;
-  unit: string;
-  price: number;
-  reason: 'Product not wanted' | 'Wrong product received' | 'Damaged product' | 'Product issue' | 'Other' | string;
-  reasonDescription?: string;
-  originalOrderAmount: number;
-  requestedAt: string;
-  acceptedAt?: string;
-  acceptedBy?: string;
-  collectedAt?: string;
-  collectedBy?: string;
-  refundAmount?: number;
-  refundId?: string;
-  refundedAt?: string;
-}
-
 export interface CustomerOrder extends Order {
   customerId?: string;
   estimatedDeliveryTime?: string;
   paymentMethod?: string;
-  paymentStatus?: PaymentStatus;
-  razorpayOrderId?: string;
-  razorpayPaymentId?: string;
-  razorpaySignature?: string;
-  deliveryCharge?: number;
-  returnStatus?: ReturnStatus;
-  returnDetails?: ReturnDetails;
-  settlementStatus?: SettlementStatus;
-  settlementDate?: string;
-}
-
-export interface Transaction {
-  id: string; // e.g. TXN-1001
-  orderId: string;
-  customerName: string;
-  userId: string;
-  paymentMethod: 'UPI' | string;
-  originalAmount: number;
-  paymentStatus: PaymentStatus;
-  razorpayPaymentId?: string;
-  razorpayOrderId: string;
-  createdAt: string;
-  returnStatus?: ReturnStatus;
-  refundAmount?: number;
-  razorpayRefundId?: string;
-  refundCreatedAt?: string;
-  settlementStatus: SettlementStatus;
-  settlementDate?: string;
 }
 
 export interface Coupon {
@@ -176,5 +118,4 @@ export interface DeliveryChargeRule {
   minOrderAmount: number;
   deliveryCharge: number; // 0 indicates FREE delivery
 }
-
 
