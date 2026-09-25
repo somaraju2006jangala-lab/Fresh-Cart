@@ -1,4 +1,4 @@
-import { Customer, CustomerAddress, CustomerOrder } from '../types';
+import { Customer, CustomerAddress, CustomerOrder, ReturnStatus, ReturnDetails, PaymentStatus } from '../types';
 import { INITIAL_PRODUCTS } from '../data/products';
 
 const STORAGE_CUSTOMERS_KEY = 'freshcart_registered_customers';
@@ -609,6 +609,40 @@ export function updateOrderStatus(
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to update order status:', err);
+  }
+}
+
+/**
+ * Updates the return status and return details of a customer order.
+ */
+export function updateOrderReturnStatus(
+  orderId: string,
+  returnStatus: ReturnStatus,
+  returnDetails?: Partial<ReturnDetails>,
+  paymentStatus?: PaymentStatus
+): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
+    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+    const normalizedId = orderId.startsWith('#') ? orderId : `#${orderId}`;
+    const unhashedId = orderId.replace(/^#/, '');
+
+    const updated = orders.map((o) => {
+      if (o.id === orderId || o.id === normalizedId || o.id === unhashedId) {
+        return {
+          ...o,
+          returnStatus,
+          ...(returnDetails
+            ? { returnDetails: { ...(o.returnDetails as any), ...returnDetails } }
+            : {}),
+          ...(paymentStatus ? { paymentStatus } : {}),
+        };
+      }
+      return o;
+    });
+    localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to update order return status:', err);
   }
 }
 

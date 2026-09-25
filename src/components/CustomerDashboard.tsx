@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { CartItem, Product, CustomerAddress } from '../types';
+import { CartItem, Product, CustomerAddress, CustomerOrder, ReturnDetails } from '../types';
 import { formatINR } from '../utils/currency';
 import {
   User,
@@ -26,7 +26,12 @@ import {
   Mail,
   Calendar,
   Zap,
+  CornerDownLeft,
+  X,
+  AlertCircle,
 } from 'lucide-react';
+import { requestOrderReturn } from '../services/paymentService';
+import { updateOrderReturnStatus } from '../services/authService';
 
 interface CustomerDashboardProps {
   cart: CartItem[];
@@ -49,7 +54,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onBackToStorefront,
   onLogout,
 }) => {
-  const { currentUser, orders, updateProfile, addAddress, removeAddress } = useAuth();
+  const { currentUser, orders, updateProfile, addAddress, removeAddress, refreshOrders } = useAuth();
   const { t } = useLanguage();
 
   const getStatusLabel = (status: string) => {
@@ -63,6 +68,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   };
 
   const [activeTab, setActiveTab] = useState<'orders' | 'history' | 'profile' | 'addresses' | 'cart'>('orders');
+
+  // Return request modal state
+  const [returnOrderModalOpen, setReturnOrderModalOpen] = useState<CustomerOrder | null>(null);
+  const [selectedReturnProductId, setSelectedReturnProductId] = useState<string>('');
+  const [returnQty, setReturnQty] = useState<number>(1);
+  const [returnReason, setReturnReason] = useState<string>('Product not wanted');
+  const [returnReasonDesc, setReturnReasonDesc] = useState<string>('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState<boolean>(false);
+  const [returnToast, setReturnToast] = useState<string | null>(null);
 
   // Profile edit state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -82,6 +96,62 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   // Reorder toast feedback
   const [reorderToast, setReorderToast] = useState<string | null>(null);
+
+  const handleOpenReturnModal = (order: CustomerOrder) => {
+    setReturnOrderModalOpen(order);
+    setSelectedReturnProductId(order.items[0]?.product.id || '');
+    setReturnQty(1);
+    setReturnReason('Product not wanted');
+    setReturnReasonDesc('');
+  };
+
+  const handleConfirmReturnRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnOrderModalOpen) return;
+    setIsSubmittingReturn(true);
+
+    try {
+      const selectedItem = returnOrderModalOpen.items.find((it) => it.product.id === selectedReturnProductId) || returnOrderModalOpen.items[0];
+      const prod = selectedItem ? selectedItem.product : { id: 'unknown', title: 'Product', price: returnOrderModalOpen.total, unit: 'item' };
+
+      const returnDetails: ReturnDetails = {
+        productId: prod.id,
+        productTitle: prod.title,
+        quantity: returnQty,
+        unit: prod.unit,
+        price: prod.price,
+        reason: returnReason as any,
+        reasonDescription: returnReasonDesc,
+        originalOrderAmount: returnOrderModalOpen.total,
+        requestedAt: new Date().toISOString(),
+      };
+
+      // 1. Submit to backend API
+      await requestOrderReturn({
+        orderId: returnOrderModalOpen.id,
+        productId: prod.id,
+        productTitle: prod.title,
+        quantity: returnQty,
+        unit: prod.unit,
+        price: prod.price,
+        reason: returnReason,
+        reasonDescription: returnReasonDesc,
+        originalOrderAmount: returnOrderModalOpen.total,
+      });
+
+      // 2. Update local customer order record
+      updateOrderReturnStatus(returnOrderModalOpen.id, 'RETURN REQUESTED', returnDetails);
+      refreshOrders();
+
+      setReturnOrderModalOpen(null);
+      setReturnToast(`Return requested for Order ${returnOrderModalOpen.id}. Admin will review shortly.`);
+      setTimeout(() => setReturnToast(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit return request.');
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
 
   if (!currentUser) {
     return null;
@@ -583,6 +653,20 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           </div>
                         </div>
 
+                        {/* Return Product Button - ONLY for Delivered orders */}
+                        {!order.returnStatus && (
+                          <button
+                            type="button"
+                            id={`return-btn-${order.id}`}
+                            onClick={() => handleOpenReturnModal(order)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fff7ed] hover:bg-[#ffedd5] text-[#c2410c] text-[12px] font-bold transition-all border border-[#fed7aa] cursor-pointer shadow-2xs"
+                            title="Request return for this delivered order"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-[#ea580c]" />
+                            <span>Return Product</span>
+                          </button>
+                        )}
+
                         {/* 1-Click Reorder Button */}
                         <button
                           type="button"
@@ -619,6 +703,106 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </div>
                       ))}
                     </div>
+
+                    {/* Customer Return Status Progression Tracker */}
+                    {order.returnStatus && (
+                      <div className="mt-3 p-4 rounded-xl bg-[#f0fdf4] border border-[#bbf7d0] space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold text-[#0f172a]">Your Return Status</span>
+                            {order.returnDetails?.productTitle && (
+                              <span className="text-[11px] text-[#475569]">
+                                ({order.returnDetails.productTitle} · Qty {order.returnDetails.quantity})
+                              </span>
+                            )}
+                          </div>
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#dcfce7] text-[#15803d] border border-[#86efac]">
+                            {order.returnStatus}
+                          </span>
+                        </div>
+
+                        {/* 5-Step Return Timeline */}
+                        <div className="pt-2">
+                          <div className="grid grid-cols-5 gap-1 text-center">
+                            {[
+                              { key: 'RETURN REQUESTED', label: 'Return Requested', step: 1 },
+                              { key: 'RETURN ACCEPTED', label: 'Return Accepted', step: 2 },
+                              { key: 'PRODUCT COLLECTED', label: 'Product Collected', step: 3 },
+                              { key: 'REFUND PROCESSING', label: 'Refund Processing', step: 4 },
+                              { key: 'REFUNDED', label: 'Refund Completed', step: 5 },
+                            ].map((stage, idx) => {
+                              const stages = [
+                                'RETURN REQUESTED',
+                                'RETURN ACCEPTED',
+                                'PRODUCT COLLECTED',
+                                'REFUND PROCESSING',
+                                'REFUNDED',
+                              ];
+                              const currentIdx = stages.indexOf(order.returnStatus || '');
+                              const isDone = currentIdx >= idx;
+                              const isCurrent = currentIdx === idx;
+
+                              return (
+                                <div key={stage.key} className="flex flex-col items-center">
+                                  <div
+                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold mb-1 transition-all ${
+                                      isDone
+                                        ? 'bg-[#006b2c] text-white shadow-2xs'
+                                        : 'bg-[#e2e8f0] text-[#64748b]'
+                                    } ${isCurrent ? 'ring-3 ring-[#86efac]' : ''}`}
+                                  >
+                                    {isDone ? '✓' : stage.step}
+                                  </div>
+                                  <span
+                                    className={`text-[10px] leading-tight ${
+                                      isCurrent
+                                        ? 'font-bold text-[#006b2c]'
+                                        : isDone
+                                        ? 'font-medium text-[#0b1c30]'
+                                        : 'text-[#94a3b8]'
+                                    }`}
+                                  >
+                                    {stage.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Return Reason & Details Note */}
+                        {order.returnDetails?.reason && (
+                          <div className="text-[11px] text-[#475569] bg-white p-2 rounded-lg border border-[#bbf7d0] flex items-center justify-between">
+                            <span>Reason: <strong className="text-[#0f172a]">{order.returnDetails.reason}</strong></span>
+                            {order.returnDetails.requestedAt && (
+                              <span className="text-[#64748b]">
+                                Requested on {new Date(order.returnDetails.requestedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Razorpay Refund Confirmation Banner */}
+                        {order.returnStatus === 'REFUNDED' && (
+                          <div className="p-3 bg-white rounded-lg border border-[#86efac] text-[12px] space-y-1 shadow-2xs">
+                            <div className="font-bold text-[#15803d] flex items-center gap-1.5">
+                              <Check className="w-4 h-4 text-[#15803d]" />
+                              <span>
+                                Refund of {formatINR(order.returnDetails?.refundAmount || order.total)} processed via Razorpay!
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[#475569] flex flex-wrap gap-x-4">
+                              <span>Refund returned via Razorpay to original UPI payment method</span>
+                              {order.returnDetails?.refundId && (
+                                <span className="font-mono text-[#006b2c] font-semibold">
+                                  Razorpay Refund ID: {order.returnDetails.refundId}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1030,6 +1214,175 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           )}
         </main>
       </div>
+
+      {/* Return Success Toast */}
+      {returnToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#064e3b] text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-[13px] animate-in fade-in slide-in-from-bottom-4">
+          <Check className="w-4 h-4 text-[#34d399]" />
+          <span>{returnToast}</span>
+        </div>
+      )}
+
+      {/* Customer Return Product Modal */}
+      {returnOrderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-[#e2e8f0] space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-[#e5eeff]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#fff7ed] text-[#c2410c] flex items-center justify-center">
+                  <RotateCcw className="w-4 h-4 text-[#ea580c]" />
+                </div>
+                <div>
+                  <h3 className="text-[17px] font-bold text-[#0b1c30] font-display">
+                    Return Product
+                  </h3>
+                  <p className="text-[11px] text-[#565e74]">
+                    Order #{returnOrderModalOpen.id} · Delivered on {new Date(returnOrderModalOpen.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReturnOrderModalOpen(null)}
+                className="w-8 h-8 rounded-lg text-[#565e74] hover:bg-[#eff4ff] flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmReturnRequest} className="space-y-4 text-[13px]">
+              {/* Order Info & Original Payment Amount */}
+              <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] space-y-1.5 text-[12px]">
+                <div className="flex justify-between">
+                  <span className="text-[#64748b]">Order ID:</span>
+                  <span className="font-bold text-[#0b1c30]">{returnOrderModalOpen.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#64748b]">Order Date:</span>
+                  <span className="text-[#0b1c30]">{new Date(returnOrderModalOpen.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between font-bold text-[13px] pt-1 border-t border-[#e2e8f0]">
+                  <span>Original Payment Amount:</span>
+                  <span className="text-[#006b2c] font-display">{formatINR(returnOrderModalOpen.total)}</span>
+                </div>
+              </div>
+
+              {/* Product Selection */}
+              <div>
+                <label className="block text-[12px] font-semibold text-[#0b1c30] mb-1">
+                  Select Product to Return
+                </label>
+                <select
+                  value={selectedReturnProductId}
+                  onChange={(e) => {
+                    setSelectedReturnProductId(e.target.value);
+                    const selected = returnOrderModalOpen.items.find((it) => it.product.id === e.target.value);
+                    if (selected) {
+                      setReturnQty(Math.min(returnQty, selected.quantity));
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                >
+                  {returnOrderModalOpen.items.map((it) => (
+                    <option key={it.product.id} value={it.product.id}>
+                      {it.product.title} ({it.quantity} {it.product.unit} @ {formatINR(it.product.price)}/{it.product.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity */}
+              {(() => {
+                const currentItem = returnOrderModalOpen.items.find((it) => it.product.id === selectedReturnProductId) || returnOrderModalOpen.items[0];
+                const maxQty = currentItem ? currentItem.quantity : 1;
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#0b1c30] mb-1">
+                        Returned Quantity (Max: {maxQty})
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={maxQty}
+                        value={returnQty}
+                        onChange={(e) => setReturnQty(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))}
+                        className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-[#0b1c30] mb-1">
+                        Product Unit &amp; Price
+                      </label>
+                      <div className="px-3 py-2 text-[12px] bg-[#f8fafc] border border-[#cbd5e1] rounded-lg text-[#475569]">
+                        {currentItem?.product.unit} · {formatINR(currentItem ? currentItem.product.price * returnQty : returnOrderModalOpen.total)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Return Reason */}
+              <div>
+                <label className="block text-[12px] font-semibold text-[#0b1c30] mb-1">
+                  Return Reason
+                </label>
+                <select
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  className="w-full px-3 py-2 text-[13px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                >
+                  <option value="Product not wanted">Product not wanted</option>
+                  <option value="Wrong product received">Wrong product received</option>
+                  <option value="Damaged product">Damaged product</option>
+                  <option value="Product issue">Product issue</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {/* Optional Reason Description */}
+              <div>
+                <label className="block text-[12px] font-semibold text-[#0b1c30] mb-1">
+                  Optional Reason Description
+                </label>
+                <textarea
+                  value={returnReasonDesc}
+                  onChange={(e) => setReturnReasonDesc(e.target.value)}
+                  rows={2}
+                  placeholder="Provide additional details regarding the return request (optional)..."
+                  className="w-full px-3 py-2 text-[12px] border border-[#cbd5e1] rounded-lg bg-white focus:outline-hidden focus:ring-1 focus:ring-[#006b2c]"
+                />
+              </div>
+
+              <div className="p-3 bg-[#eff4ff] rounded-xl text-[11px] text-[#006b2c] border border-[#d3e4fe]">
+                Note: Submitting this form sets your Return Status to <strong>RETURN REQUESTED</strong>. Refunds are verified and processed through Razorpay to your original UPI payment method only after our store hub accepts and collects the product.
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnOrderModalOpen(null)}
+                  className="px-4 py-2.5 rounded-xl border border-[#cbd5e1] text-[13px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="px-5 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold shadow-md transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>Confirm Return Request</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
