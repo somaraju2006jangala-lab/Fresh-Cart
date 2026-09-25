@@ -306,13 +306,12 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-[#565e74] font-medium">Password Strength:</span>
                 <span
-                  className={`font-bold ${
-                    strengthScore <= 1
+                  className={`font-bold ${strengthScore <= 1
                       ? 'text-red-500'
                       : strengthScore <= 3
-                      ? 'text-amber-500'
-                      : 'text-emerald-600'
-                  }`}
+                        ? 'text-amber-500'
+                        : 'text-emerald-600'
+                    }`}
                 >
                   {strengthScore <= 1 ? 'Weak' : strengthScore <= 3 ? 'Good' : 'Strong'}
                 </span>
@@ -321,15 +320,14 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 {[1, 2, 3, 4].map((step) => (
                   <div
                     key={step}
-                    className={`rounded-full transition-all duration-300 ${
-                      strengthScore >= step
+                    className={`rounded-full transition-all duration-300 ${strengthScore >= step
                         ? strengthScore <= 1
                           ? 'bg-red-400'
                           : strengthScore <= 3
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-500'
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-500'
                         : 'bg-[#e2e8f0]'
-                    }`}
+                      }`}
                   />
                 ))}
               </div>
