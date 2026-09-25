@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, Coupon } from '../types';
+import { CartItem, Coupon, DeliveryChargeRule } from '../types';
 import { formatINR } from '../utils/currency';
+import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../services/settingsService';
 import {
   ShoppingCart,
   Plus,
@@ -29,6 +30,7 @@ interface CartDrawerProps {
   onRemoveCoupon: () => void;
   coupons?: Coupon[];
   deliveryCharges?: number;
+  deliveryRules?: DeliveryChargeRule[];
   taxAndPackingPercentage?: number;
 }
 
@@ -43,15 +45,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyCoupon,
   onRemoveCoupon,
   coupons = [],
-  deliveryCharges = 50,
+  deliveryCharges = 40,
+  deliveryRules,
   taxAndPackingPercentage,
 }) => {
   const { t } = useLanguage();
   const [couponInput, setCouponInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const [couponFeedback, setCouponFeedback] = useState('');
-
-  const freeDeliveryThreshold = 499.0;
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -90,11 +91,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const discountPercent = isQualified && activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
 
-  // Delivery Charges calculation
-  // Free delivery if cart qualifies for Free Express Delivery Goal (₹499)
-  // Otherwise, standard Delivery Charges apply (default ₹50 or admin-configured)
-  const deliveryChargesAmount = items.length > 0 && subtotal > 0
-    ? (subtotal >= freeDeliveryThreshold ? 0 : Math.max(0, deliveryCharges))
+  // Delivery Charges calculation based on custom admin-controlled rules
+  const effectiveRules = deliveryRules && deliveryRules.length > 0
+    ? deliveryRules
+    : DEFAULT_DELIVERY_RULES;
+
+  const applicableDeliveryRule = items.length > 0 && subtotal > 0
+    ? getApplicableDeliveryChargeRule(effectiveRules, subtotal)
+    : null;
+
+  const deliveryChargesAmount = items.length > 0 && subtotal > 0 && applicableDeliveryRule
+    ? applicableDeliveryRule.deliveryCharge
     : 0;
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
@@ -150,11 +157,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [subtotal, appliedCoupon, coupons, activeRules, onApplyCoupon, onRemoveCoupon]);
 
+  // Dynamic delivery goal meter based on lowest FREE delivery rule
+  const freeRule = [...effectiveRules]
+    .sort((a, b) => a.minOrderAmount - b.minOrderAmount)
+    .find((r) => r.deliveryCharge === 0);
+  const freeDeliveryThreshold = freeRule ? freeRule.minOrderAmount : 3000;
   const deliveryDiff = freeDeliveryThreshold - subtotal;
-  const deliveryProgressPct = Math.min(
-    100,
-    Math.round((subtotal / freeDeliveryThreshold) * 100)
-  );
+  const deliveryProgressPct = freeDeliveryThreshold > 0
+    ? Math.min(100, Math.round((subtotal / freeDeliveryThreshold) * 100))
+    : 100;
 
   const handleApplyCouponSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -471,7 +482,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="flex justify-between text-[#565e74]">
               <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
               <span id="cart-drawer-taxes" data-testid="cart-drawer-delivery-charges" className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
-                {deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : t('free')}
+                {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
               </span>
             </div>
 

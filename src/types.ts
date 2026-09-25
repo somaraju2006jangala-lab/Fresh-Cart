@@ -113,3 +113,9 @@ export interface Coupon {
 
 export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category';
 
+export interface DeliveryChargeRule {
+  id: string;
+  minOrderAmount: number;
+  deliveryCharge: number; // 0 indicates FREE delivery
+}
+

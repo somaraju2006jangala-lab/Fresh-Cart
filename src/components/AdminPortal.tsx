@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Product, InventoryLog, Coupon, CustomerOrder } from '../types';
+import { Product, InventoryLog, Coupon, CustomerOrder, DeliveryChargeRule } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
 import { formatLogDateTime, formatOrderDateTime } from '../utils/date';
 import { useLanguage } from '../context/LanguageContext';
+import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../services/settingsService';
 import { LanguageSelector } from './LanguageSelector';
 import { AddProductModal, STANDARD_UNITS } from './AddProductModal';
 import { EditProductModal } from './EditProductModal';
@@ -169,6 +170,8 @@ interface AdminPortalProps {
   onDeleteCustomerOrder?: (orderId: string) => void;
   deliveryCharges?: number;
   onUpdateDeliveryCharges?: (charge: number) => Promise<void> | void;
+  deliveryRules?: DeliveryChargeRule[];
+  onUpdateDeliveryRules?: (rules: DeliveryChargeRule[]) => Promise<void> | void;
   taxAndPackingPercentage?: number;
   onUpdateTaxAndPacking?: (percentage: number) => Promise<void> | void;
 }
@@ -194,8 +197,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onClearInventoryLogs,
   onUpdateOrderStatus,
   onDeleteCustomerOrder,
-  deliveryCharges = 50,
+  deliveryCharges = 40,
   onUpdateDeliveryCharges,
+  deliveryRules,
+  onUpdateDeliveryRules,
   taxAndPackingPercentage,
   onUpdateTaxAndPacking,
 }) => {
@@ -205,61 +210,217 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [adminSearch, setAdminSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
 
-  const activeDeliveryCharge = typeof deliveryCharges === 'number'
-    ? deliveryCharges
-    : typeof taxAndPackingPercentage === 'number'
-    ? taxAndPackingPercentage
-    : 50;
+  // Customizable Delivery Charges Rules State
+  const [rules, setRules] = useState<DeliveryChargeRule[]>(() => {
+    if (deliveryRules && deliveryRules.length > 0) {
+      return [...deliveryRules].sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+    }
+    return DEFAULT_DELIVERY_RULES;
+  });
 
-  const [deliveryChargesInput, setDeliveryChargesInput] = useState<string>(String(activeDeliveryCharge));
-  const [deliveryChargesError, setDeliveryChargesError] = useState<string>('');
-  const [deliveryChargesSuccess, setDeliveryChargesSuccess] = useState<string>('');
-  const [isSavingDeliveryCharges, setIsSavingDeliveryCharges] = useState<boolean>(false);
+  const activeDeliveryCharge = rules.length > 0 ? rules[0].deliveryCharge : 40;
 
   React.useEffect(() => {
-    setDeliveryChargesInput(String(activeDeliveryCharge));
-  }, [activeDeliveryCharge]);
+    if (deliveryRules && deliveryRules.length > 0) {
+      setRules([...deliveryRules].sort((a, b) => a.minOrderAmount - b.minOrderAmount));
+    }
+  }, [deliveryRules]);
 
-  const handleSaveDeliveryCharges = async (e?: React.FormEvent) => {
+  // Add Rule form inputs
+  const [newMinOrder, setNewMinOrder] = useState<string>('');
+  const [newDeliveryCharge, setNewDeliveryCharge] = useState<string>('');
+  const [newIsFree, setNewIsFree] = useState<boolean>(false);
+  const [addRuleError, setAddRuleError] = useState<string>('');
+
+  // Edit Rule form state
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editMinOrder, setEditMinOrder] = useState<string>('');
+  const [editDeliveryCharge, setEditDeliveryCharge] = useState<string>('');
+  const [editIsFree, setEditIsFree] = useState<boolean>(false);
+  const [editRuleError, setEditRuleError] = useState<string>('');
+
+  // Rules save / persistence state
+  const [isSavingRules, setIsSavingRules] = useState<boolean>(false);
+  const [saveRulesSuccess, setSaveRulesSuccess] = useState<string>('');
+  const [saveRulesError, setSaveRulesError] = useState<string>('');
+
+  // Interactive Live Rule Simulation / Testing
+  const [testSubtotalInput, setTestSubtotalInput] = useState<string>('1750');
+
+  const handleAddRule = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setDeliveryChargesError('');
-    setDeliveryChargesSuccess('');
+    setAddRuleError('');
+    setSaveRulesSuccess('');
+    setSaveRulesError('');
 
-    const trimmed = deliveryChargesInput.trim();
-    if (!trimmed) {
-      setDeliveryChargesError('Please enter a valid delivery charge.');
+    const minTrimmed = newMinOrder.trim();
+    if (!minTrimmed && minTrimmed !== '0') {
+      setAddRuleError('Please enter a Minimum Order Amount.');
+      return;
+    }
+    const minNum = Number(minTrimmed);
+    if (isNaN(minNum)) {
+      setAddRuleError('Minimum Order Amount must be a valid number.');
+      return;
+    }
+    if (minNum < 0) {
+      setAddRuleError('Minimum Order Amount cannot be negative.');
       return;
     }
 
-    const num = Number(trimmed);
-    if (isNaN(num)) {
-      setDeliveryChargesError('Please enter a valid number.');
-      return;
-    }
-
-    if (num < 0) {
-      setDeliveryChargesError('Delivery charge cannot be negative.');
-      return;
-    }
-
-    setIsSavingDeliveryCharges(true);
-    try {
-      const rounded = Math.round(num * 100) / 100;
-      if (onUpdateDeliveryCharges) {
-        await onUpdateDeliveryCharges(rounded);
-      } else if (onUpdateTaxAndPacking) {
-        await onUpdateTaxAndPacking(rounded);
+    let chargeNum = 0;
+    if (!newIsFree) {
+      const chargeTrimmed = newDeliveryCharge.trim();
+      if (!chargeTrimmed && chargeTrimmed !== '0') {
+        setAddRuleError('Please enter a Delivery Charge or select "FREE".');
+        return;
       }
-      setDeliveryChargesInput(String(rounded));
-      setDeliveryChargesSuccess(
-        `Delivery Charges setting saved successfully to ${rounded > 0 ? formatINR(rounded) : 'FREE'}!`
-      );
-      setTimeout(() => setDeliveryChargesSuccess(''), 4000);
-    } catch {
-      setDeliveryChargesError('Failed to save setting. Please try again.');
-    } finally {
-      setIsSavingDeliveryCharges(false);
+      chargeNum = Number(chargeTrimmed);
+      if (isNaN(chargeNum)) {
+        setAddRuleError('Delivery Charge must be a valid number.');
+        return;
+      }
+      if (chargeNum < 0) {
+        setAddRuleError('Delivery Charge cannot be negative.');
+        return;
+      }
     }
+
+    const roundedMin = Math.round(minNum * 100) / 100;
+    const roundedCharge = Math.round(chargeNum * 100) / 100;
+
+    // Duplicate check
+    if (rules.some((r) => r.minOrderAmount === roundedMin)) {
+      setAddRuleError(`A rule for Minimum Order Amount of ₹${roundedMin} already exists.`);
+      return;
+    }
+
+    const newRule: DeliveryChargeRule = {
+      id: `rule-${roundedMin}-${Date.now()}`,
+      minOrderAmount: roundedMin,
+      deliveryCharge: roundedCharge,
+    };
+
+    const updated = [...rules, newRule].sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+    setRules(updated);
+    setNewMinOrder('');
+    setNewDeliveryCharge('');
+    setNewIsFree(false);
+    setAddRuleError('');
+  };
+
+  const handleStartEdit = (rule: DeliveryChargeRule) => {
+    setEditingRuleId(rule.id);
+    setEditMinOrder(String(rule.minOrderAmount));
+    setEditDeliveryCharge(rule.deliveryCharge === 0 ? '0' : String(rule.deliveryCharge));
+    setEditIsFree(rule.deliveryCharge === 0);
+    setEditRuleError('');
+  };
+
+  const handleSaveEdit = (ruleId: string) => {
+    setEditRuleError('');
+    const minTrimmed = editMinOrder.trim();
+    if (!minTrimmed && minTrimmed !== '0') {
+      setEditRuleError('Please enter a Minimum Order Amount.');
+      return;
+    }
+    const minNum = Number(minTrimmed);
+    if (isNaN(minNum)) {
+      setEditRuleError('Minimum Order Amount must be a valid number.');
+      return;
+    }
+    if (minNum < 0) {
+      setEditRuleError('Minimum Order Amount cannot be negative.');
+      return;
+    }
+
+    let chargeNum = 0;
+    if (!editIsFree) {
+      const chargeTrimmed = editDeliveryCharge.trim();
+      if (!chargeTrimmed && chargeTrimmed !== '0') {
+        setEditRuleError('Please enter a Delivery Charge or select "FREE".');
+        return;
+      }
+      chargeNum = Number(chargeTrimmed);
+      if (isNaN(chargeNum)) {
+        setEditRuleError('Delivery Charge must be a valid number.');
+        return;
+      }
+      if (chargeNum < 0) {
+        setEditRuleError('Delivery Charge cannot be negative.');
+        return;
+      }
+    }
+
+    const roundedMin = Math.round(minNum * 100) / 100;
+    const roundedCharge = Math.round(chargeNum * 100) / 100;
+
+    // Check duplicate against other rules
+    if (rules.some((r) => r.id !== ruleId && r.minOrderAmount === roundedMin)) {
+      setEditRuleError(`A rule for Minimum Order Amount of ₹${roundedMin} already exists.`);
+      return;
+    }
+
+    const updated = rules
+      .map((r) =>
+        r.id === ruleId
+          ? { ...r, minOrderAmount: roundedMin, deliveryCharge: roundedCharge }
+          : r
+      )
+      .sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+
+    setRules(updated);
+    setEditingRuleId(null);
+    setEditRuleError('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRuleId(null);
+    setEditRuleError('');
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    const updated = rules.filter((r) => r.id !== ruleId);
+    setRules(updated);
+    if (editingRuleId === ruleId) {
+      setEditingRuleId(null);
+    }
+  };
+
+  const handleSaveAllRules = async () => {
+    setSaveRulesError('');
+    setSaveRulesSuccess('');
+
+    if (rules.length === 0) {
+      setSaveRulesError('Please configure at least one delivery charge rule.');
+      return;
+    }
+
+    setIsSavingRules(true);
+    try {
+      const sorted = [...rules].sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+      if (onUpdateDeliveryRules) {
+        await onUpdateDeliveryRules(sorted);
+      }
+      if (onUpdateDeliveryCharges) {
+        await onUpdateDeliveryCharges(sorted[0]?.deliveryCharge || 0);
+      }
+      setSaveRulesSuccess('Delivery charge rules saved successfully!');
+      setTimeout(() => setSaveRulesSuccess(''), 4000);
+    } catch {
+      setSaveRulesError('Failed to save rules. Please try again.');
+    } finally {
+      setIsSavingRules(false);
+    }
+  };
+
+  const handleResetToDefaultRules = () => {
+    setRules(DEFAULT_DELIVERY_RULES);
+    setEditingRuleId(null);
+    setAddRuleError('');
+    setEditRuleError('');
+    setSaveRulesSuccess('Reset to default example rules. Click "Save Delivery Rules" to commit.');
+    setTimeout(() => setSaveRulesSuccess(''), 4000);
   };
 
   const [orderSearch, setOrderSearch] = useState('');
@@ -1918,7 +2079,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           )
         )}
 
-        {/* Tab 5: Settings - Delivery Charges */}
+        {/* Tab 5: Settings - Customizable Delivery Charges Rules */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
             {/* Header */}
@@ -1929,79 +2090,458 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span>Delivery Charges</span>
                 </h3>
                 <p className="text-[12px] text-[#565e74] mt-0.5">
-                  {t('deliveryChargesSettingDesc') ||
-                    'Configure the delivery charges applied to customer orders.'}
+                  Configure custom delivery charge rules based on customer cart minimum order amounts.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 bg-[#f8fafc] px-3.5 py-2 rounded-xl border border-[#e2e8f0]">
-                <span className="text-[12px] font-semibold text-[#64748b]">Current Active Setting:</span>
-                <span className="text-[14px] font-extrabold text-[#006b2c]">
-                  {activeDeliveryCharge > 0 ? formatINR(activeDeliveryCharge) : 'FREE (₹0)'}
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-[#eff4ff] px-3 py-1.5 rounded-xl border border-[#dbeafe]">
+                  <span className="text-[12px] font-semibold text-[#1e40af]">Rules Active:</span>
+                  <span className="text-[13px] font-extrabold text-[#1d4ed8] tabular-nums">
+                    {rules.length}
+                  </span>
+                </div>
+                {(() => {
+                  const freeRule = [...rules]
+                    .sort((a, b) => a.minOrderAmount - b.minOrderAmount)
+                    .find((r) => r.deliveryCharge === 0);
+                  if (freeRule) {
+                    return (
+                      <div className="flex items-center gap-1.5 bg-[#dcfce7] px-3 py-1.5 rounded-xl border border-[#86efac]">
+                        <span className="text-[12px] font-semibold text-[#15803d]">Free Delivery From:</span>
+                        <span className="text-[13px] font-extrabold text-[#15803d] tabular-nums">
+                          {formatINR(freeRule.minOrderAmount)}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
 
-            {/* Settings Form */}
-            <form onSubmit={handleSaveDeliveryCharges} className="max-w-xl space-y-5">
-              <div>
-                <label
-                  htmlFor="admin-delivery-charges-input"
-                  className="block text-[13px] font-bold text-[#0f172a] mb-1.5"
-                >
-                  {t('deliveryChargesLabel') || 'Delivery Charges (₹)'}
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
-                    ₹
-                  </span>
-                  <input
-                    id="admin-delivery-charges-input"
-                    name="deliveryCharges"
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={deliveryChargesInput}
-                    onChange={(e) => {
-                      setDeliveryChargesInput(e.target.value);
-                      if (deliveryChargesError) setDeliveryChargesError('');
-                      if (deliveryChargesSuccess) setDeliveryChargesSuccess('');
-                    }}
-                    placeholder="Enter delivery charge (e.g. 50, 0 for FREE)"
-                    className="w-full pl-8 pr-3.5 py-2.5 text-[14px] font-semibold bg-[#f8fafc] border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] focus:bg-white transition-all"
-                  />
-                </div>
-                <p className="text-[11px] text-[#64748b] mt-1.5">
-                  Enter 0 for FREE delivery. (Default: ₹50). Orders of ₹499 or more unlock Free Express Delivery.
-                </p>
+            {/* Notification Banners */}
+            {saveRulesSuccess && (
+              <div
+                id="admin-delivery-charges-success"
+                className="p-3 bg-[#dcfce7] text-[#15803d] rounded-xl text-[13px] font-semibold border border-[#86efac] flex items-center gap-2 animate-fadeIn"
+              >
+                <CheckCircle className="w-4 h-4 shrink-0 text-[#15803d]" />
+                <span>{saveRulesSuccess}</span>
+              </div>
+            )}
+
+            {saveRulesError && (
+              <div
+                id="admin-delivery-charges-error"
+                className="p-3 bg-[#fee2e2] text-[#ba1a1a] rounded-xl text-[13px] font-semibold border border-[#fecaca] flex items-center gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 text-[#ba1a1a]" />
+                <span>{saveRulesError}</span>
+              </div>
+            )}
+
+            {/* Section 1: Add New Delivery Rule Form */}
+            <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[14px] font-bold text-[#0f172a] flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-[#006b2c]" />
+                  <span>Add New Delivery Charge Rule</span>
+                </h4>
+                <span className="text-[11px] font-medium text-[#64748b]">
+                  Rules are evaluated by highest applicable minimum order
+                </span>
               </div>
 
-              {/* Quick Preset Buttons */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">
-                  Quick Presets:
+              <form onSubmit={handleAddRule} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                {/* Minimum Order Amount Field */}
+                <div className="sm:col-span-5">
+                  <label
+                    htmlFor="admin-min-order-input"
+                    className="block text-[12px] font-bold text-[#334155] mb-1"
+                  >
+                    Minimum Order Amount
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      id="admin-min-order-input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={newMinOrder}
+                      onChange={(e) => {
+                        setNewMinOrder(e.target.value);
+                        if (addRuleError) setAddRuleError('');
+                      }}
+                      placeholder="e.g. 1500"
+                      className="w-full pl-8 pr-3 py-2 text-[14px] font-semibold bg-white border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] transition-all tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                {/* Delivery Charge Field */}
+                <div className="sm:col-span-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <label
+                      htmlFor="admin-charge-input"
+                      className="block text-[12px] font-bold text-[#334155]"
+                    >
+                      Delivery Charge
+                    </label>
+                    <button
+                      type="button"
+                      id="admin-free-toggle-btn"
+                      onClick={() => {
+                        const next = !newIsFree;
+                        setNewIsFree(next);
+                        if (next) {
+                          setNewDeliveryCharge('0');
+                        } else {
+                          setNewDeliveryCharge('');
+                        }
+                        if (addRuleError) setAddRuleError('');
+                      }}
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer border ${
+                        newIsFree
+                          ? 'bg-[#006b2c] text-white border-[#006b2c]'
+                          : 'bg-[#e2e8f0] text-[#334155] border-[#cbd5e1] hover:bg-[#cbd5e1]'
+                      }`}
+                    >
+                      {newIsFree ? '✓ FREE Selected' : 'Select FREE'}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      id="admin-charge-input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      disabled={newIsFree}
+                      value={newIsFree ? '0' : newDeliveryCharge}
+                      onChange={(e) => {
+                        setNewDeliveryCharge(e.target.value);
+                        if (e.target.value === '0') {
+                          setNewIsFree(true);
+                        } else {
+                          setNewIsFree(false);
+                        }
+                        if (addRuleError) setAddRuleError('');
+                      }}
+                      placeholder="e.g. 12 (or select FREE)"
+                      className={`w-full pl-8 pr-3 py-2 text-[14px] font-semibold rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] transition-all tabular-nums ${
+                        newIsFree
+                          ? 'bg-[#dcfce7] border-[#86efac] text-[#15803d]'
+                          : 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Add Rule Button */}
+                <div className="sm:col-span-3">
+                  <button
+                    type="submit"
+                    id="admin-add-rule-btn"
+                    className="w-full py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Rule</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Add Rule Error */}
+              {addRuleError && (
+                <div
+                  id="admin-rule-add-error"
+                  className="p-2.5 bg-[#fee2e2] text-[#ba1a1a] rounded-lg text-[12px] font-semibold border border-[#fecaca] flex items-center gap-1.5"
+                >
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-[#ba1a1a]" />
+                  <span>{addRuleError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Delivery Charges Rules Table */}
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-[#0f172a] uppercase tracking-wide">
+                  Configured Delivery Rules ({rules.length})
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <span className="text-[11px] text-[#64748b]">
+                  Rules are automatically sorted from lowest to highest Minimum Order Amount
+                </span>
+              </div>
+
+              <div className="overflow-x-auto border border-[#e2e8f0] rounded-xl shadow-2xs">
+                <table className="w-full text-left border-collapse text-[13px]" id="delivery-rules-table">
+                  <thead>
+                    <tr className="bg-[#f8fafc] border-b border-[#e2e8f0] text-[#475569] font-bold text-[12px]">
+                      <th className="py-3 px-4">Minimum Order</th>
+                      <th className="py-3 px-4">Delivery Charge</th>
+                      <th className="py-3 px-4 hidden md:table-cell">Rule Application</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e2e8f0]">
+                    {rules.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-[#64748b]">
+                          No delivery rules configured. Click &ldquo;Reset to Defaults&rdquo; below or add a custom rule.
+                        </td>
+                      </tr>
+                    ) : (
+                      rules.map((rule, idx) => {
+                        const isEditing = editingRuleId === rule.id;
+                        const nextRule = rules[idx + 1];
+
+                        if (isEditing) {
+                          return (
+                            <tr key={rule.id} className="bg-[#f0fdf4] border-l-4 border-l-[#006b2c]">
+                              {/* Edit Min Order */}
+                              <td className="py-3 px-4">
+                                <div className="relative max-w-[140px]">
+                                  <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#64748b]">
+                                    ₹
+                                  </span>
+                                  <input
+                                    id={`admin-edit-min-order-${rule.id}`}
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={editMinOrder}
+                                    onChange={(e) => {
+                                      setEditMinOrder(e.target.value);
+                                      if (editRuleError) setEditRuleError('');
+                                    }}
+                                    className="w-full pl-6 pr-2 py-1.5 text-[13px] font-bold bg-white border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] tabular-nums"
+                                  />
+                                </div>
+                              </td>
+
+                              {/* Edit Delivery Charge */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2 max-w-[200px]">
+                                  <div className="relative flex-1">
+                                    <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#64748b]">
+                                      ₹
+                                    </span>
+                                    <input
+                                      id={`admin-edit-charge-${rule.id}`}
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      disabled={editIsFree}
+                                      value={editIsFree ? '0' : editDeliveryCharge}
+                                      onChange={(e) => {
+                                        setEditDeliveryCharge(e.target.value);
+                                        if (e.target.value === '0') {
+                                          setEditIsFree(true);
+                                        } else {
+                                          setEditIsFree(false);
+                                        }
+                                        if (editRuleError) setEditRuleError('');
+                                      }}
+                                      className={`w-full pl-6 pr-2 py-1.5 text-[13px] font-bold rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] tabular-nums ${
+                                        editIsFree
+                                          ? 'bg-[#dcfce7] border-[#86efac] text-[#15803d]'
+                                          : 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                                      }`}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    id={`admin-edit-free-toggle-${rule.id}`}
+                                    onClick={() => {
+                                      const next = !editIsFree;
+                                      setEditIsFree(next);
+                                      if (next) {
+                                        setEditDeliveryCharge('0');
+                                      }
+                                      if (editRuleError) setEditRuleError('');
+                                    }}
+                                    className={`px-2 py-1 rounded text-[11px] font-bold transition-all border cursor-pointer ${
+                                      editIsFree
+                                        ? 'bg-[#006b2c] text-white border-[#006b2c]'
+                                        : 'bg-[#f1f5f9] text-[#334155] border-[#cbd5e1] hover:bg-[#e2e8f0]'
+                                    }`}
+                                  >
+                                    FREE
+                                  </button>
+                                </div>
+                                {editRuleError && (
+                                  <p className="text-[11px] text-[#ba1a1a] font-semibold mt-1">
+                                    {editRuleError}
+                                  </p>
+                                )}
+                              </td>
+
+                              {/* Rule Edit Range Note */}
+                              <td className="py-3 px-4 hidden md:table-cell text-[#64748b] text-[12px]">
+                                Editing rule...
+                              </td>
+
+                              {/* Action Buttons */}
+                              <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  id={`admin-save-rule-btn-${rule.id}`}
+                                  onClick={() => handleSaveEdit(rule.id)}
+                                  className="px-2.5 py-1.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  id={`admin-cancel-rule-btn-${rule.id}`}
+                                  onClick={handleCancelEdit}
+                                  className="px-2.5 py-1.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[12px] font-semibold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Cancel</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr key={rule.id} className="hover:bg-[#f8fafc] transition-colors">
+                            {/* Minimum Order */}
+                            <td className="py-3 px-4 font-bold text-[#0f172a] tabular-nums">
+                              {formatINR(rule.minOrderAmount)}
+                            </td>
+
+                            {/* Delivery Charge */}
+                            <td className="py-3 px-4 tabular-nums">
+                              {rule.deliveryCharge === 0 ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#dcfce7] text-[#15803d] border border-[#86efac]">
+                                  FREE
+                                </span>
+                              ) : (
+                                <span className="font-extrabold text-[#0f172a]">
+                                  {formatINR(rule.deliveryCharge)}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Rule Range / Condition */}
+                            <td className="py-3 px-4 hidden md:table-cell text-[#565e74] text-[12px]">
+                              {nextRule ? (
+                                <span>
+                                  Applies for subtotals from <strong className="text-[#0f172a]">{formatINR(rule.minOrderAmount)}</strong> to <strong className="text-[#0f172a]">{formatINR(nextRule.minOrderAmount - 1)}</strong>
+                                </span>
+                              ) : (
+                                <span>
+                                  Applies for subtotals <strong className="text-[#0f172a]">≥ {formatINR(rule.minOrderAmount)}</strong>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                              <button
+                                type="button"
+                                id={`admin-edit-rule-btn-${rule.id}`}
+                                onClick={() => handleStartEdit(rule)}
+                                className="px-2.5 py-1 text-[12px] font-semibold text-[#1e40af] bg-[#eff4ff] hover:bg-[#dbeafe] rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                id={`admin-delete-rule-btn-${rule.id}`}
+                                onClick={() => handleDeleteRule(rule.id)}
+                                className="px-2.5 py-1 text-[12px] font-semibold text-[#ba1a1a] bg-[#fee2e2]/60 hover:bg-[#fee2e2] rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Section 3: Save and Reset Actions Bar */}
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-[#e2e8f0]">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  id="admin-save-delivery-charges-btn"
+                  onClick={handleSaveAllRules}
+                  disabled={isSavingRules}
+                  className="px-6 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingRules ? (
+                    <span>Saving Rules...</span>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Save Delivery Rules</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  id="admin-reset-delivery-rules-btn"
+                  onClick={handleResetToDefaultRules}
+                  className="px-4 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[13px] font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset to Defaults</span>
+                </button>
+              </div>
+
+              <span className="text-[12px] text-[#64748b]">
+                Changes affect customer Cart and Checkout immediately upon save.
+              </span>
+            </div>
+
+            {/* Section 4: Live Rule Application Simulator / Tester */}
+            <div className="bg-[#eff4ff]/60 border border-[#bfdbfe] rounded-xl p-4 sm:p-5 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-[14px] font-bold text-[#1e3a8a] flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-[#1d4ed8]" />
+                    <span>Live Rule Application Tester (Customer Perspective)</span>
+                  </h4>
+                  <p className="text-[11px] text-[#3b82f6] mt-0.5">
+                    Test how different customer cart subtotals match the configured rules in real time.
+                  </p>
+                </div>
+
+                {/* Quick Test Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-[#1e40af]">Quick Test:</span>
                   {[
-                    { label: 'FREE (₹0)', value: 0 },
-                    { label: '₹30', value: 30 },
-                    { label: '₹40', value: 40 },
-                    { label: '₹50', value: 50 },
-                    { label: '₹70', value: 70 },
+                    { label: '₹200', val: 200 },
+                    { label: '₹1,000', val: 1000 },
+                    { label: '₹1,750 (Example)', val: 1750 },
+                    { label: '₹3,000 (Example)', val: 3000 },
+                    { label: '₹5,000', val: 5000 },
                   ].map((preset) => (
                     <button
-                      key={preset.value}
+                      key={preset.val}
                       type="button"
-                      id={`preset-delivery-${preset.value}`}
-                      onClick={() => {
-                        setDeliveryChargesInput(String(preset.value));
-                        if (deliveryChargesError) setDeliveryChargesError('');
-                        if (deliveryChargesSuccess) setDeliveryChargesSuccess('');
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all cursor-pointer border ${
-                        deliveryChargesInput === String(preset.value)
-                          ? 'bg-[#006b2c] text-white border-[#006b2c] shadow-xs'
-                          : 'bg-[#f1f5f9] text-[#334155] border-[#cbd5e1] hover:bg-[#e2e8f0]'
+                      onClick={() => setTestSubtotalInput(String(preset.val))}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                        testSubtotalInput === String(preset.val)
+                          ? 'bg-[#1d4ed8] text-white border-[#1d4ed8]'
+                          : 'bg-white text-[#1e40af] border-[#bfdbfe] hover:bg-[#dbeafe]'
                       }`}
                     >
                       {preset.label}
@@ -2010,88 +2550,112 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              {/* Live Preview Box */}
-              <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-2">
-                <span className="text-[11px] font-bold uppercase text-[#64748b] tracking-wider block">
-                  Live Calculation Example (Cart Subtotal: ₹69)
-                </span>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                {/* Input Subtotal */}
+                <div className="sm:col-span-5">
+                  <label htmlFor="admin-test-subtotal-input" className="block text-[12px] font-bold text-[#1e3a8a] mb-1">
+                    Simulate Cart Subtotal (₹)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      id="admin-test-subtotal-input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={testSubtotalInput}
+                      onChange={(e) => setTestSubtotalInput(e.target.value)}
+                      placeholder="e.g. 1750"
+                      className="w-full pl-8 pr-3 py-2 text-[14px] font-bold bg-white border border-[#93c5fd] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#1d4ed8] tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                {/* Simulation Output Card */}
                 {(() => {
-                  const previewVal = parseFloat(deliveryChargesInput);
-                  const validVal = !isNaN(previewVal) && previewVal >= 0 ? previewVal : 0;
-                  const previewTotal = 69 + validVal;
+                  const testNum = Math.max(0, parseFloat(testSubtotalInput) || 0);
+                  const matchedRule = getApplicableDeliveryChargeRule(rules, testNum);
+                  const appliedCharge = matchedRule ? matchedRule.deliveryCharge : 0;
+                  const finalTotal = testNum + appliedCharge;
+
                   return (
-                    <div className="text-[12px] space-y-1 text-[#334155]">
-                      <div className="flex justify-between">
-                        <span>Cart Subtotal:</span>
-                        <span className="font-semibold text-[#0f172a]">₹69</span>
+                    <div className="sm:col-span-7 bg-white p-3.5 rounded-xl border border-[#93c5fd] shadow-2xs space-y-1.5 text-[12px]">
+                      <div className="flex justify-between text-[#475569]">
+                        <span>Simulated Subtotal:</span>
+                        <span className="font-bold text-[#0f172a] tabular-nums">{formatINR(testNum)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Delivery Charges:</span>
-                        <span className={`font-semibold ${validVal > 0 ? 'text-[#0f172a]' : 'text-[#006b2c]'}`}>
-                          {validVal > 0 ? formatINR(validVal) : 'FREE'}
+                      <div className="flex justify-between text-[#475569]">
+                        <span>Highest Minimum Order Reached:</span>
+                        <span className="font-bold text-[#1d4ed8] tabular-nums">
+                          {matchedRule ? `Rule ≥ ${formatINR(matchedRule.minOrderAmount)}` : 'None'}
                         </span>
                       </div>
-                      <div className="flex justify-between pt-1 border-t border-[#e2e8f0] font-bold text-[13px]">
-                        <span>Total:</span>
-                        <span className="text-[#006b2c] font-display">{formatINR(previewTotal)}</span>
+                      <div className="flex justify-between text-[#475569]">
+                        <span>Delivery Charges:</span>
+                        <span className={`font-extrabold tabular-nums ${appliedCharge === 0 ? 'text-[#006b2c]' : 'text-[#0f172a]'}`}>
+                          {appliedCharge === 0 ? 'FREE' : formatINR(appliedCharge)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1.5 border-t border-[#e2e8f0] text-[13px] font-extrabold text-[#0f172a]">
+                        <span>Customer Final Total:</span>
+                        <span className="text-[#006b2c] tabular-nums">{formatINR(finalTotal)}</span>
                       </div>
                     </div>
                   );
                 })()}
               </div>
 
-              {/* Validation Error / Success */}
-              {deliveryChargesError && (
-                <div
-                  id="admin-delivery-charges-error"
-                  className="p-3 bg-[#fee2e2] text-[#ba1a1a] rounded-xl text-[12px] font-semibold border border-[#fecaca] flex items-center gap-2"
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{deliveryChargesError}</span>
-                </div>
-              )}
+              {/* Step-by-step Rule Breakdown Checklist */}
+              {(() => {
+                const testNum = Math.max(0, parseFloat(testSubtotalInput) || 0);
+                const matchedRule = getApplicableDeliveryChargeRule(rules, testNum);
 
-              {deliveryChargesSuccess && (
-                <div
-                  id="admin-delivery-charges-success"
-                  className="p-3 bg-[#dcfce7] text-[#15803d] rounded-xl text-[12px] font-semibold border border-[#86efac] flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4 shrink-0" />
-                  <span>{deliveryChargesSuccess}</span>
-                </div>
-              )}
+                return (
+                  <div className="pt-2 border-t border-[#bfdbfe]/60">
+                    <span className="text-[11px] font-bold text-[#1e40af] uppercase tracking-wider block mb-1.5">
+                      Rule Evaluation Trace (Cart Subtotal = {formatINR(testNum)}):
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {rules.map((r) => {
+                        const isReached = testNum >= r.minOrderAmount;
+                        const isApplied = matchedRule && matchedRule.id === r.id;
 
-              {/* Actions */}
-              <div className="pt-2 flex items-center gap-3">
-                <button
-                  type="submit"
-                  id="admin-save-delivery-charges-btn"
-                  disabled={isSavingDeliveryCharges}
-                  className="px-5 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {isSavingDeliveryCharges ? (
-                    <span>Saving...</span>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>{t('saveSettingBtn') || 'Save Setting'}</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  id="admin-reset-delivery-charges-btn"
-                  onClick={() => {
-                    setDeliveryChargesInput(String(activeDeliveryCharge));
-                    setDeliveryChargesError('');
-                    setDeliveryChargesSuccess('');
-                  }}
-                  className="px-4 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
-                >
-                  Reset
-                </button>
-              </div>
-            </form>
+                        return (
+                          <div
+                            key={r.id}
+                            className={`p-2 rounded-lg border text-[11px] transition-all ${
+                              isApplied
+                                ? 'bg-[#dcfce7] border-[#22c55e] text-[#15803d] font-bold shadow-2xs ring-1 ring-[#22c55e]'
+                                : isReached
+                                ? 'bg-white border-[#cbd5e1] text-[#475569]'
+                                : 'bg-[#f1f5f9]/50 border-dashed border-[#cbd5e1] text-[#94a3b8]'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span>≥ {formatINR(r.minOrderAmount)}:</span>
+                              <span className="tabular-nums font-bold">
+                                {r.deliveryCharge === 0 ? 'FREE' : formatINR(r.deliveryCharge)}
+                              </span>
+                            </div>
+                            <div className="text-[10px] mt-0.5">
+                              {isApplied ? (
+                                <span className="text-[#15803d] font-extrabold">← Applied</span>
+                              ) : isReached ? (
+                                <span className="text-[#64748b]">Reached (overridden)</span>
+                              ) : (
+                                <span className="text-[#94a3b8]">Not reached</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>

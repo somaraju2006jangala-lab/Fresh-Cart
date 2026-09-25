@@ -133,26 +133,55 @@ apiRouter.get('/api/otp/provider-config', (_req: Request, res: Response) => {
 
 const SETTINGS_FILE = path.resolve(process.cwd(), '.data/app_settings.json');
 
-function loadAppSettings(): { deliveryCharges: number; taxAndPackingPercentage?: number } {
+interface ServerDeliveryRule {
+  id: string;
+  minOrderAmount: number;
+  deliveryCharge: number;
+}
+
+const DEFAULT_SERVER_RULES: ServerDeliveryRule[] = [
+  { id: 'rule-0', minOrderAmount: 0, deliveryCharge: 40 },
+  { id: 'rule-500', minOrderAmount: 500, deliveryCharge: 30 },
+  { id: 'rule-1000', minOrderAmount: 1000, deliveryCharge: 25 },
+  { id: 'rule-1500', minOrderAmount: 1500, deliveryCharge: 12 },
+  { id: 'rule-2000', minOrderAmount: 2000, deliveryCharge: 10 },
+  { id: 'rule-2500', minOrderAmount: 2500, deliveryCharge: 5 },
+  { id: 'rule-3000', minOrderAmount: 3000, deliveryCharge: 0 },
+  { id: 'rule-5000', minOrderAmount: 5000, deliveryCharge: 0 },
+];
+
+function sanitizeServerRules(rawRules: any[]): ServerDeliveryRule[] {
+  if (!Array.isArray(rawRules) || rawRules.length === 0) return [];
+  return rawRules
+    .filter((r) => r && typeof r.minOrderAmount === 'number' && !isNaN(r.minOrderAmount))
+    .map((r) => ({
+      id: String(r.id || `rule-${r.minOrderAmount}`),
+      minOrderAmount: Math.max(0, Math.round(r.minOrderAmount * 100) / 100),
+      deliveryCharge: Math.max(0, Math.round((Number(r.deliveryCharge) || 0) * 100) / 100),
+    }))
+    .sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+}
+
+function loadAppSettings(): { deliveryChargeRules: ServerDeliveryRule[]; deliveryCharges: number } {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
       const data = JSON.parse(raw);
-      const deliveryCharges = typeof data?.deliveryCharges === 'number' && !isNaN(data.deliveryCharges)
-        ? Math.max(0, data.deliveryCharges)
-        : 50;
-      return {
-        deliveryCharges,
-        taxAndPackingPercentage: 0,
-      };
+      const sanitized = sanitizeServerRules(data?.deliveryChargeRules);
+      if (sanitized.length > 0) {
+        return {
+          deliveryChargeRules: sanitized,
+          deliveryCharges: sanitized[0]?.deliveryCharge || 40,
+        };
+      }
     }
   } catch {
     // fallback
   }
-  return { deliveryCharges: 50, taxAndPackingPercentage: 0 };
+  return { deliveryChargeRules: DEFAULT_SERVER_RULES, deliveryCharges: 40 };
 }
 
-function saveAppSettings(settings: { deliveryCharges: number; taxAndPackingPercentage?: number }): void {
+function saveAppSettings(settings: { deliveryChargeRules: ServerDeliveryRule[]; deliveryCharges?: number }): void {
   try {
     const dir = path.dirname(SETTINGS_FILE);
     if (!fs.existsSync(dir)) {
@@ -166,7 +195,7 @@ function saveAppSettings(settings: { deliveryCharges: number; taxAndPackingPerce
 
 /**
  * GET /api/settings
- * Retrieves app settings, including Admin-configured Delivery Charges.
+ * Retrieves app settings, including Admin-configured Delivery Charge rules.
  */
 apiRouter.get('/api/settings', (_req: Request, res: Response) => {
   const settings = loadAppSettings();
@@ -175,44 +204,133 @@ apiRouter.get('/api/settings', (_req: Request, res: Response) => {
 
 /**
  * POST /api/settings
- * Updates app settings, including Delivery Charges with validation.
+ * Updates app settings, including Delivery Charge rules with validation:
+ * - Prevents negative minimum order amounts
+ * - Prevents negative delivery charges
+ * - Prevents duplicate minimum order amounts
+ * - Prevents invalid or empty values
+ * - Sorts rules from lowest to highest minimum order amount
  */
 apiRouter.post('/api/settings', (req: Request, res: Response) => {
   try {
-    const { deliveryCharges, taxAndPackingPercentage } = req.body;
-    const rawVal = deliveryCharges !== undefined ? deliveryCharges : taxAndPackingPercentage;
+    const { deliveryChargeRules, deliveryCharges } = req.body;
 
-    if (rawVal === undefined || rawVal === null) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'deliveryCharges is required.',
+    // Legacy payload fallback
+    if (!deliveryChargeRules && deliveryCharges !== undefined) {
+      const charge = Math.max(0, Number(deliveryCharges) || 0);
+      const singleRule: ServerDeliveryRule[] = [{ id: 'rule-0', minOrderAmount: 0, deliveryCharge: charge }];
+      saveAppSettings({ deliveryChargeRules: singleRule, deliveryCharges: charge });
+      sendJson(res, 200, {
+        success: true,
+        settings: { deliveryChargeRules: singleRule, deliveryCharges: charge },
       });
       return;
     }
 
-    const num = Number(rawVal);
-    if (isNaN(num)) {
+    if (!Array.isArray(deliveryChargeRules) || deliveryChargeRules.length === 0) {
       sendJson(res, 400, {
         success: false,
-        error: 'Delivery charge must be a valid number.',
+        error: 'Delivery charge rules must be a non-empty array.',
       });
       return;
     }
 
-    if (num < 0) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Delivery charge cannot be negative.',
+    const seenMinAmounts = new Set<number>();
+    const sanitizedRules: ServerDeliveryRule[] = [];
+
+    for (let i = 0; i < deliveryChargeRules.length; i++) {
+      const rule = deliveryChargeRules[i];
+      if (!rule || typeof rule !== 'object') {
+        sendJson(res, 400, {
+          success: false,
+          error: `Rule at index ${i} is invalid.`,
+        });
+        return;
+      }
+
+      if (rule.minOrderAmount === undefined || rule.minOrderAmount === null || rule.minOrderAmount === '') {
+        sendJson(res, 400, {
+          success: false,
+          error: `Rule at row ${i + 1} has an empty Minimum Order Amount.`,
+        });
+        return;
+      }
+
+      const minOrder = Number(rule.minOrderAmount);
+      if (isNaN(minOrder)) {
+        sendJson(res, 400, {
+          success: false,
+          error: `Rule at row ${i + 1} has an invalid Minimum Order Amount.`,
+        });
+        return;
+      }
+
+      if (minOrder < 0) {
+        sendJson(res, 400, {
+          success: false,
+          error: `Minimum Order Amount cannot be negative (row ${i + 1}).`,
+        });
+        return;
+      }
+
+      if (rule.deliveryCharge === undefined || rule.deliveryCharge === null || rule.deliveryCharge === '') {
+        sendJson(res, 400, {
+          success: false,
+          error: `Rule at row ${i + 1} has an empty Delivery Charge.`,
+        });
+        return;
+      }
+
+      const charge = Number(rule.deliveryCharge);
+      if (isNaN(charge)) {
+        sendJson(res, 400, {
+          success: false,
+          error: `Rule at row ${i + 1} has an invalid Delivery Charge.`,
+        });
+        return;
+      }
+
+      if (charge < 0) {
+        sendJson(res, 400, {
+          success: false,
+          error: `Delivery Charge cannot be negative (row ${i + 1}).`,
+        });
+        return;
+      }
+
+      const roundedMinOrder = Math.round(minOrder * 100) / 100;
+      const roundedCharge = Math.round(charge * 100) / 100;
+
+      if (seenMinAmounts.has(roundedMinOrder)) {
+        sendJson(res, 400, {
+          success: false,
+          error: `Duplicate Minimum Order Amount detected: ₹${roundedMinOrder}. Each rule must have a unique minimum order amount.`,
+        });
+        return;
+      }
+      seenMinAmounts.add(roundedMinOrder);
+
+      sanitizedRules.push({
+        id: String(rule.id || `rule-${roundedMinOrder}-${i}`),
+        minOrderAmount: roundedMinOrder,
+        deliveryCharge: roundedCharge,
       });
-      return;
     }
 
-    const sanitized = Math.round(num * 100) / 100;
-    saveAppSettings({ deliveryCharges: sanitized, taxAndPackingPercentage: 0 });
+    // Sort rules by Minimum Order Amount from lowest to highest
+    sanitizedRules.sort((a, b) => a.minOrderAmount - b.minOrderAmount);
+
+    saveAppSettings({
+      deliveryChargeRules: sanitizedRules,
+      deliveryCharges: sanitizedRules[0]?.deliveryCharge || 40,
+    });
 
     sendJson(res, 200, {
       success: true,
-      settings: { deliveryCharges: sanitized, taxAndPackingPercentage: 0 },
+      settings: {
+        deliveryChargeRules: sanitizedRules,
+        deliveryCharges: sanitizedRules[0]?.deliveryCharge || 40,
+      },
     });
   } catch (err: any) {
     sendJson(res, 500, {
@@ -221,6 +339,7 @@ apiRouter.post('/api/settings', (req: Request, res: Response) => {
     });
   }
 });
+
 
 /**
  * Internal developer test endpoint (only active when NODE_ENV !== 'production'):

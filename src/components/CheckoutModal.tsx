@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, CustomerOrder, Coupon } from '../types';
+import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
 import { useLanguage } from '../context/LanguageContext';
+import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../services/settingsService';
 import {
   CheckCircle,
   X,
@@ -30,6 +31,7 @@ interface CheckoutModalProps {
   onApplyCoupon?: (code: string) => void;
   onRemoveCoupon?: () => void;
   deliveryCharges?: number;
+  deliveryRules?: DeliveryChargeRule[];
   taxAndPackingPercentage?: number;
 }
 
@@ -44,7 +46,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   coupons = [],
   onApplyCoupon,
   onRemoveCoupon,
-  deliveryCharges = 50,
+  deliveryCharges = 40,
+  deliveryRules,
   taxAndPackingPercentage,
 }) => {
   const { currentUser, addOrder } = useAuth();
@@ -81,12 +84,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const discountPercent = activeCoupon ? activeCoupon.discountPercentage : 0;
   const discount = Math.round((subtotal * discountPercent) / 100);
 
-  const freeDeliveryThreshold = 499.0;
-  // Delivery Charges calculation
-  // Free delivery if cart qualifies for Free Express Delivery Goal (₹499)
-  // Otherwise, standard Delivery Charges apply (default ₹50 or admin-configured)
-  const deliveryChargesAmount = items.length > 0 && subtotal > 0
-    ? (subtotal >= freeDeliveryThreshold ? 0 : Math.max(0, deliveryCharges))
+  // Delivery Charges calculation based on custom admin-controlled rules
+  const effectiveRules = deliveryRules && deliveryRules.length > 0
+    ? deliveryRules
+    : DEFAULT_DELIVERY_RULES;
+
+  const applicableDeliveryRule = items.length > 0 && subtotal > 0
+    ? getApplicableDeliveryChargeRule(effectiveRules, subtotal)
+    : null;
+
+  const deliveryChargesAmount = items.length > 0 && subtotal > 0 && applicableDeliveryRule
+    ? applicableDeliveryRule.deliveryCharge
     : 0;
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
@@ -362,7 +370,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="flex justify-between text-[#565e74]">
                   <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
                   <span id="checkout-tax-packing-amount" data-testid="checkout-delivery-charges" className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-medium'}`}>
-                    {deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : t('free')}
+                    {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
                   </span>
                 </div>
                 <div className="flex justify-between font-bold text-[14px] text-[#0b1c30] pt-1 border-t border-[#e2e8f0]">

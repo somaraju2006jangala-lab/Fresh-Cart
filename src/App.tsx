@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem, InventoryLog, ViewType, Coupon, CustomerOrder } from './types';
+import { Product, CartItem, InventoryLog, ViewType, Coupon, CustomerOrder, DeliveryChargeRule } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
 import { INITIAL_COUPONS } from './data/coupons';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -234,18 +234,30 @@ function FreshCartStore() {
     setCustomerOrders(getCustomerOrders());
   }, [currentUser]);
 
-  // Admin-controlled Delivery Charges Setting
+  // Admin-controlled Delivery Charges Rules Setting
+  const [deliveryRules, setDeliveryRules] = useState<DeliveryChargeRule[]>(() => {
+    return getStoredSettings().deliveryChargeRules;
+  });
+
   const [deliveryCharges, setDeliveryCharges] = useState<number>(() => {
-    return getStoredSettings().deliveryCharges;
+    const r = getStoredSettings().deliveryChargeRules;
+    return r[0]?.deliveryCharge ?? 40;
   });
 
   useEffect(() => {
     fetchServerSettings().then((s) => {
-      if (typeof s?.deliveryCharges === 'number') {
-        setDeliveryCharges(s.deliveryCharges);
+      if (Array.isArray(s?.deliveryChargeRules) && s.deliveryChargeRules.length > 0) {
+        setDeliveryRules(s.deliveryChargeRules);
+        setDeliveryCharges(s.deliveryChargeRules[0]?.deliveryCharge ?? 40);
       }
     });
   }, []);
+
+  const handleUpdateDeliveryRules = async (newRules: DeliveryChargeRule[]) => {
+    setDeliveryRules(newRules);
+    setDeliveryCharges(newRules[0]?.deliveryCharge ?? 40);
+    await updateServerSettings({ deliveryChargeRules: newRules });
+  };
 
   const handleUpdateDeliveryCharges = async (newCharge: number) => {
     setDeliveryCharges(newCharge);
@@ -738,6 +750,8 @@ function FreshCartStore() {
             onClearInventoryLogs={handleClearInventoryLogs}
             deliveryCharges={deliveryCharges}
             onUpdateDeliveryCharges={handleUpdateDeliveryCharges}
+            deliveryRules={deliveryRules}
+            onUpdateDeliveryRules={handleUpdateDeliveryRules}
           />
         ) : currentView === 'login' ? (
           <LoginPage
@@ -956,6 +970,7 @@ function FreshCartStore() {
           onRemoveCoupon={() => setAppliedCoupon(null)}
           coupons={coupons}
           deliveryCharges={deliveryCharges}
+          deliveryRules={deliveryRules}
         />
       )}
 
@@ -982,6 +997,7 @@ function FreshCartStore() {
           onApplyCoupon={(code) => setAppliedCoupon(code)}
           onRemoveCoupon={() => setAppliedCoupon(null)}
           deliveryCharges={deliveryCharges}
+          deliveryRules={deliveryRules}
         />
       )}
     </div>
