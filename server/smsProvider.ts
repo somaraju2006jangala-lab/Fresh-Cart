@@ -37,20 +37,8 @@ export interface SmsDeliveryResult {
   message: string;
 }
 
-function isPlaceholder(val: string): boolean {
-  const lower = val.toLowerCase().trim();
-  return (
-    lower.startsWith('your_real_') ||
-    lower.startsWith('your_') ||
-    lower.startsWith('my_') ||
-    lower.startsWith('<') ||
-    lower.includes('placeholder')
-  );
-}
-
 /**
  * Cleanly reads an environment variable, trimming whitespace and optional wrapping quotes.
- * Safely ignores placeholder values awaiting real user secrets.
  */
 function getCleanEnv(key: string): string | undefined {
   const val = process.env[key];
@@ -63,7 +51,7 @@ function getCleanEnv(key: string): string | undefined {
   ) {
     unquoted = trimmed.slice(1, -1).trim();
   }
-  if (!unquoted || isPlaceholder(unquoted)) {
+  if (!unquoted || unquoted.length === 0) {
     return undefined;
   }
   return unquoted;
@@ -129,7 +117,7 @@ export function getSmsProviderConfig(): SmsProviderConfig {
           const content = fs.readFileSync(filePath, 'utf-8');
           const parsed = dotenv.parse(content);
           for (const [k, v] of Object.entries(parsed)) {
-            if (v && v.trim() && !isPlaceholder(v)) {
+            if (v && v.trim().length > 0) {
               process.env[k] = v.trim();
             }
           }
