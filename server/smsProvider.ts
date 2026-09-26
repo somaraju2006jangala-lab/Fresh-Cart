@@ -9,6 +9,8 @@
  * does NOT create fake SMS logs, and clearly identifies the missing provider configuration.
  */
 
+import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 
 // Ensure environment variables are loaded in local development
@@ -106,8 +108,19 @@ function getEnvWithFallbacks(primary: string, fallbacks: string[] = []): string 
 export function getSmsProviderConfig(): SmsProviderConfig {
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     try {
-      dotenv.config({ override: true, quiet: true } as any);
-      dotenv.config({ path: '.env.local', override: true, quiet: true } as any);
+      const loadNonEmptyEnv = (filePath: string) => {
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const parsed = dotenv.parse(content);
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && v.trim()) {
+              process.env[k] = v.trim();
+            }
+          }
+        }
+      };
+      loadNonEmptyEnv(path.resolve(process.cwd(), '.env'));
+      loadNonEmptyEnv(path.resolve(process.cwd(), '.env.local'));
     } catch {
       // ignore
     }
