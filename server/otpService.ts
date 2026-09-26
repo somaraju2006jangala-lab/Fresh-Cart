@@ -18,9 +18,10 @@ export interface StoredOtpRecord {
   verifiedAt?: string;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), '.data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'freshcart_data')
+  : path.resolve(process.cwd(), '.data');
 const STORE_FILE = path.join(DATA_DIR, 'otp_store.json');
-const DEV_TEST_STORE_FILE = path.join(DATA_DIR, 'dev_active_codes.json');
 
 // Ensure server data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -90,7 +91,16 @@ export async function generateOrderOtp(
   maskedPhone: string;
   expiresAt: number;
   delivery: SmsDeliveryResult;
+  error?: string;
 }> {
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  // Invalidate any previous OTP for this order before generating a new one
+  const existing = otpStore.get(orderId) || otpStore.get(altId);
+  if (existing && existing.status !== 'USED') {
+    existing.status = 'EXPIRED';
+  }
+
   // Generate secure 6-digit number
   const rawOtp = crypto.randomInt(100000, 1000000).toString();
   const salt = crypto.randomBytes(16).toString('hex');
@@ -115,36 +125,19 @@ export async function generateOrderOtp(
   };
 
   otpStore.set(orderId, record);
-  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
   otpStore.set(altId, record);
   persistStore();
-
-  // For server-side local development and automated testing only:
-  // Write to private server file if NODE_ENV !== 'production'
-  // (NEVER sent to frontend, never in localStorage, never in UI, never in console)
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      let devMap: Record<string, string> = {};
-      if (fs.existsSync(DEV_TEST_STORE_FILE)) {
-        devMap = JSON.parse(fs.readFileSync(DEV_TEST_STORE_FILE, 'utf-8'));
-      }
-      devMap[orderId] = rawOtp;
-      devMap[altId] = rawOtp;
-      fs.writeFileSync(DEV_TEST_STORE_FILE, JSON.stringify(devMap, null, 2), 'utf-8');
-    } catch {
-      // Ignore
-    }
-  }
 
   // Attempt real SMS delivery via isolated SMS provider
   const delivery = await dispatchOtpSms(customerPhone, rawOtp, orderId);
 
   return {
-    success: true,
+    success: delivery.sent,
     orderId,
     maskedPhone,
     expiresAt,
     delivery,
+    ...(delivery.sent ? {} : { error: delivery.message || 'SMS delivery failed.' }),
   };
 }
 
@@ -264,9 +257,17 @@ export async function resendOrderOtp(
   expiresAt?: number;
   delivery?: SmsDeliveryResult;
 }> {
-  const existing = otpStore.get(orderId);
-  const customerId = existing?.customerId || fallbackCustomerId || 'rahul123';
-  const customerPhone = existing?.customerPhone || fallbackCustomerPhone || '9876541234';
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const existing = otpStore.get(orderId) || otpStore.get(altId);
+  const customerId = fallbackCustomerId || existing?.customerId || 'guest';
+  const customerPhone = fallbackCustomerPhone || existing?.customerPhone;
+
+  if (!customerPhone) {
+    return {
+      success: false,
+      error: 'Customer registered mobile number is required to resend OTP.',
+    };
+  }
 
   if (existing && existing.status === 'USED') {
     return {
@@ -282,7 +283,7 @@ export async function resendOrderOtp(
     persistStore();
   }
 
-  // Generate new OTP
+  // Generate new OTP & dispatch real SMS
   const result = await generateOrderOtp(
     orderId,
     customerId,
@@ -291,7 +292,9 @@ export async function resendOrderOtp(
 
   return {
     ...result,
-    message: 'New 6-digit OTP generated. 10-minute expiry reset.',
+    message: result.success
+      ? `New 6-digit OTP sent to ${result.maskedPhone}. 10-minute expiry reset.`
+      : (result.delivery?.message || 'Failed to resend OTP.'),
   };
 }
 
@@ -308,7 +311,8 @@ export function getOrderOtpStatus(orderId: string): {
   verifiedAt?: string;
   providerConfigured: boolean;
 } {
-  const record = otpStore.get(orderId);
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const record = otpStore.get(orderId) || otpStore.get(altId);
   const provider = getSmsProviderConfig();
 
   if (!record) {
@@ -336,10 +340,3 @@ export function getOrderOtpStatus(orderId: string): {
   };
 }
 
-// Seed demo order #FC-1005 so it is immediately backend-ready
-(function seedInitialDemoOrder() {
-  const demoOrderId = '#FC-1005';
-  if (!otpStore.has(demoOrderId)) {
-    generateOrderOtp(demoOrderId, 'rahul123', '9876541234').catch(() => {});
-  }
-})();

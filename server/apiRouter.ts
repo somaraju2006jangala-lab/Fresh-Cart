@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -131,7 +132,9 @@ apiRouter.get('/api/otp/provider-config', (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
 });
 
-const SETTINGS_FILE = path.resolve(process.cwd(), '.data/app_settings.json');
+const SETTINGS_FILE = process.env.VERCEL
+  ? path.join('/tmp', 'freshcart_data', 'app_settings.json')
+  : path.resolve(process.cwd(), '.data/app_settings.json');
 
 interface ServerDeliveryRule {
   id: string;
@@ -341,28 +344,6 @@ apiRouter.post('/api/settings', (req: Request, res: Response) => {
 });
 
 
-/**
- * Internal developer test endpoint (only active when NODE_ENV !== 'production'):
- * Allows local test validation when telecom carrier credentials are not set in .env.
- */
-if (process.env.NODE_ENV !== 'production') {
-  apiRouter.get('/api/otp/dev-active-code/:orderId', (req: Request, res: Response) => {
-    try {
-      const orderId = decodeURIComponent(req.params.orderId);
-      const testFile = path.resolve(process.cwd(), '.data/dev_active_codes.json');
-      if (fs.existsSync(testFile)) {
-        const map = JSON.parse(fs.readFileSync(testFile, 'utf-8'));
-        if (map[orderId]) {
-          sendJson(res, 200, { success: true, code: map[orderId] });
-          return;
-        }
-      }
-      sendJson(res, 404, { success: false, error: 'No active code found.' });
-    } catch {
-      sendJson(res, 500, { success: false });
-    }
-  });
-}
 
 export const apiApp = express();
 apiApp.use(express.json());

@@ -5,6 +5,23 @@
  * - OTP is never exposed in frontend code, localStorage, or console logs.
  */
 
+export interface SmsDeliveryResult {
+  sent: boolean;
+  provider: string;
+  status: 'DELIVERED_TO_CARRIER' | 'PROVIDER_NOT_CONFIGURED' | 'FAILED';
+  carrierMessageId?: string;
+  message: string;
+}
+
+export interface OtpGenerateResult {
+  success: boolean;
+  orderId?: string;
+  maskedPhone?: string;
+  expiresAt?: number;
+  delivery?: SmsDeliveryResult;
+  error?: string;
+}
+
 export interface OtpVerifyResult {
   success: boolean;
   message?: string;
@@ -13,6 +30,15 @@ export interface OtpVerifyResult {
   verifiedAt?: string;
   isExpired?: boolean;
   remainingAttempts?: number;
+}
+
+export interface OtpResendResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  maskedPhone?: string;
+  expiresAt?: number;
+  delivery?: SmsDeliveryResult;
 }
 
 export interface OtpStatusResult {
@@ -47,13 +73,7 @@ export async function generateOrderOtp(
   orderId: string,
   customerId: string,
   customerPhone: string
-): Promise<{
-  success: boolean;
-  orderId?: string;
-  maskedPhone?: string;
-  expiresAt?: number;
-  error?: string;
-}> {
+): Promise<OtpGenerateResult> {
   try {
     const res = await fetch('/api/otp/generate', {
       method: 'POST',
@@ -61,10 +81,16 @@ export async function generateOrderOtp(
       body: JSON.stringify({ orderId, customerId, customerPhone }),
     });
     return await res.json();
-  } catch {
+  } catch (err: any) {
     return {
       success: false,
-      error: 'Could not contact server to initiate OTP.',
+      error: err?.message || 'Could not contact server to initiate OTP.',
+      delivery: {
+        sent: false,
+        provider: 'None',
+        status: 'FAILED',
+        message: 'Could not contact server to initiate OTP.',
+      },
     };
   }
 }
@@ -99,13 +125,7 @@ export async function resendOrderOtp(
   orderId: string,
   customerId?: string,
   customerPhone?: string
-): Promise<{
-  success: boolean;
-  message?: string;
-  error?: string;
-  maskedPhone?: string;
-  expiresAt?: number;
-}> {
+): Promise<OtpResendResult> {
   try {
     const res = await fetch('/api/otp/resend', {
       method: 'POST',
@@ -113,10 +133,16 @@ export async function resendOrderOtp(
       body: JSON.stringify({ orderId, customerId, customerPhone }),
     });
     return await res.json();
-  } catch {
+  } catch (err: any) {
     return {
       success: false,
-      error: 'Failed to contact backend to resend OTP.',
+      error: err?.message || 'Failed to contact backend to resend OTP.',
+      delivery: {
+        sent: false,
+        provider: 'None',
+        status: 'FAILED',
+        message: 'Failed to contact backend to resend OTP.',
+      },
     };
   }
 }
