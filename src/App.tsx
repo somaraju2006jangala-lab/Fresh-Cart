@@ -701,8 +701,7 @@ function FreshCartStore() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#030305] relative overflow-hidden">
-        <CursorReactiveBackground />
+      <div className="min-h-screen flex items-center justify-center bg-transparent relative z-10 overflow-hidden">
         <div className="relative z-10 flex flex-col items-center gap-3 bg-white/40 backdrop-blur-md p-8 rounded-3xl border border-white/55 shadow-xl">
           <span className="w-8 h-8 border-3 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
           <span className="text-[13px] font-semibold text-[#565e74]">{t('loading')}</span>
@@ -712,10 +711,7 @@ function FreshCartStore() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#030305] text-[#f1f5f9] relative overflow-hidden">
-      {/* Interactive Cursor-Reactive Glassmorphism Background */}
-      <CursorReactiveBackground />
-
+    <div className="min-h-screen flex flex-col bg-transparent text-[#f1f5f9] relative z-10">
       {/* Universal Header with View Navigation & Customer Authentication */}
       <Header
         currentView={currentView}
@@ -1013,7 +1009,11 @@ export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <FreshCartStore />
+        <div className="min-h-screen bg-[#030305] text-[#f1f5f9] relative">
+          {/* Universal Global Full-Website Black Liquid Crystal Background */}
+          <CursorReactiveBackground />
+          <FreshCartStore />
+        </div>
       </AuthProvider>
     </LanguageProvider>
   );

@@ -3,24 +3,29 @@ import React, { useEffect, useRef } from 'react';
 /**
  * CursorReactiveBackground
  *
- * BLACK LIQUID CRYSTAL-CLEAR GLASS ANIMATION THEME
+ * GLOBAL FULL-WEBSITE BLACK LIQUID CRYSTAL ANIMATION THEME
  *
- * 1. Deep black glossy liquid-glass environment (#000000, #030305, #08080c)
- * 2. Continuously morphing, flowing, stretching, and rotating black liquid crystal surfaces
- * 3. Subtle moving crystal specular reflections and caustics across liquid surfaces
- * 4. High-tech cursor liquid distortion ripples that dissipate naturally
- * 5. Full cursor-reactive liquid tension coupling and 3D parallax
- * 6. Preserved atomic orbital particle system:
- *    - Central nucleus with multi-layered quantum halo and breathing pulse
- *    - 6 elliptical 3D orbits with inclination & tilt driven by cursor pitch/roll
- *    - Orbiting particles with depth-sorting, light trails, and proximity deflection
- *    - Restrained luxury palette: soft white, silver, subtle emerald, subtle cyan
- * 7. High-DPI 60fps Canvas rendering, zero React re-renders, accessible fallback
+ * 1. Global Viewport Fixed Layer:
+ *    - Attached at application root with position: fixed; inset: 0; width: 100vw; height: 100vh;
+ *    - Covers entire scrollable website from top to bottom
+ *    - Stays active and continuous while scrolling with zero restarts or jumps
+ * 2. Deep Obsidian Glossy Liquid Crystal Base (#000000, #030305, #08080c)
+ * 3. 8 Morphing Organic Black Liquid Crystal Blobs distributed from top to bottom
+ * 4. High-tech Liquid Glass Distortion Ripples responding to cursor across entire viewport
+ * 5. Full-Screen 3D Orbital Particle System:
+ *    - Central quantum nucleus that smoothly follows cursor across full page height & width
+ *    - Expansive 3D elliptical orbits sweeping through top, middle, and bottom of screen
+ *    - Satellite quantum cores ensuring permanent luminous activity in upper and lower zones
+ *    - Depth-sorted orbiting particles with light trails and magnetic cursor deflection
+ *    - Ambient quantum crystal sparkles drifting throughout full screen
+ * 6. High-DPI 60fps Canvas rendering, zero React re-renders, accessible fallback
  */
 
 interface OrbitDefinition {
-  radiusX: number;
-  radiusY: number;
+  radiusXFactor: number;
+  radiusYFactor: number;
+  baseRadiusX: number;
+  baseRadiusY: number;
   inclinationX: number;
   inclinationZ: number;
   color: string;
@@ -48,6 +53,15 @@ interface AmbientNode {
   color: string;
   baseAlpha: number;
   pulsePhase: number;
+}
+
+interface SatelliteNode {
+  baseXRatio: number;
+  baseYRatio: number;
+  x: number;
+  y: number;
+  radius: number;
+  particles: Array<{ angle: number; speed: number; dist: number; size: number; color: string }>;
 }
 
 interface LiquidBlob {
@@ -115,24 +129,37 @@ export const CursorReactiveBackground: React.FC = () => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
-    // Mouse tracking state (with smooth viscous lerp damping)
+    // Mouse tracking state across entire screen
     let mouseX = width * 0.5;
-    let mouseY = height * 0.38;
+    let mouseY = height * 0.5;
     let targetMouseX = width * 0.5;
-    let targetMouseY = height * 0.38;
+    let targetMouseY = height * 0.5;
 
     let prevMouseX = width * 0.5;
-    let prevMouseY = height * 0.38;
+    let prevMouseY = height * 0.5;
 
     let normX = 0;
     let normY = 0;
     let targetNormX = 0;
     let targetNormY = 0;
 
-    // High-tech liquid ripples pool
+    // Liquid ripple distortion waves
     const ripples: LiquidRipple[] = [];
     let lastRippleX = width * 0.5;
-    let lastRippleY = height * 0.38;
+    let lastRippleY = height * 0.5;
+
+    // Smooth scroll velocity tracking to keep liquid physically continuous during scrolling
+    let scrollVelocity = 0;
+    let lastScrollY = window.scrollY;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const delta = Math.abs(currentScrollY - lastScrollY);
+      scrollVelocity = Math.min(delta * 0.05, 4);
+      lastScrollY = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
     const handleMouseMove = (e: MouseEvent) => {
       targetMouseX = e.clientX;
@@ -142,25 +169,24 @@ export const CursorReactiveBackground: React.FC = () => {
       targetNormX = (e.clientX - w / 2) / (w / 2);
       targetNormY = (e.clientY - h / 2) / (h / 2);
 
-      // Create subtle high-tech liquid crystal distortion ripples on movement
+      // High-tech liquid distortion ripples everywhere cursor moves
       const distFromLastRipple = Math.hypot(e.clientX - lastRippleX, e.clientY - lastRippleY);
-      if (distFromLastRipple > 36 && !prefersReducedMotion) {
+      if (distFromLastRipple > 32 && !prefersReducedMotion) {
         lastRippleX = e.clientX;
         lastRippleY = e.clientY;
         const velocity = Math.min(distFromLastRipple * 0.15, 6);
         ripples.push({
           x: e.clientX,
           y: e.clientY,
-          radius: 8,
-          maxRadius: Math.min(180 + velocity * 25, 260),
-          speed: 1.8 + velocity * 0.3,
-          opacity: Math.min(0.28 + velocity * 0.05, 0.45),
-          maxOpacity: Math.min(0.28 + velocity * 0.05, 0.45),
-          thickness: 1.2 + Math.random() * 0.8,
+          radius: 10,
+          maxRadius: Math.min(180 + velocity * 25, 280),
+          speed: 2.0 + velocity * 0.35,
+          opacity: Math.min(0.32 + velocity * 0.05, 0.5),
+          maxOpacity: Math.min(0.32 + velocity * 0.05, 0.5),
+          thickness: 1.3 + Math.random() * 0.8,
         });
 
-        // Cap active ripples for optimal performance
-        if (ripples.length > 18) {
+        if (ripples.length > 20) {
           ripples.shift();
         }
       }
@@ -170,79 +196,91 @@ export const CursorReactiveBackground: React.FC = () => {
       window.addEventListener('mousemove', handleMouseMove, { passive: true });
     }
 
-    // 1. Definition of 6 distinct 3D orbital planes (Atomic Gyroscope)
-    // Refined for dark crystal environment with restrained luminous accents
+    // 1. Definition of 6 Expansive 3D Orbital Planes
+    // Proportions dynamically sweep through top, middle, and bottom of entire screen
     const orbits: OrbitDefinition[] = [
       {
-        radiusX: 135,
-        radiusY: 58,
+        radiusXFactor: 0.16,
+        radiusYFactor: 0.09,
+        baseRadiusX: 160,
+        baseRadiusY: 85,
         inclinationX: 0.42,
         inclinationZ: 0.28,
-        color: 'rgba(16, 185, 129, 0.20)',
-        glowColor: 'rgba(16, 185, 129, 0.42)',
+        color: 'rgba(16, 185, 129, 0.22)',
+        glowColor: 'rgba(16, 185, 129, 0.45)',
       },
       {
-        radiusX: 225,
-        radiusY: 90,
+        radiusXFactor: 0.26,
+        radiusYFactor: 0.15,
+        baseRadiusX: 260,
+        baseRadiusY: 135,
         inclinationX: -0.58,
         inclinationZ: -0.52,
-        color: 'rgba(56, 189, 248, 0.18)',
-        glowColor: 'rgba(56, 189, 248, 0.38)',
+        color: 'rgba(56, 189, 248, 0.20)',
+        glowColor: 'rgba(56, 189, 248, 0.40)',
       },
       {
-        radiusX: 315,
-        radiusY: 120,
+        radiusXFactor: 0.38,
+        radiusYFactor: 0.22,
+        baseRadiusX: 380,
+        baseRadiusY: 195,
         inclinationX: 0.95,
         inclinationZ: 0.85,
-        color: 'rgba(255, 255, 255, 0.16)',
-        glowColor: 'rgba(203, 213, 225, 0.35)',
+        color: 'rgba(255, 255, 255, 0.18)',
+        glowColor: 'rgba(203, 213, 225, 0.38)',
       },
       {
-        radiusX: 420,
-        radiusY: 158,
+        radiusXFactor: 0.52,
+        radiusYFactor: 0.30,
+        baseRadiusX: 520,
+        baseRadiusY: 265,
         inclinationX: -0.82,
         inclinationZ: 1.15,
-        color: 'rgba(52, 211, 153, 0.18)',
-        glowColor: 'rgba(52, 211, 153, 0.36)',
+        color: 'rgba(52, 211, 153, 0.19)',
+        glowColor: 'rgba(52, 211, 153, 0.38)',
       },
       {
-        radiusX: 535,
-        radiusY: 190,
+        radiusXFactor: 0.68,
+        radiusYFactor: 0.38,
+        baseRadiusX: 680,
+        baseRadiusY: 345,
         inclinationX: 0.48,
         inclinationZ: -1.25,
-        color: 'rgba(241, 245, 249, 0.14)',
-        glowColor: 'rgba(255, 255, 255, 0.32)',
+        color: 'rgba(241, 245, 249, 0.16)',
+        glowColor: 'rgba(255, 255, 255, 0.34)',
       },
       {
-        radiusX: 650,
-        radiusY: 228,
+        radiusXFactor: 0.85,
+        radiusYFactor: 0.48,
+        baseRadiusX: 850,
+        baseRadiusY: 430,
         inclinationX: -0.32,
         inclinationZ: 1.95,
-        color: 'rgba(45, 212, 191, 0.15)',
-        glowColor: 'rgba(45, 212, 191, 0.32)',
+        color: 'rgba(45, 212, 191, 0.16)',
+        glowColor: 'rgba(45, 212, 191, 0.35)',
       },
     ];
 
-    // Restrained, elegant luminous accents (Soft white, silver, subtle green, subtle cyan)
+    // Restrained luxury palette (Soft white, silver, subtle green, subtle cyan)
     const particleColors = [
-      { fill: '#ffffff', glow: 'rgba(255, 255, 255, 0.85)' }, // Pure Crystal White
-      { fill: '#cbd5e1', glow: 'rgba(203, 213, 225, 0.80)' }, // Polished Silver
-      { fill: '#10b981', glow: 'rgba(16, 185, 129, 0.80)' },  // Restrained Emerald
-      { fill: '#34d399', glow: 'rgba(52, 211, 153, 0.82)' },  // Mint Crystal
-      { fill: '#38bdf8', glow: 'rgba(56, 189, 248, 0.78)' },  // Subtle Cyan Sky
-      { fill: '#e2e8f0', glow: 'rgba(226, 232, 240, 0.82)' }, // Starlight
+      { fill: '#ffffff', glow: 'rgba(255, 255, 255, 0.88)' }, // Pure Crystal White
+      { fill: '#cbd5e1', glow: 'rgba(203, 213, 225, 0.82)' }, // Polished Silver
+      { fill: '#10b981', glow: 'rgba(16, 185, 129, 0.82)' },  // Restrained Emerald
+      { fill: '#34d399', glow: 'rgba(52, 211, 153, 0.85)' },  // Mint Crystal
+      { fill: '#38bdf8', glow: 'rgba(56, 189, 248, 0.80)' },  // Subtle Cyan Sky
+      { fill: '#e2e8f0', glow: 'rgba(226, 232, 240, 0.85)' }, // Starlight
     ];
 
-    // 2. Initialize orbiting particles distributed across all orbital paths
+    // 2. Initialize orbiting particles (56 on desktop, 26 on mobile)
     const particles: Particle[] = [];
-    const particleCount = isTouch ? 24 : 46;
+    const particleCount = isTouch ? 26 : 56;
 
     for (let i = 0; i < particleCount; i++) {
       const orbitIndex = i % orbits.length;
       const col = particleColors[i % particleColors.length];
       const baseAngle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.4;
       const direction = i % 2 === 0 ? 1 : -1;
-      const speed = (0.28 + Math.random() * 0.42) * direction * (prefersReducedMotion ? 0.2 : 1);
+      const speed = (0.26 + Math.random() * 0.40) * direction * (prefersReducedMotion ? 0.2 : 1);
       const size = 1.6 + Math.random() * 2.4;
 
       particles.push({
@@ -258,40 +296,69 @@ export const CursorReactiveBackground: React.FC = () => {
       });
     }
 
-    // 3. Initialize ambient floating quantum dust / crystal sparkles
+    // 3. Harmonic Secondary Quantum Satellites (ensures persistent luminous activity in upper & lower quadrants)
+    const satellites: SatelliteNode[] = [
+      {
+        baseXRatio: 0.24,
+        baseYRatio: 0.22,
+        x: width * 0.24,
+        y: height * 0.22,
+        radius: 14,
+        particles: [
+          { angle: 0, speed: 0.6, dist: 55, size: 2.2, color: '#10b981' },
+          { angle: Math.PI, speed: 0.6, dist: 55, size: 2.0, color: '#38bdf8' },
+          { angle: Math.PI * 0.5, speed: -0.45, dist: 78, size: 1.8, color: '#ffffff' },
+        ],
+      },
+      {
+        baseXRatio: 0.78,
+        baseYRatio: 0.78,
+        x: width * 0.78,
+        y: height * 0.78,
+        radius: 15,
+        particles: [
+          { angle: 0.8, speed: 0.55, dist: 60, size: 2.2, color: '#34d399' },
+          { angle: 0.8 + Math.PI, speed: 0.55, dist: 60, size: 2.0, color: '#cbd5e1' },
+          { angle: -0.4, speed: -0.5, dist: 84, size: 1.9, color: '#ffffff' },
+        ],
+      },
+    ];
+
+    // 4. Initialize ambient floating quantum dust / crystal sparkles across full screen
     const ambientNodes: AmbientNode[] = [];
-    const ambientCount = isTouch ? 12 : 24;
+    const ambientCount = isTouch ? 16 : 36;
 
     for (let i = 0; i < ambientCount; i++) {
       const col = particleColors[i % particleColors.length];
       ambientNodes.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        size: 1.2 + Math.random() * 1.8,
+        vx: (Math.random() - 0.5) * 0.32,
+        vy: (Math.random() - 0.5) * 0.32,
+        size: 1.3 + Math.random() * 1.9,
         color: col.fill,
-        baseAlpha: 0.16 + Math.random() * 0.22,
+        baseAlpha: 0.18 + Math.random() * 0.24,
         pulsePhase: Math.random() * Math.PI * 2,
       });
     }
 
-    // 4. Definition of 5 Organic Black Liquid Crystal Glass Blobs
-    // These continuously morph, stretch, and flow behind the UI
+    // 5. Definition of 8 Organic Black Liquid Crystal Glass Blobs
+    // Spans the ENTIRE viewport: Top, Center, Bottom, Left, and Right
     const liquidBlobs: LiquidBlob[] = [
+      // Top row
       {
-        baseXRatio: 0.5,
-        baseYRatio: 0.38,
-        x: width * 0.5,
-        y: height * 0.38,
-        baseRadius: 320,
+        baseXRatio: 0.50,
+        baseYRatio: 0.18,
+        x: width * 0.50,
+        y: height * 0.18,
+        baseRadius: 310,
         harmonics: [
           { freq: 2, amp: 26, speed: 0.42, phase: 0 },
-          { freq: 3, amp: 20, speed: -0.32, phase: 1.2 },
-          { freq: 5, amp: 14, speed: 0.55, phase: 2.8 },
+          { freq: 3, amp: 18, speed: -0.32, phase: 1.2 },
+          { freq: 5, amp: 12, speed: 0.55, phase: 2.8 },
         ],
         rotation: 0,
-        rotationSpeed: 0.00035,
+        rotationSpeed: 0.00032,
         stretch: 1,
         targetStretch: 1,
         stretchAngle: 0,
@@ -302,15 +369,14 @@ export const CursorReactiveBackground: React.FC = () => {
         rimColor: 'rgba(255, 255, 255, 0.085)',
       },
       {
-        baseXRatio: 0.18,
-        baseYRatio: 0.65,
-        x: width * 0.18,
-        y: height * 0.65,
-        baseRadius: 260,
+        baseXRatio: 0.16,
+        baseYRatio: 0.22,
+        x: width * 0.16,
+        y: height * 0.22,
+        baseRadius: 280,
         harmonics: [
           { freq: 2, amp: 24, speed: -0.36, phase: 0.8 },
           { freq: 4, amp: 16, speed: 0.45, phase: 2.1 },
-          { freq: 6, amp: 10, speed: -0.6, phase: 3.4 },
         ],
         rotation: 1.2,
         rotationSpeed: -0.00028,
@@ -324,18 +390,17 @@ export const CursorReactiveBackground: React.FC = () => {
         rimColor: 'rgba(16, 185, 129, 0.075)',
       },
       {
-        baseXRatio: 0.82,
-        baseYRatio: 0.32,
-        x: width * 0.82,
-        y: height * 0.32,
+        baseXRatio: 0.84,
+        baseYRatio: 0.25,
+        x: width * 0.84,
+        y: height * 0.25,
         baseRadius: 290,
         harmonics: [
-          { freq: 3, amp: 28, speed: 0.38, phase: 1.5 },
-          { freq: 4, amp: 18, speed: -0.42, phase: 3.2 },
-          { freq: 7, amp: 12, speed: 0.58, phase: 0.4 },
+          { freq: 3, amp: 25, speed: 0.38, phase: 1.5 },
+          { freq: 5, amp: 14, speed: -0.42, phase: 3.2 },
         ],
         rotation: 2.4,
-        rotationSpeed: 0.00031,
+        rotationSpeed: 0.00030,
         stretch: 1,
         targetStretch: 1,
         stretchAngle: 0,
@@ -345,48 +410,115 @@ export const CursorReactiveBackground: React.FC = () => {
         colorOuter: 'rgba(2, 3, 7, 0.92)',
         rimColor: 'rgba(56, 189, 248, 0.075)',
       },
+
+      // Middle row (covers Customer Portal, Catalog, Admin tables)
       {
-        baseXRatio: 0.65,
-        baseYRatio: 0.82,
-        x: width * 0.65,
-        y: height * 0.82,
+        baseXRatio: 0.50,
+        baseYRatio: 0.50,
+        x: width * 0.50,
+        y: height * 0.50,
         baseRadius: 360,
         harmonics: [
-          { freq: 2, amp: 34, speed: -0.32, phase: 2.1 },
-          { freq: 3, amp: 22, speed: 0.44, phase: 0.7 },
-          { freq: 5, amp: 15, speed: -0.52, phase: 4.2 },
+          { freq: 2, amp: 30, speed: 0.35, phase: 0.5 },
+          { freq: 3, amp: 22, speed: -0.40, phase: 1.8 },
+          { freq: 4, amp: 14, speed: 0.50, phase: 3.2 },
         ],
-        rotation: 0.8,
+        rotation: 0.6,
+        rotationSpeed: -0.00025,
+        stretch: 1,
+        targetStretch: 1,
+        stretchAngle: 0,
+        targetStretchAngle: 0,
+        colorCenter: 'rgba(19, 26, 40, 0.50)',
+        colorMid: 'rgba(8, 12, 19, 0.72)',
+        colorOuter: 'rgba(2, 3, 6, 0.94)',
+        rimColor: 'rgba(255, 255, 255, 0.09)',
+      },
+      {
+        baseXRatio: 0.12,
+        baseYRatio: 0.56,
+        x: width * 0.12,
+        y: height * 0.56,
+        baseRadius: 310,
+        harmonics: [
+          { freq: 3, amp: 24, speed: 0.44, phase: 2.3 },
+          { freq: 5, amp: 15, speed: -0.35, phase: 0.9 },
+        ],
+        rotation: 1.8,
+        rotationSpeed: 0.00027,
+        stretch: 1,
+        targetStretch: 1,
+        stretchAngle: 0,
+        targetStretchAngle: 0,
+        colorCenter: 'rgba(16, 23, 36, 0.44)',
+        colorMid: 'rgba(7, 10, 16, 0.69)',
+        colorOuter: 'rgba(1, 2, 4, 0.90)',
+        rimColor: 'rgba(52, 211, 153, 0.075)',
+      },
+      {
+        baseXRatio: 0.88,
+        baseYRatio: 0.58,
+        x: width * 0.88,
+        y: height * 0.58,
+        baseRadius: 320,
+        harmonics: [
+          { freq: 2, amp: 28, speed: -0.38, phase: 1.1 },
+          { freq: 4, amp: 16, speed: 0.48, phase: 2.7 },
+        ],
+        rotation: 3.2,
+        rotationSpeed: -0.00031,
+        stretch: 1,
+        targetStretch: 1,
+        stretchAngle: 0,
+        targetStretchAngle: 0,
+        colorCenter: 'rgba(18, 25, 38, 0.45)',
+        colorMid: 'rgba(7, 11, 18, 0.70)',
+        colorOuter: 'rgba(2, 3, 6, 0.92)',
+        rimColor: 'rgba(56, 189, 248, 0.08)',
+      },
+
+      // Bottom row (covers lower product rows, checkout, footer, bottom logs)
+      {
+        baseXRatio: 0.25,
+        baseYRatio: 0.86,
+        x: width * 0.25,
+        y: height * 0.86,
+        baseRadius: 350,
+        harmonics: [
+          { freq: 2, amp: 32, speed: -0.34, phase: 2.5 },
+          { freq: 3, amp: 20, speed: 0.46, phase: 0.9 },
+        ],
+        rotation: 1.0,
+        rotationSpeed: 0.00029,
+        stretch: 1,
+        targetStretch: 1,
+        stretchAngle: 0,
+        targetStretchAngle: 0,
+        colorCenter: 'rgba(17, 24, 38, 0.46)',
+        colorMid: 'rgba(8, 11, 18, 0.72)',
+        colorOuter: 'rgba(2, 2, 5, 0.94)',
+        rimColor: 'rgba(255, 255, 255, 0.085)',
+      },
+      {
+        baseXRatio: 0.76,
+        baseYRatio: 0.85,
+        x: width * 0.76,
+        y: height * 0.85,
+        baseRadius: 360,
+        harmonics: [
+          { freq: 3, amp: 30, speed: 0.40, phase: 1.7 },
+          { freq: 4, amp: 18, speed: -0.45, phase: 3.6 },
+        ],
+        rotation: 2.1,
         rotationSpeed: -0.00033,
         stretch: 1,
         targetStretch: 1,
         stretchAngle: 0,
         targetStretchAngle: 0,
-        colorCenter: 'rgba(16, 24, 36, 0.46)',
-        colorMid: 'rgba(7, 11, 18, 0.72)',
-        colorOuter: 'rgba(2, 2, 5, 0.94)',
-        rimColor: 'rgba(255, 255, 255, 0.08)',
-      },
-      {
-        baseXRatio: 0.35,
-        baseYRatio: 0.15,
-        x: width * 0.35,
-        y: height * 0.15,
-        baseRadius: 240,
-        harmonics: [
-          { freq: 3, amp: 22, speed: 0.48, phase: 3.1 },
-          { freq: 5, amp: 14, speed: -0.38, phase: 1.6 },
-        ],
-        rotation: 3.1,
-        rotationSpeed: 0.00025,
-        stretch: 1,
-        targetStretch: 1,
-        stretchAngle: 0,
-        targetStretchAngle: 0,
-        colorCenter: 'rgba(14, 20, 32, 0.40)',
-        colorMid: 'rgba(5, 8, 14, 0.65)',
-        colorOuter: 'rgba(1, 2, 4, 0.88)',
-        rimColor: 'rgba(52, 211, 153, 0.065)',
+        colorCenter: 'rgba(16, 23, 36, 0.45)',
+        colorMid: 'rgba(7, 10, 17, 0.70)',
+        colorOuter: 'rgba(1, 2, 4, 0.91)',
+        rimColor: 'rgba(16, 185, 129, 0.08)',
       },
     ];
 
@@ -401,29 +533,25 @@ export const CursorReactiveBackground: React.FC = () => {
       centerX: number,
       centerY: number
     ) => {
-      // Rotation Z
       const cosZ = Math.cos(rotZ);
       const sinZ = Math.sin(rotZ);
       const x1 = x * cosZ - y * sinZ;
       const y1 = x * sinZ + y * cosZ;
       const z1 = z;
 
-      // Rotation X
       const cosX = Math.cos(rotX);
       const sinX = Math.sin(rotX);
       const y2 = y1 * cosX - z1 * sinX;
       const z2 = y1 * sinX + z1 * cosX;
       const x2 = x1;
 
-      // Rotation Y
       const cosY = Math.cos(rotY);
       const sinY = Math.sin(rotY);
       const x3 = x2 * cosY + z2 * sinY;
       const z3 = -x2 * sinY + z2 * cosY;
       const y3 = y2;
 
-      // Perspective projection
-      const cameraDistance = 900;
+      const cameraDistance = 950;
       const scale = cameraDistance / (cameraDistance + z3);
       return {
         x: centerX + x3 * scale,
@@ -435,9 +563,9 @@ export const CursorReactiveBackground: React.FC = () => {
 
     let lastTime = performance.now();
 
-    // Nucleus state
+    // Central Nucleus state: starts centered in viewport
     let nucleusX = width * 0.5;
-    let nucleusY = height * 0.38;
+    let nucleusY = height * 0.5;
 
     // Main 60fps Animation Loop
     const render = (currentTime: number) => {
@@ -452,44 +580,46 @@ export const CursorReactiveBackground: React.FC = () => {
       normX += (targetNormX - normX) * lerpFactor;
       normY += (targetNormY - normY) * lerpFactor;
 
-      // Cursor movement speed calculation
       const cursorSpeed = Math.hypot(mouseX - prevMouseX, mouseY - prevMouseY);
       prevMouseX = mouseX;
       prevMouseY = mouseY;
+
+      // Decay scroll velocity smoothly
+      scrollVelocity *= 0.92;
 
       // 2. Clear canvas with Deep Black Liquid Crystal base
       ctx.fillStyle = '#030305';
       ctx.fillRect(0, 0, width, height);
 
-      // Deep obsidian ambient gradients for cinematic dimensional depth
+      // Deep obsidian ambient gradients spanning full window
       const baseGrad = ctx.createRadialGradient(
         width * 0.5 + normX * 60,
-        height * 0.4 + normY * 50,
-        80,
+        height * 0.5 + normY * 60,
+        100,
         width * 0.5,
         height * 0.5,
-        Math.max(width, height) * 0.8
+        Math.max(width, height) * 0.85
       );
-      baseGrad.addColorStop(0, '#0a0d14');
-      baseGrad.addColorStop(0.35, '#05070b');
+      baseGrad.addColorStop(0, '#0a0e16');
+      baseGrad.addColorStop(0.35, '#05070c');
       baseGrad.addColorStop(0.75, '#020305');
       baseGrad.addColorStop(1, '#000000');
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // 3. Render Morphing Organic Black Liquid Crystal Blobs
+      // 3. Render 8 Morphing Organic Black Liquid Crystal Blobs across full screen
       liquidBlobs.forEach((blob) => {
-        // Base coordinate with smooth cursor tension attraction
+        // Smooth cursor tension attraction
         const targetX = blob.baseXRatio * width + (isTouch ? 0 : normX * 55);
-        const targetY = blob.baseYRatio * height + (isTouch ? 0 : normY * 45);
+        const targetY = blob.baseYRatio * height + (isTouch ? 0 : normY * 50);
         blob.x += (targetX - blob.x) * 0.04;
         blob.y += (targetY - blob.y) * 0.04;
 
         if (!prefersReducedMotion) {
-          blob.rotation += blob.rotationSpeed * (1 + cursorSpeed * 0.1);
+          blob.rotation += blob.rotationSpeed * (1 + cursorSpeed * 0.12 + scrollVelocity * 0.2);
         }
 
-        // Cursor distance and elongation tension
+        // Distance to cursor everywhere on screen
         const dx = mouseX - blob.x;
         const dy = mouseY - blob.y;
         const distToMouse = Math.hypot(dx, dy);
@@ -505,8 +635,8 @@ export const CursorReactiveBackground: React.FC = () => {
         blob.stretch += (blob.targetStretch - blob.stretch) * 0.05;
         blob.stretchAngle += (blob.targetStretchAngle - blob.stretchAngle) * 0.05;
 
-        // Compute organic spline points around perimeter
-        const pointsCount = 48;
+        // Spline points computation
+        const pointsCount = 44;
         const points: Array<{ x: number; y: number }> = [];
 
         for (let i = 0; i < pointsCount; i++) {
@@ -519,7 +649,6 @@ export const CursorReactiveBackground: React.FC = () => {
             });
           }
 
-          // Apply liquid stretch toward cursor
           const cosAngleDiff = Math.cos(angle - blob.stretchAngle);
           const stretchFactor = 1 + (blob.stretch - 1) * Math.max(0, cosAngleDiff);
           r *= stretchFactor;
@@ -529,7 +658,7 @@ export const CursorReactiveBackground: React.FC = () => {
           points.push({ x: px, y: py });
         }
 
-        // Draw the smooth organic liquid glass shape using quadratic bezier curves
+        // Quadratic bezier curved path
         ctx.beginPath();
         const startX = (points[0].x + points[pointsCount - 1].x) * 0.5;
         const startY = (points[0].y + points[pointsCount - 1].y) * 0.5;
@@ -543,7 +672,6 @@ export const CursorReactiveBackground: React.FC = () => {
         }
         ctx.closePath();
 
-        // Multi-stop translucent liquid crystal gradient fill
         const blobGrad = ctx.createRadialGradient(
           blob.x + Math.cos(blob.stretchAngle) * 35,
           blob.y + Math.sin(blob.stretchAngle) * 35,
@@ -560,15 +688,15 @@ export const CursorReactiveBackground: React.FC = () => {
         ctx.fillStyle = blobGrad;
         ctx.fill();
 
-        // Polished crystal caustic edge highlight
+        // Crystal caustic rim
         ctx.lineWidth = 1.3;
         ctx.strokeStyle = blob.rimColor;
         ctx.stroke();
 
-        // Moving internal specular caustic sheen line
+        // Internal specular caustic sheen
         if (!prefersReducedMotion) {
           ctx.save();
-          ctx.clip(); // Restrict specular highlight to inside this liquid blob
+          ctx.clip();
           const sheenX = blob.x + Math.sin(timeSec * 0.6 + blob.rotation) * (blob.baseRadius * 0.45);
           const sheenY = blob.y + Math.cos(timeSec * 0.5 + blob.rotation) * (blob.baseRadius * 0.35);
           const sheenGrad = ctx.createRadialGradient(
@@ -596,12 +724,12 @@ export const CursorReactiveBackground: React.FC = () => {
       const sheenGrad = ctx.createLinearGradient(
         sheenOffset,
         0,
-        sheenOffset + 240,
+        sheenOffset + 260,
         height
       );
       sheenGrad.addColorStop(0, 'transparent');
       sheenGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.015)');
-      sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.035)');
+      sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.038)');
       sheenGrad.addColorStop(0.55, 'rgba(16, 185, 129, 0.02)');
       sheenGrad.addColorStop(1, 'transparent');
 
@@ -613,7 +741,7 @@ export const CursorReactiveBackground: React.FC = () => {
       ctx.fillRect(-200, -200, width + 400, height + 400);
       ctx.restore();
 
-      // 5. Update & Draw High-Tech Liquid Glass Distortion Ripples
+      // 5. Update & Draw Liquid Glass Distortion Ripples anywhere on screen
       for (let rIdx = ripples.length - 1; rIdx >= 0; rIdx--) {
         const ripple = ripples[rIdx];
         ripple.radius += ripple.speed;
@@ -626,7 +754,6 @@ export const CursorReactiveBackground: React.FC = () => {
 
         ctx.save();
         ctx.beginPath();
-        // High-tech subtle distortion ring with slight harmonic wobble
         const wobblePoints = 32;
         for (let p = 0; p <= wobblePoints; p++) {
           const wAngle = (p / wobblePoints) * Math.PI * 2;
@@ -638,12 +765,10 @@ export const CursorReactiveBackground: React.FC = () => {
         }
         ctx.closePath();
 
-        // Specular translucent liquid glass distortion crest
         ctx.lineWidth = ripple.thickness;
         ctx.strokeStyle = `rgba(255, 255, 255, ${(ripple.opacity * 0.55).toFixed(3)})`;
         ctx.stroke();
 
-        // Subtle green/cyan refractive caustic companion line
         ctx.lineWidth = ripple.thickness * 1.6;
         ctx.strokeStyle = `rgba(16, 185, 129, ${(ripple.opacity * 0.35).toFixed(3)})`;
         ctx.stroke();
@@ -651,33 +776,72 @@ export const CursorReactiveBackground: React.FC = () => {
         ctx.restore();
       }
 
-      // 6. Dynamic Nucleus Position with smooth parallax toward cursor
-      const baseCenterX = width * 0.5;
-      const baseCenterY = height * 0.38;
+      // 6. Secondary Quantum Satellites (Permanent upper & lower quadrant luminous activity)
+      satellites.forEach((sat) => {
+        const targetSatX = sat.baseXRatio * width + (isTouch ? 0 : normX * 40);
+        const targetSatY = sat.baseYRatio * height + (isTouch ? 0 : normY * 40);
+        sat.x += (targetSatX - sat.x) * 0.05;
+        sat.y += (targetSatY - sat.y) * 0.05;
 
-      const targetNucleusX = isTouch ? baseCenterX : baseCenterX + normX * 85;
-      const targetNucleusY = isTouch ? baseCenterY : baseCenterY + normY * 65;
+        // Satellite Halo
+        const satHalo = ctx.createRadialGradient(sat.x, sat.y, 2, sat.x, sat.y, 55);
+        satHalo.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+        satHalo.addColorStop(0.5, 'rgba(56, 189, 248, 0.08)');
+        satHalo.addColorStop(1, 'transparent');
+        ctx.fillStyle = satHalo;
+        ctx.beginPath();
+        ctx.arc(sat.x, sat.y, 55, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Satellite Core Node
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(sat.x, sat.y, sat.radius * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Micro-orbiting satellite particles
+        sat.particles.forEach((sp) => {
+          sp.angle += sp.speed * dt;
+          const px = sat.x + Math.cos(sp.angle) * sp.dist;
+          const py = sat.y + Math.sin(sp.angle) * (sp.dist * 0.6);
+
+          ctx.fillStyle = sp.color;
+          ctx.beginPath();
+          ctx.arc(px, py, sp.size, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.beginPath();
+          ctx.arc(px, py, sp.size * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+
+      // 7. Dynamic Central Nucleus Position (Follows cursor smoothly across entire screen)
+      const baseCenterX = width * 0.5;
+      const baseCenterY = height * 0.5;
+
+      const targetNucleusX = isTouch ? baseCenterX : baseCenterX + normX * (width * 0.32);
+      const targetNucleusY = isTouch ? baseCenterY : baseCenterY + normY * (height * 0.32);
 
       nucleusX += (targetNucleusX - nucleusX) * lerpFactor;
       nucleusY += (targetNucleusY - nucleusY) * lerpFactor;
 
-      // Cursor proximity calculation
       const distToCursor = Math.hypot(mouseX - nucleusX, mouseY - nucleusY);
-      const proximity = isTouch ? 0 : Math.max(0, 1 - distToCursor / 520);
+      const proximity = isTouch ? 0.35 : Math.max(0, 1 - distToCursor / 480);
 
       const speedMultiplier = 1 + proximity * 0.55;
-      const glowBoost = 1 + proximity * 0.5;
+      const glowBoost = 1 + proximity * 0.55;
 
-      // 3D Tilt angles influenced by cursor pitch and roll
-      const tiltX = isTouch ? 0 : -normY * 0.42;
+      const tiltX = isTouch ? 0 : -normY * 0.45;
       const tiltY = isTouch ? 0 : normX * 0.48;
 
-      // 7. Draw Central Nucleus (Atomic Quantum Core)
+      // 8. Draw Central Nucleus (Atomic Quantum Core)
       const pulse = prefersReducedMotion ? 0 : Math.sin(timeSec * 2.4) * 2.5;
       const nucleusRadius = (22 + pulse) * (1 + proximity * 0.15);
 
-      // Outer Corona (Subtle atmospheric emerald & silver atmospheric glow)
-      const coronaRadius = 145 * glowBoost;
+      // Outer Corona
+      const coronaRadius = 150 * glowBoost;
       const coronaGrad = ctx.createRadialGradient(
         nucleusX,
         nucleusY,
@@ -686,9 +850,9 @@ export const CursorReactiveBackground: React.FC = () => {
         nucleusY,
         coronaRadius
       );
-      coronaGrad.addColorStop(0, `rgba(16, 185, 129, ${0.18 * glowBoost})`);
-      coronaGrad.addColorStop(0.35, `rgba(56, 189, 248, ${0.09 * glowBoost})`);
-      coronaGrad.addColorStop(0.7, `rgba(203, 213, 225, ${0.04 * glowBoost})`);
+      coronaGrad.addColorStop(0, `rgba(16, 185, 129, ${0.20 * glowBoost})`);
+      coronaGrad.addColorStop(0.35, `rgba(56, 189, 248, ${0.10 * glowBoost})`);
+      coronaGrad.addColorStop(0.7, `rgba(203, 213, 225, ${0.05 * glowBoost})`);
       coronaGrad.addColorStop(1, 'transparent');
 
       ctx.fillStyle = coronaGrad;
@@ -705,9 +869,9 @@ export const CursorReactiveBackground: React.FC = () => {
         nucleusY,
         nucleusRadius * 2.2
       );
-      haloGrad.addColorStop(0, `rgba(255, 255, 255, ${0.9 * glowBoost})`);
-      haloGrad.addColorStop(0.25, `rgba(110, 231, 183, ${0.75 * glowBoost})`);
-      haloGrad.addColorStop(0.65, `rgba(16, 185, 129, ${0.35 * glowBoost})`);
+      haloGrad.addColorStop(0, `rgba(255, 255, 255, ${0.92 * glowBoost})`);
+      haloGrad.addColorStop(0.25, `rgba(110, 231, 183, ${0.78 * glowBoost})`);
+      haloGrad.addColorStop(0.65, `rgba(16, 185, 129, ${0.38 * glowBoost})`);
       haloGrad.addColorStop(1, 'transparent');
 
       ctx.fillStyle = haloGrad;
@@ -742,15 +906,26 @@ export const CursorReactiveBackground: React.FC = () => {
           const subX = nucleusX + Math.cos(subAngle) * subDist;
           const subY = nucleusY + Math.sin(subAngle) * subDist * 0.7;
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
           ctx.beginPath();
           ctx.arc(subX, subY, 2.2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
-      // 8. Draw 3D Elliptical Orbital Paths
-      orbits.forEach((orbit) => {
+      // 9. Draw 6 Expansive 3D Elliptical Orbital Paths
+      // Scale dynamically with viewport dimensions so orbits span entire window
+      const computedOrbits = orbits.map((o) => {
+        const radX = Math.max(o.baseRadiusX, width * o.radiusXFactor);
+        const radY = Math.max(o.baseRadiusY, height * o.radiusYFactor);
+        return {
+          ...o,
+          radX,
+          radY,
+        };
+      });
+
+      computedOrbits.forEach((orbit) => {
         const segments = 80;
         ctx.beginPath();
 
@@ -762,8 +937,8 @@ export const CursorReactiveBackground: React.FC = () => {
 
         for (let s = 0; s <= segments; s++) {
           const phi = (s / segments) * Math.PI * 2;
-          const lx = Math.cos(phi) * orbit.radiusX;
-          const ly = Math.sin(phi) * orbit.radiusY;
+          const lx = Math.cos(phi) * orbit.radX;
+          const ly = Math.sin(phi) * orbit.radY;
           const lz = 0;
 
           const proj = project3D(
@@ -793,7 +968,6 @@ export const CursorReactiveBackground: React.FC = () => {
         );
         ctx.stroke();
 
-        // Subtle specular highlight along closest section of the orbital ring
         if (proximity > 0.05) {
           ctx.lineWidth = 1.8;
           ctx.strokeStyle = orbit.glowColor.replace(
@@ -804,18 +978,18 @@ export const CursorReactiveBackground: React.FC = () => {
         }
       });
 
-      // 9. Update & Draw Orbiting Particles (with 3D depth and light trails)
+      // 10. Update & Draw Orbiting Particles (with 3D depth and light trails)
       const renderedParticles = particles.map((p) => {
         p.angle += p.speed * speedMultiplier * dt;
 
-        const orbit = orbits[p.orbitIndex];
+        const orbit = computedOrbits[p.orbitIndex];
         const combinedRotX = orbit.inclinationX + tiltX;
         const combinedRotY = tiltY;
         const combinedRotZ = orbit.inclinationZ;
 
         const wobble = prefersReducedMotion ? 0 : Math.sin(timeSec * p.wobbleSpeed + p.wobbleOffset) * 4;
-        const lx = Math.cos(p.angle) * (orbit.radiusX + wobble);
-        const ly = Math.sin(p.angle) * (orbit.radiusY + wobble);
+        const lx = Math.cos(p.angle) * (orbit.radX + wobble);
+        const ly = Math.sin(p.angle) * (orbit.radY + wobble);
         const lz = 0;
 
         let proj = project3D(
@@ -829,14 +1003,14 @@ export const CursorReactiveBackground: React.FC = () => {
           nucleusY
         );
 
-        // Magnetic cursor interaction
+        // Magnetic cursor deflection everywhere on screen
         if (!isTouch) {
           const dxCursor = proj.x - mouseX;
           const dyCursor = proj.y - mouseY;
           const distParticleToCursor = Math.hypot(dxCursor, dyCursor);
 
-          if (distParticleToCursor < 180 && distParticleToCursor > 0.1) {
-            const push = (1 - distParticleToCursor / 180) * 26;
+          if (distParticleToCursor < 190 && distParticleToCursor > 0.1) {
+            const push = (1 - distParticleToCursor / 190) * 28;
             proj.x += (dxCursor / distParticleToCursor) * push;
             proj.y += (dyCursor / distParticleToCursor) * push;
           }
@@ -854,7 +1028,7 @@ export const CursorReactiveBackground: React.FC = () => {
         };
       });
 
-      // Sort by Z coordinate (true back-to-front depth rendering)
+      // Sort by Z coordinate (back-to-front depth rendering)
       renderedParticles.sort((a, b) => a.z - b.z);
 
       renderedParticles.forEach(({ particle: p, proj }) => {
@@ -912,7 +1086,7 @@ export const CursorReactiveBackground: React.FC = () => {
         ctx.fill();
       });
 
-      // 10. Update and Draw Ambient Quantum Dust / Sparkles
+      // 11. Update and Draw Ambient Quantum Dust / Sparkles across entire screen
       ambientNodes.forEach((node) => {
         if (!prefersReducedMotion) {
           node.x += node.vx;
@@ -943,33 +1117,53 @@ export const CursorReactiveBackground: React.FC = () => {
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
 
   return (
     <div
-      className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-1000"
+      id="global-black-liquid-background"
+      className="fixed inset-0 w-screen h-screen pointer-events-none overflow-hidden z-0 transition-opacity duration-1000"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}
       aria-hidden="true"
     >
-      {/* 1. Underlying Atmospheric Ambient Mesh Glow (Subtle emerald/cyan luminous depth behind liquid crystal) */}
+      {/* 1. Underlying Atmospheric Ambient Mesh Glow spanning full height */}
       <div
-        className="absolute inset-0 opacity-80"
+        className="absolute inset-0 w-full h-full pointer-events-none opacity-85"
         style={{
           background:
-            'radial-gradient(1200px circle at 50% 38%, rgba(16, 185, 129, 0.06), rgba(56, 189, 248, 0.035) 45%, transparent 75%)',
+            'radial-gradient(1400px circle at 50% 50%, rgba(16, 185, 129, 0.06), rgba(56, 189, 248, 0.035) 45%, transparent 75%)',
         }}
       />
 
       {/* 2. Interactive Black Liquid Crystal & 3D Orbital Particle System Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 block w-full h-full pointer-events-none will-change-transform"
+        className="fixed inset-0 block w-full h-full pointer-events-none z-0 will-change-transform"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
       />
 
-      {/* 3. Subtle Crystal Specular Lattice Grid Overlay (Maintains polished crystal depth) */}
+      {/* 3. Subtle Crystal Specular Lattice Grid Overlay across entire viewport */}
       <div
-        className="absolute inset-0 opacity-[0.025] pointer-events-none"
+        className="absolute inset-0 w-full h-full opacity-[0.025] pointer-events-none"
         style={{
           backgroundImage:
             'radial-gradient(rgba(255, 255, 255, 0.45) 1px, transparent 1px), radial-gradient(rgba(255, 255, 255, 0.45) 1px, transparent 1px)',

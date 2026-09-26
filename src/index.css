@@ -369,6 +369,32 @@
   border-color: rgba(56, 189, 248, 0.18) !important;
 }
 
+.bg-\[\#1e293b\]\/92 {
+  background-color: rgba(10, 14, 23, 0.55) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+}
+
+.bg-\[\#00873a\]\/92 {
+  background-color: rgba(0, 107, 44, 0.52) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Global full-viewport background layer */
+#global-black-liquid-background {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  overflow: hidden !important;
+}
+
 /* 3. POLISHED TRANSLUCENT CRYSTAL BORDERS */
 .border-white\/50,
 .border-white\/55,
