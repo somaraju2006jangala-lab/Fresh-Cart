@@ -1,7 +1,20 @@
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { defineConfig, loadEnv, Plugin } from 'vite';
+
+const projectRootDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
+
+// Ensure project root .env is loaded into process.env before server middleware is attached
+try {
+  dotenv.config({ path: path.join(projectRootDir, '.env'), quiet: true } as any);
+  dotenv.config({ path: path.join(projectRootDir, '.env.local'), quiet: true, override: false } as any);
+} catch {
+  // ignore
+}
+
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import { defineConfig, Plugin } from 'vite';
 import { apiApp } from './server/apiRouter.ts';
 
 function backendApiPlugin(): Plugin {
@@ -20,12 +33,20 @@ function backendApiPlugin(): Plugin {
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  // Synchronize all environment variables (including server secrets) into process.env
+  const env = loadEnv(mode, process.cwd(), '');
+  for (const [key, val] of Object.entries(env)) {
+    if (val && typeof val === 'string' && val.trim() && !process.env[key]) {
+      process.env[key] = val.trim();
+    }
+  }
+
   return {
     plugins: [react(), tailwindcss(), backendApiPlugin()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': projectRootDir,
       },
     },
     server: {
