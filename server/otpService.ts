@@ -22,6 +22,7 @@ const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'freshcart_data')
   : path.resolve(process.cwd(), '.data');
 const STORE_FILE = path.join(DATA_DIR, 'otp_store.json');
+const REGISTRATION_STORE_FILE = path.join(DATA_DIR, 'registration_otp_store.json');
 
 // Ensure server data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -33,6 +34,24 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 const otpStore = new Map<string, StoredOtpRecord>();
+
+export interface StoredRegistrationOtpRecord {
+  normalizedPhone: string; // E.164 strictly: +919876543210
+  maskedPhone: string;
+  hashedOtp: string;
+  salt: string;
+  expiresAt: number; // 10 minutes expiry timestamp (ms)
+  attempts: number;
+  maxAttempts: number; // 5 attempts limit
+  status: 'UNUSED' | 'USED' | 'EXPIRED' | 'LOCKED' | 'CONSUMED';
+  createdAt: string;
+  lastSentAt: number;
+  verifiedAt?: string;
+  verificationToken?: string;
+  tokenExpiresAt?: number;
+}
+
+const registrationOtpStore = new Map<string, StoredRegistrationOtpRecord>();
 
 function loadStore(): void {
   try {
@@ -55,7 +74,29 @@ function persistStore(): void {
   }
 }
 
+function loadRegistrationStore(): void {
+  try {
+    if (fs.existsSync(REGISTRATION_STORE_FILE)) {
+      const data = fs.readFileSync(REGISTRATION_STORE_FILE, 'utf-8');
+      const records: StoredRegistrationOtpRecord[] = JSON.parse(data);
+      records.forEach((r) => registrationOtpStore.set(r.normalizedPhone, r));
+    }
+  } catch {
+    // Ignore error
+  }
+}
+
+function persistRegistrationStore(): void {
+  try {
+    const records = Array.from(registrationOtpStore.values());
+    fs.writeFileSync(REGISTRATION_STORE_FILE, JSON.stringify(records, null, 2), 'utf-8');
+  } catch {
+    // Ignore error
+  }
+}
+
 loadStore();
+loadRegistrationStore();
 
 /**
  * Mask mobile number to format: ******1234 (exact requirement: Example: ******1234)
@@ -340,3 +381,364 @@ export function getOrderOtpStatus(orderId: string): {
   };
 }
 
+/**
+ * Validates an Indian mobile number.
+ * Requirements:
+ * - Exactly 10 digits after optional country code / prefix.
+ * - Starts with 6, 7, 8, or 9.
+ * - Rejects letters and special characters.
+ * - Returns normalized E.164 strictly formatted: +919876543210 (no spaces, dashes, or parentheses).
+ */
+export function validateIndianMobile(input: string): {
+  isValid: boolean;
+  normalized?: string;
+  digits?: string;
+  error?: string;
+} {
+  if (!input || typeof input !== 'string') {
+    return {
+      isValid: false,
+      error: 'Mobile number is required.',
+    };
+  }
+
+  const trimmed = input.trim();
+
+  // Reject letters
+  if (/[a-zA-Z]/.test(trimmed)) {
+    return {
+      isValid: false,
+      error: 'Mobile number must contain digits only. Letters are not allowed.',
+    };
+  }
+
+  // Reject special characters (only digits, spaces, hyphens, and leading plus allowed)
+  if (/[^\d+\-\s]/.test(trimmed)) {
+    return {
+      isValid: false,
+      error: 'Mobile number cannot contain special characters.',
+    };
+  }
+
+  // Extract clean digits
+  let digits = trimmed.replace(/\D/g, '');
+
+  // Strip leading country code if present (+91 or 91) or leading trunk zero (0)
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  // Check length: exactly 10 digits
+  if (digits.length < 10) {
+    return {
+      isValid: false,
+      error: 'Please enter a complete 10-digit Indian mobile number.',
+    };
+  }
+  if (digits.length > 10) {
+    return {
+      isValid: false,
+      error: 'Mobile number cannot exceed 10 digits.',
+    };
+  }
+
+  // Check Indian mobile numbering pattern: first digit must be 6, 7, 8, or 9
+  if (!/^[6-9]\d{9}$/.test(digits)) {
+    return {
+      isValid: false,
+      error: 'Please enter a valid Indian mobile number starting with 6, 7, 8, or 9.',
+    };
+  }
+
+  const normalized = `+91${digits}`;
+
+  return {
+    isValid: true,
+    normalized,
+    digits,
+  };
+}
+
+/**
+ * Generates a server-side 6-digit OTP for Customer Registration,
+ * hashes it using salted SHA-256, establishes a 10-minute expiry and 30s resend cooldown,
+ * and dispatches via Twilio / configured SMS provider to +91XXXXXXXXXX.
+ */
+export async function generateRegistrationOtp(
+  rawPhone: string
+): Promise<{
+  success: boolean;
+  maskedPhone?: string;
+  expiresAt?: number;
+  cooldownSeconds?: number;
+  delivery?: SmsDeliveryResult;
+  error?: string;
+}> {
+  const validation = validateIndianMobile(rawPhone);
+  if (!validation.isValid || !validation.normalized) {
+    return {
+      success: false,
+      error: validation.error || 'Invalid Indian mobile number.',
+    };
+  }
+
+  const normalizedPhone = validation.normalized;
+  const existing = registrationOtpStore.get(normalizedPhone);
+  const now = Date.now();
+
+  // Enforce 30-second cooldown
+  if (existing && existing.lastSentAt && now - existing.lastSentAt < 30 * 1000) {
+    const secondsRemaining = Math.ceil((30 * 1000 - (now - existing.lastSentAt)) / 1000);
+    return {
+      success: false,
+      error: `Please wait ${secondsRemaining}s before requesting another OTP.`,
+      cooldownSeconds: secondsRemaining,
+    };
+  }
+
+  // Invalidate any previous OTP for this registration phone
+  if (existing && existing.status !== 'USED' && existing.status !== 'CONSUMED') {
+    existing.status = 'EXPIRED';
+  }
+
+  // Generate secure 6-digit number server-side
+  const rawOtp = crypto.randomInt(100000, 1000000).toString();
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hashedOtp = hashOtp(rawOtp, salt);
+
+  const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
+  const maskedPhone = maskMobileNumber(normalizedPhone);
+
+  const record: StoredRegistrationOtpRecord = {
+    normalizedPhone,
+    maskedPhone,
+    hashedOtp,
+    salt,
+    expiresAt,
+    attempts: 0,
+    maxAttempts: 5,
+    status: 'UNUSED',
+    createdAt: new Date().toISOString(),
+    lastSentAt: now,
+  };
+
+  registrationOtpStore.set(normalizedPhone, record);
+  persistRegistrationStore();
+
+  // Attempt real SMS delivery via configured SMS provider
+  const delivery = await dispatchOtpSms(
+    normalizedPhone,
+    rawOtp,
+    'registration',
+    { purpose: 'registration' }
+  );
+
+  return {
+    success: delivery.sent,
+    maskedPhone,
+    expiresAt,
+    cooldownSeconds: 30,
+    delivery,
+    ...(delivery.sent ? {} : { error: delivery.message || 'OTP could not be sent. Please verify the mobile number or try again later.' }),
+  };
+}
+
+/**
+ * Verifies submitted OTP for customer registration against backend salted SHA-256 hash.
+ */
+export function verifyRegistrationOtp(
+  rawPhone: string,
+  submittedOtp: string
+): {
+  success: boolean;
+  message?: string;
+  error?: string;
+  verificationToken?: string;
+  phone?: string;
+  remainingAttempts?: number;
+} {
+  const validation = validateIndianMobile(rawPhone);
+  if (!validation.isValid || !validation.normalized) {
+    return {
+      success: false,
+      error: validation.error || 'Invalid Indian mobile number.',
+    };
+  }
+
+  const normalizedPhone = validation.normalized;
+  const record = registrationOtpStore.get(normalizedPhone);
+
+  if (!record) {
+    return {
+      success: false,
+      error: 'No active OTP found. Please request an OTP.',
+    };
+  }
+
+  // 1. Used OTP cannot be reused
+  if (record.status === 'USED' || record.status === 'CONSUMED') {
+    return {
+      success: false,
+      error: 'OTP is no longer valid. Please request a new OTP.',
+    };
+  }
+
+  // 2. Lockout protection against repeated incorrect attempts
+  if (record.status === 'LOCKED' || record.attempts >= record.maxAttempts) {
+    return {
+      success: false,
+      error: 'Maximum incorrect OTP attempts exceeded. Please request a new OTP.',
+      remainingAttempts: 0,
+    };
+  }
+
+  // 3. 10-Minute Expiry check
+  const now = Date.now();
+  if (now > record.expiresAt || record.status === 'EXPIRED') {
+    record.status = 'EXPIRED';
+    persistRegistrationStore();
+    return {
+      success: false,
+      error: 'OTP expired. Please request a new OTP.',
+      remainingAttempts: 0,
+    };
+  }
+
+  // 4. Timing-safe comparison of SHA-256 salted hashes
+  const cleanInput = (submittedOtp || '').trim();
+  if (cleanInput.length !== 6 || !/^\d{6}$/.test(cleanInput)) {
+    return {
+      success: false,
+      error: 'Invalid OTP. Please try again.',
+    };
+  }
+
+  const candidateHash = hashOtp(cleanInput, record.salt);
+  const bufA = Buffer.from(candidateHash, 'hex');
+  const bufB = Buffer.from(record.hashedOtp, 'hex');
+  const matches = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+
+  if (matches) {
+    // CORRECT OTP
+    const verifiedAt = new Date().toISOString();
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
+    record.status = 'USED';
+    record.verifiedAt = verifiedAt;
+    record.verificationToken = verificationToken;
+    record.tokenExpiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes to complete registration
+    persistRegistrationStore();
+
+    return {
+      success: true,
+      message: '✓ Mobile number verified',
+      verificationToken,
+      phone: normalizedPhone,
+    };
+  } else {
+    // INCORRECT OTP
+    record.attempts += 1;
+    const remaining = Math.max(0, record.maxAttempts - record.attempts);
+    if (remaining === 0) {
+      record.status = 'LOCKED';
+    }
+    persistRegistrationStore();
+
+    return {
+      success: false,
+      error: 'Invalid OTP. Please try again.',
+      remainingAttempts: remaining,
+    };
+  }
+}
+
+/**
+ * Resends a registration OTP, enforcing 30-second cooldown and invalidating the previous OTP.
+ */
+export async function resendRegistrationOtp(rawPhone: string) {
+  return generateRegistrationOtp(rawPhone);
+}
+
+/**
+ * Validates on the backend that the given normalized phone number was actually verified via OTP.
+ * Prevents client-side tamper attacks where an attacker verifies number A but submits number B.
+ */
+export function validateRegistrationVerification(
+  rawPhone: string,
+  verificationToken?: string
+): {
+  verified: boolean;
+  normalizedPhone?: string;
+  error?: string;
+} {
+  const validation = validateIndianMobile(rawPhone);
+  if (!validation.isValid || !validation.normalized) {
+    return {
+      verified: false,
+      error: validation.error || 'Invalid Indian mobile number.',
+    };
+  }
+
+  const normalizedPhone = validation.normalized;
+  const record = registrationOtpStore.get(normalizedPhone);
+
+  if (!record) {
+    return {
+      verified: false,
+      error: 'Mobile number has not been verified with OTP.',
+    };
+  }
+
+  // Must have been verified
+  if (record.status !== 'USED' && record.status !== 'CONSUMED') {
+    return {
+      verified: false,
+      error: 'Mobile number has not been verified with OTP.',
+    };
+  }
+
+  // If a token is supplied, verify it matches and has not expired
+  if (verificationToken) {
+    if (record.verificationToken !== verificationToken) {
+      return {
+        verified: false,
+        error: 'Verification session mismatch. Please verify your mobile number again.',
+      };
+    }
+    if (record.tokenExpiresAt && Date.now() > record.tokenExpiresAt) {
+      return {
+        verified: false,
+        error: 'Verification session expired. Please verify your mobile number again.',
+      };
+    }
+  }
+
+  return {
+    verified: true,
+    normalizedPhone,
+  };
+}
+
+/**
+ * Consumes the registration verification session after account creation.
+ */
+export function consumeRegistrationVerification(
+  rawPhone: string,
+  verificationToken?: string
+): boolean {
+  const validation = validateIndianMobile(rawPhone);
+  if (!validation.isValid || !validation.normalized) return false;
+
+  const record = registrationOtpStore.get(validation.normalized);
+  if (!record) return false;
+
+  if (verificationToken && record.verificationToken !== verificationToken) {
+    return false;
+  }
+
+  record.status = 'CONSUMED';
+  persistRegistrationStore();
+  return true;
+}

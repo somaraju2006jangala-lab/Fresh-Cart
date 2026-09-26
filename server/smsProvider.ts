@@ -36,10 +36,7 @@ export function ensureEnvLoaded(): void {
           const parsed = dotenv.parse(content);
           for (const [k, v] of Object.entries(parsed)) {
             if (v && typeof v === 'string' && v.trim().length > 0) {
-              // Populate if currently missing or empty in process.env
-              if (!process.env[k] || process.env[k]!.trim().length === 0) {
-                process.env[k] = v.trim();
-              }
+              process.env[k] = v.trim();
             }
           }
         } catch {
@@ -223,18 +220,32 @@ export function logSafeEnvStatus(): void {
 
 /**
  * Dispatches an OTP via the configured live SMS provider.
- * Uses exact customer-facing message:
- * "Your FreshCart order verification OTP is 123456. This OTP is valid for 10 minutes."
+ * Uses exact customer-facing message for orders or registrations:
+ * Order: "Your FreshCart order verification OTP is 123456. This OTP is valid for 10 minutes."
+ * Registration: "Your FreshCart registration verification OTP is 123456. This OTP is valid for 10 minutes."
  *
  * If unconfigured or provider rejects, returns sent: false without faking delivery.
  */
 export async function dispatchOtpSms(
   recipientPhone: string,
   otp: string,
-  _orderId: string
+  _contextId: string,
+  options?: { purpose?: 'order' | 'registration'; customMessage?: string }
 ): Promise<SmsDeliveryResult> {
   const config = getSmsProviderConfig();
-  const smsBody = `Your FreshCart order verification OTP is ${otp}. This OTP is valid for 10 minutes.`;
+  const purpose = options?.purpose || 'order';
+  const smsBody = options?.customMessage || (
+    purpose === 'registration'
+      ? `Your FreshCart registration verification OTP is ${otp}. This OTP is valid for 10 minutes.`
+      : `Your FreshCart order verification OTP is ${otp}. This OTP is valid for 10 minutes.`
+  );
+
+  const cleanPhone = formatE164Phone(recipientPhone);
+  const maskedPhone = cleanPhone.length >= 4 ? `******${cleanPhone.slice(-4)}` : '******0000';
+
+  console.log(`[SMS Provider] OTP request received`);
+  console.log(`[SMS Provider] Phone: ${maskedPhone}`);
+  console.log(`[SMS Provider] Provider: ${config.activeProvider === 'twilio' ? 'Twilio' : (config.activeProvider === 'fast2sms' ? 'Fast2SMS' : 'None')}`);
 
   // 1. TWILIO PROVIDER
   if (config.activeProvider === 'twilio') {
@@ -264,6 +275,7 @@ export async function dispatchOtpSms(
 
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.sid) {
+        console.log(`[SMS Provider] Sent: true`);
         return {
           sent: true,
           provider: 'Twilio',
@@ -272,20 +284,25 @@ export async function dispatchOtpSms(
           message: `OTP SMS delivered to carrier route for ${e164Phone}.`,
         };
       } else {
+        console.log(`[SMS Provider] Sent: false`);
         const errorDetail = data.message || `Twilio dispatch rejected (Status ${response.status}).`;
+        console.warn(`[SMS Provider] Twilio delivery rejected: ${data.code ? `Twilio Code ${data.code}: ` : ''}${errorDetail}`);
+        // Return clear, user-friendly error conforming to Section 7 & 21
         return {
           sent: false,
           provider: 'Twilio',
           status: 'FAILED',
-          message: errorDetail,
+          message: 'OTP could not be sent. Please verify the mobile number or try again later.',
         };
       }
     } catch (err: any) {
+      console.log(`[SMS Provider] Sent: false`);
+      console.warn(`[SMS Provider] Twilio network error:`, err?.message);
       return {
         sent: false,
         provider: 'Twilio',
         status: 'FAILED',
-        message: err.message || 'Twilio network request error.',
+        message: 'OTP could not be sent. Please verify the mobile number or try again later.',
       };
     }
   }

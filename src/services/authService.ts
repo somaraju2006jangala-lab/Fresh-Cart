@@ -1,5 +1,10 @@
 import { Customer, CustomerAddress, CustomerOrder } from '../types';
 import { INITIAL_PRODUCTS } from '../data/products';
+import {
+  validateIndianMobileNumber,
+  verifyRegistrationPhoneWithBackend,
+  consumeRegistrationTokenWithBackend,
+} from './registrationOtpService';
 
 const STORAGE_CUSTOMERS_KEY = 'freshcart_registered_customers';
 const STORAGE_CURRENT_USER_KEY = 'freshcart_active_customer_session';
@@ -372,14 +377,30 @@ export interface RegisterPayload {
   phone: string;
   password: string;
   address: string;
+  verificationToken?: string;
+}
+
+/**
+ * Checks if an Indian mobile number is already registered to an existing customer.
+ */
+export function isPhoneRegistered(rawPhone: string): boolean {
+  const val = validateIndianMobileNumber(rawPhone);
+  if (!val.isValid || !val.normalized) return false;
+  const customers = getStoredCustomers();
+  return customers.some((c) => {
+    if (!c.phone) return false;
+    const existingVal = validateIndianMobileNumber(c.phone);
+    return (existingVal.isValid && existingVal.normalized === val.normalized) || c.phone === val.normalized;
+  });
 }
 
 /**
  * Registers a new customer.
- * Hashes password using SHA-256 + cryptographic salt before persisting.
- *
- * NOTE: When connecting a real backend, replace this with:
- * const response = await fetch('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+ * - Validates required fields and Indian mobile number format.
+ * - Enforces duplicate mobile number prevention.
+ * - Verifies mobile number verification state with the backend (preventing client-side tampering).
+ * - Stores mobile number normalized strictly to E.164 format: +91XXXXXXXXXX.
+ * - Hashes password using SHA-256 + cryptographic salt before persisting.
  */
 export async function registerCustomer(
   payload: RegisterPayload
@@ -399,15 +420,52 @@ export async function registerCustomer(
     return { success: false, error: 'Password must be at least 6 characters long.' };
   }
 
+  // 1. Indian Mobile Number Validation
+  const phoneValidation = validateIndianMobileNumber(payload.phone);
+  if (!phoneValidation.isValid || !phoneValidation.normalized) {
+    return {
+      success: false,
+      error: phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number.',
+    };
+  }
+  const normalizedPhone = phoneValidation.normalized;
+
+  // 2. Duplicate Email & Duplicate Phone Prevention
   const customers = getStoredCustomers();
-  const alreadyExists = customers.some(
+  const emailAlreadyExists = customers.some(
     (c) => c.email.toLowerCase() === trimmedEmail
   );
 
-  if (alreadyExists) {
+  if (emailAlreadyExists) {
     return {
       success: false,
       error: 'An account with this email already exists. Please log in or use another email.',
+    };
+  }
+
+  const phoneAlreadyExists = customers.some((c) => {
+    if (!c.phone) return false;
+    const existingVal = validateIndianMobileNumber(c.phone);
+    return (existingVal.isValid && existingVal.normalized === normalizedPhone) || c.phone === normalizedPhone;
+  });
+
+  if (phoneAlreadyExists) {
+    return {
+      success: false,
+      error: 'This mobile number is already registered. Please use another number or log in.',
+    };
+  }
+
+  // 3. Backend Verification Check (Do not trust frontend verification state)
+  const backendCheck = await verifyRegistrationPhoneWithBackend(
+    normalizedPhone,
+    payload.verificationToken
+  );
+
+  if (!backendCheck.verified) {
+    return {
+      success: false,
+      error: backendCheck.error || 'Mobile number has not been verified. Please verify using OTP.',
     };
   }
 
@@ -419,9 +477,9 @@ export async function registerCustomer(
     id: `addr-${Date.now()}`,
     label: 'Primary Delivery',
     street: payload.address || 'Address on file',
-    city: 'Springfield',
-    state: 'OR',
-    zip: '97477',
+    city: 'Bengaluru',
+    state: 'KA',
+    zip: '560001',
     isDefault: true,
   };
 
@@ -429,7 +487,7 @@ export async function registerCustomer(
     id: newId,
     name: trimmedName,
     email: trimmedEmail,
-    phone: payload.phone || '',
+    phone: normalizedPhone, // E.164 normalized: +919876543210
     address: payload.address || '',
     savedAddresses: [defaultAddress],
     passwordSalt: salt,
@@ -441,6 +499,9 @@ export async function registerCustomer(
 
   customers.push(newCustomer);
   saveStoredCustomers(customers);
+
+  // Consume verification token with backend so it cannot be reused
+  consumeRegistrationTokenWithBackend(normalizedPhone, payload.verificationToken);
 
   // Auto-login new registered customer
   const sessionUser: Customer = {

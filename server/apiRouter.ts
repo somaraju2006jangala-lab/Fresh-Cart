@@ -7,6 +7,12 @@ import {
   resendOrderOtp,
   getOrderOtpStatus,
   maskMobileNumber,
+  validateIndianMobile,
+  generateRegistrationOtp,
+  verifyRegistrationOtp,
+  resendRegistrationOtp,
+  validateRegistrationVerification,
+  consumeRegistrationVerification,
 } from './otpService.ts';
 import { ensureEnvLoaded, getSmsProviderConfig, logSafeEnvStatus } from './smsProvider.ts';
 
@@ -165,6 +171,158 @@ apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:ord
  */
 apiRouter.get(['/api/otp/provider-config', '/otp/provider-config', '/provider-config'], (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
+});
+
+/**
+ * POST /api/auth/otp/send
+ * Sends OTP to an Indian mobile number during customer registration.
+ */
+apiRouter.post(['/api/auth/otp/send', '/auth/otp/send'], async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.body || {};
+    if (!phone) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Mobile number is required.',
+      });
+      return;
+    }
+
+    const validation = validateIndianMobile(phone);
+    if (!validation.isValid || !validation.normalized) {
+      sendJson(res, 400, {
+        success: false,
+        error: validation.error || 'Please enter a valid 10-digit Indian mobile number.',
+      });
+      return;
+    }
+
+    logSafeEnvStatus();
+
+    const result = await generateRegistrationOtp(validation.normalized);
+    if (!result.success) {
+      sendJson(res, 400, result);
+      return;
+    }
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    console.error('[Registration OTP] Exception in /api/auth/otp/send:', err?.message);
+    sendJson(res, 500, {
+      success: false,
+      error: 'OTP could not be sent. Please verify the mobile number or try again later.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/otp/verify
+ * Verifies submitted 6-digit OTP for registration.
+ */
+apiRouter.post(['/api/auth/otp/verify', '/auth/otp/verify'], (req: Request, res: Response) => {
+  try {
+    const { phone, otp } = req.body || {};
+    if (!phone || !otp) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Mobile number and 6-digit OTP code are required.',
+      });
+      return;
+    }
+
+    const result = verifyRegistrationOtp(phone, otp);
+    if (!result.success) {
+      sendJson(res, 400, result);
+      return;
+    }
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    console.error('[Registration OTP] Exception in /api/auth/otp/verify:', err?.message);
+    sendJson(res, 500, {
+      success: false,
+      error: 'Backend error verifying OTP.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/otp/resend
+ * Resends OTP with 30s cooldown and previous OTP invalidation.
+ */
+apiRouter.post(['/api/auth/otp/resend', '/auth/otp/resend'], async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.body || {};
+    if (!phone) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Mobile number is required to resend OTP.',
+      });
+      return;
+    }
+
+    const result = await resendRegistrationOtp(phone);
+    if (!result.success) {
+      sendJson(res, 400, result);
+      return;
+    }
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    console.error('[Registration OTP] Exception in /api/auth/otp/resend:', err?.message);
+    sendJson(res, 500, {
+      success: false,
+      error: 'Failed to resend OTP.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/verify-registration-phone
+ * Backend verification check: ensures mobile was actually verified before account is registered.
+ */
+apiRouter.post(['/api/auth/verify-registration-phone', '/auth/verify-registration-phone'], (req: Request, res: Response) => {
+  try {
+    const { phone, verificationToken } = req.body || {};
+    if (!phone) {
+      sendJson(res, 400, {
+        success: false,
+        verified: false,
+        error: 'Mobile number is required.',
+      });
+      return;
+    }
+
+    const check = validateRegistrationVerification(phone, verificationToken);
+    sendJson(res, check.verified ? 200 : 400, {
+      success: check.verified,
+      verified: check.verified,
+      normalizedPhone: check.normalizedPhone,
+      error: check.error,
+    });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      verified: false,
+      error: 'Failed to verify mobile status.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/consume-registration-token
+ * Invalidates token after account creation so it cannot be used again.
+ */
+apiRouter.post(['/api/auth/consume-registration-token', '/auth/consume-registration-token'], (req: Request, res: Response) => {
+  try {
+    const { phone, verificationToken } = req.body || {};
+    if (phone) {
+      consumeRegistrationVerification(phone, verificationToken);
+    }
+    sendJson(res, 200, { success: true });
+  } catch {
+    sendJson(res, 200, { success: true });
+  }
 });
 
 const SETTINGS_FILE = process.env.VERCEL
