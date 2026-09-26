@@ -182,8 +182,9 @@ export async function dispatchOtpSms(
       const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
 
       const params = new URLSearchParams();
+      const fromParam = twilioPhone.startsWith('MG') ? twilioPhone : (twilioPhone.startsWith('+') ? twilioPhone : formatE164Phone(twilioPhone));
       params.append('To', e164Phone);
-      params.append('From', twilioPhone);
+      params.append('From', fromParam);
       params.append('Body', smsBody);
 
       const response = await fetch(twilioUrl, {
