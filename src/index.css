@@ -3,8 +3,8 @@
 @layer base {
   body {
     font-family: 'Inter', sans-serif;
-    color: #0b1c30;
-    background-color: #f8f9ff;
+    color: #f1f5f9;
+    background-color: #030305;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
@@ -23,71 +23,132 @@
 }
 
 /* ==========================================================================
-   GLASSMORPHISM DESIGN SYSTEM
+   BLACK LIQUID CRYSTAL-CLEAR GLASS THEME
+   - High transparency black glass (rgba(10, 14, 23, 0.42))
+   - Deep dimensional depth & blur
+   - Thin translucent crystal borders (rgba(255, 255, 255, 0.12))
+   - Subtle inner specular highlights
+   - Background liquid & orbital particle visibility through all panels
    ========================================================================== */
 
-/* Base semi-transparent glass panel */
+/* Base Black Crystal Glass Panel */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.76);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 8px 32px 0 rgba(11, 28, 48, 0.04);
+  background: rgba(10, 14, 23, 0.42);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
 }
 
-/* Elevated glass surface (modals, drawers, hero banners) */
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  pointer-events: none;
+}
+
+/* Elevated Black Crystal Glass Surface (Modals, drawers, hero banners) */
 .glass-panel-elevated {
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 16px 48px -8px rgba(11, 28, 48, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  background: rgba(12, 17, 28, 0.58);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.75), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+  position: relative;
 }
 
-/* Product & content glass card */
+.glass-panel-elevated::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  pointer-events: none;
+}
+
+/* Product & Content Black Crystal Glass Card */
 .glass-card {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 6px 24px -2px rgba(11, 28, 48, 0.03);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+  background: rgba(10, 14, 22, 0.38);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 24px -2px rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease,
+              background 0.3s ease;
+  position: relative;
 }
 
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 16px 36px -6px rgba(0, 107, 44, 0.08), 0 0 24px -4px rgba(16, 185, 129, 0.08);
+  background: rgba(16, 22, 34, 0.52);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.65), 0 0 20px 1px rgba(16, 185, 129, 0.15), inset 0 1px 2px 0 rgba(255, 255, 255, 0.2);
 }
 
-/* Glass Pill / Chip */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  pointer-events: none;
+}
+
+/* Black Crystal Glass Pill / Chip */
 .glass-pill {
-  background: rgba(239, 244, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-pill:hover {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
   transform: translateY(-1px);
 }
 
-/* Glass Header */
+/* Black Crystal Glass Header */
 .glass-header {
-  background: rgba(248, 249, 255, 0.82);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(229, 238, 255, 0.75);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+  background: rgba(6, 9, 15, 0.65);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6), inset 0 -1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Black Crystal Glass Input */
+.glass-input {
+  background: rgba(14, 20, 32, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  background: rgba(20, 28, 44, 0.65);
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.15);
 }
 
 /* ==========================================================================
-   INTERACTIVE BUTTON & HOVER ELEVATIONS
-   - Smoothly change elevation/shadow
-   - Slightly brighten glass surface
-   - Subtle hover movement (no excessive bouncing)
+   BUTTON & HOVER ELEVATIONS
+   - Emerald accents glowing against black crystal
    ========================================================================== */
 
 .glass-button {
@@ -99,25 +160,35 @@
 
 .glass-button:hover {
   transform: translateY(-1.5px);
-  filter: brightness(1.03);
+  filter: brightness(1.06);
 }
 
 .glass-button:active {
   transform: translateY(0px) scale(0.99);
 }
 
-/* Primary emerald button enhancement */
-.btn-emerald-glass {
-  background: #006b2c;
+/* Primary emerald button enhancement with subtle luminous glow */
+.btn-emerald-glass,
+.bg-\[\#006b2c\],
+.bg-\[\#00873a\],
+.bg-\[\#15803d\],
+.bg-\[\#16a34a\] {
+  background: linear-gradient(135deg, #00873a 0%, #006b2c 100%) !important;
+  border: 1px solid rgba(127, 252, 151, 0.25) !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 107, 44, 0.4), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              background-color 0.25s ease;
+              background 0.25s ease,
+              filter 0.25s ease !important;
 }
 
-.btn-emerald-glass:hover {
-  background: #00873a;
+.btn-emerald-glass:hover,
+.hover\:bg-\[\#00873a\]:hover {
+  background: linear-gradient(135deg, #00a346 0%, #007530 100%) !important;
   transform: translateY(-1.5px);
-  box-shadow: 0 6px 20px -2px rgba(0, 107, 44, 0.35);
+  box-shadow: 0 8px 24px -2px rgba(0, 107, 44, 0.55), 0 0 16px 1px rgba(52, 211, 153, 0.25), inset 0 1px 1px 0 rgba(255, 255, 255, 0.3) !important;
+  filter: brightness(1.05);
 }
 
 .btn-emerald-glass:active {
@@ -125,10 +196,8 @@
 }
 
 /* ==========================================================================
-   CART ICON HOVER INTERACTIONS
-   - Subtle emerald glow
-   - Slightly lift the icon
-   - Smooth transition
+   CART & FLOATING TOGGLE INTERACTIONS
+   - Black crystal glass base + subtle emerald accent glow
    ========================================================================== */
 
 .cart-icon-glow {
@@ -139,27 +208,35 @@
 
 .cart-icon-glow:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px -2px rgba(0, 107, 44, 0.35),
-              0 0 14px 1px rgba(127, 252, 151, 0.45);
-  filter: brightness(1.05);
+  box-shadow: 0 6px 20px -2px rgba(0, 107, 44, 0.45),
+              0 0 16px 2px rgba(16, 185, 129, 0.35);
+  filter: brightness(1.08);
 }
 
 .cart-icon-glow:active {
   transform: translateY(0px) scale(0.97);
 }
 
-/* Floating cart toggle button glow & lift */
+/* Floating cart toggle button */
 .cart-floating-glow {
+  background: rgba(10, 15, 24, 0.65) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.75), 0 0 20px 2px rgba(16, 185, 129, 0.25) !important;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 0.3s ease;
+              border-color 0.3s ease,
+              filter 0.3s ease !important;
 }
 
 .cart-floating-glow:hover {
   transform: translateY(-2.5px) scale(1.04);
-  box-shadow: 0 16px 36px -4px rgba(11, 28, 48, 0.4),
-              0 0 20px 2px rgba(127, 252, 151, 0.3);
-  filter: brightness(1.06);
+  background: rgba(15, 22, 34, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 20px 42px -4px rgba(0, 0, 0, 0.85),
+              0 0 28px 4px rgba(16, 185, 129, 0.4) !important;
+  filter: brightness(1.08);
 }
 
 .cart-floating-glow:active {
@@ -167,7 +244,7 @@
 }
 
 /* ==========================================================================
-   PRODUCT CARD 3D PARALLAX & GLASS SPECULAR
+   PRODUCT CARD 3D PARALLAX & SPECULAR
    ========================================================================== */
 
 .product-card-3d-wrap {
@@ -182,91 +259,252 @@
 }
 
 /* ==========================================================================
-   AMBIENT ORB & PARTICLE KEYFRAME ANIMATIONS
+   COMPREHENSIVE BLACK CRYSTAL GLASS CLASS MAPPINGS
+   Ensures EVERY existing panel, table, input, row, card, and modal
+   seamlessly transforms into crystal-clear black glass.
    ========================================================================== */
 
-@keyframes ambientFloat1 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(18px, -24px, 0) scale(1.04);
-  }
+/* 1. TEXT CONTRAST & LEGIBILITY */
+.text-\[\#0b1c30\],
+.text-\[\#0f172a\],
+.text-\[\#131b2e\],
+.text-\[\#3e4a3d\],
+.text-\[\#334155\],
+.text-\[\#002109\] {
+  color: #f8fafc !important;
 }
 
-@keyframes ambientFloat2 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(-24px, 18px, 0) scale(0.96);
-  }
+.text-\[\#565e74\],
+.text-\[\#64748b\],
+.text-\[\#475569\],
+.text-\[\#6e7b6c\],
+.text-\[\#3b4759\] {
+  color: #94a3b8 !important;
 }
 
-@keyframes ambientFloat3 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(16px, 20px, 0) scale(1.03);
-  }
+/* FreshCart Green Accent Identity: Luminous & Restrained */
+.text-\[\#006b2c\],
+.text-\[\#00873a\],
+.text-\[\#005221\],
+.text-\[\#047857\],
+.text-\[\#065f46\] {
+  color: #10b981 !important;
 }
 
-@keyframes floatParticle1 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translate3d(18px, -32px, 0) scale(1.2);
-    opacity: 0.7;
-  }
+.text-\[\#7ffc97\] {
+  color: #6ee7b7 !important;
 }
 
-@keyframes floatParticle2 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.25;
-  }
-  50% {
-    transform: translate3d(-24px, -40px, 0) scale(0.85);
-    opacity: 0.65;
-  }
+.text-\[\#16a34a\],
+.text-\[\#15803d\],
+.text-\[\#166534\] {
+  color: #34d399 !important;
 }
 
-@keyframes floatParticle3 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.2;
-  }
-  50% {
-    transform: translate3d(25px, -30px, 0) scale(1.15);
-    opacity: 0.6;
-  }
+/* Warm Amber Highlights */
+.text-\[\#825100\],
+.text-\[\#92400e\],
+.text-\[\#b45309\] {
+  color: #fbbf24 !important;
 }
 
-.animate-ambient-float-1 {
-  animation: ambientFloat1 18s ease-in-out infinite;
+/* Red / Danger Alerts */
+.text-\[\#b91c1c\],
+.text-\[\#dc2626\],
+.text-\[\#ef4444\],
+.text-\[\#991b1b\],
+.text-\[\#ba1a1a\] {
+  color: #f87171 !important;
 }
 
-.animate-ambient-float-2 {
-  animation: ambientFloat2 22s ease-in-out infinite;
+/* 2. TRANSLUCENT BLACK CRYSTAL GLASS PANELS & CARDS */
+.bg-white\/35,
+.bg-white\/40,
+.bg-white\/45,
+.bg-white\/50,
+.bg-white\/60,
+.bg-white\/65,
+.bg-white\/70,
+.bg-white\/80,
+.bg-white\/90,
+.bg-white {
+  background-color: rgba(10, 14, 23, 0.42) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
-.animate-ambient-float-3 {
-  animation: ambientFloat3 20s ease-in-out infinite;
+.bg-white\/20,
+.bg-white\/25,
+.bg-white\/30 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
 }
 
-.animate-float-particle-1 {
-  animation: floatParticle1 infinite ease-in-out;
+.bg-white\/15,
+.bg-white\/10,
+.bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.03) !important;
 }
 
-.animate-float-particle-2 {
-  animation: floatParticle2 infinite ease-in-out;
+.bg-\[\#f8f9ff\],
+.bg-\[\#f8fafc\],
+.bg-\[\#f1f5f9\] {
+  background-color: rgba(6, 9, 15, 0.42) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
 }
 
-.animate-float-particle-3 {
-  animation: floatParticle3 infinite ease-in-out;
+.bg-\[\#e2e8f0\] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.bg-\[\#eff4ff\],
+.bg-\[\#dce9ff\],
+.bg-\[\#e0e7ff\],
+.bg-\[\#e5eeff\],
+.bg-\[\#dbeafe\] {
+  background-color: rgba(14, 26, 42, 0.42) !important;
+  border-color: rgba(56, 189, 248, 0.18) !important;
+}
+
+/* 3. POLISHED TRANSLUCENT CRYSTAL BORDERS */
+.border-white\/50,
+.border-white\/55,
+.border-white\/60,
+.border-white\/65,
+.border-white\/70,
+.border-white\/80,
+.border-white\/85,
+.border-white\/90,
+.border-white\/45,
+.border-white\/40,
+.border-white\/20,
+.border-white\/15,
+.border-white,
+.border-\[\#e2e8f0\],
+.border-\[\#cbd5e1\],
+.border-\[\#d3e4fe\],
+.border-\[\#cbdcfc\],
+.border-\[\#bfdbfe\],
+.border-\[\#f1f5f9\] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 4. STATUS TAGS & BADGES AS TRANSLUCENT COLOURED GLASS */
+.bg-\[\#dcfce7\],
+.bg-\[\#f0fdf4\],
+.bg-\[\#e8f5e9\],
+.bg-\[\#f8fff9\] {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(52, 211, 153, 0.28) !important;
+  color: #86efac !important;
+}
+
+.border-\[\#86efac\],
+.border-\[\#bbf7d0\],
+.border-\[\#a7f3d0\] {
+  border-color: rgba(52, 211, 153, 0.28) !important;
+}
+
+.bg-\[\#fee2e2\],
+.bg-\[\#fef2f2\],
+.bg-\[\#ffdad6\] {
+  background-color: rgba(220, 38, 38, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.28) !important;
+  color: #fca5a5 !important;
+}
+
+.border-\[\#fecaca\] {
+  border-color: rgba(239, 68, 68, 0.28) !important;
+}
+
+.bg-\[\#fef3c7\],
+.bg-\[\#fffbeb\] {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.28) !important;
+  color: #fcd34d !important;
+}
+
+.border-\[\#fde68a\] {
+  border-color: rgba(245, 158, 11, 0.28) !important;
+}
+
+/* 5. FORM INPUTS & SELECTS */
+input,
+select,
+textarea {
+  color: #f8fafc !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148, 163, 184, 0.6) !important;
+}
+
+.focus\:bg-white\/60:focus,
+.focus\:bg-white\/70:focus,
+.focus\:bg-white:focus {
+  background-color: rgba(18, 25, 38, 0.65) !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
+}
+
+/* 6. TABLES & INVENTORY ROWS */
+table {
+  background: transparent !important;
+}
+
+table th {
+  background-color: rgba(8, 11, 18, 0.65) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+table td {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.divide-\[\#f1f5f9\] > * + * {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+tr.hover\:bg-\[\#f8fafc\]\/80:hover,
+tr:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* 7. MODALS & BACKDROPS */
+.bg-\[\#0b1c30\]\/40 {
+  background-color: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+/* 8. HOVER EFFECTS */
+.hover\:bg-white\/45:hover,
+.hover\:bg-white\/50:hover,
+.hover\:bg-white\/55:hover,
+.hover\:bg-white\/60:hover,
+.hover\:bg-white\/70:hover,
+.hover\:bg-\[\#f8fafc\]:hover {
+  background-color: rgba(18, 26, 40, 0.55) !important;
+}
+
+.hover\:border-white\/80:hover,
+.hover\:border-white\/85:hover,
+.hover\:border-white:hover {
+  border-color: rgba(255, 255, 255, 0.26) !important;
+}
+
+.hover\:text-\[\#006b2c\]:hover {
+  color: #10b981 !important;
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+}
+
+.hover\:text-\[\#0b1c30\]:hover {
+  color: #f8fafc !important;
 }
 
 /* ==========================================================================
@@ -286,29 +524,20 @@
   .product-card-3d-inner {
     transform: none !important;
   }
-
-  .animate-ambient-float-1,
-  .animate-ambient-float-2,
-  .animate-ambient-float-3,
-  .animate-float-particle-1,
-  .animate-float-particle-2,
-  .animate-float-particle-3 {
-    animation: none !important;
-  }
 }
 
-/* Custom scrollbars */
+/* Custom dark crystal scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.6);
+  background: rgba(3, 4, 7, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.8);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.9);
+  background: rgba(255, 255, 255, 0.32);
 }

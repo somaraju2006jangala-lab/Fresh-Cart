@@ -85,13 +85,13 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
               onClick={() => onSelectCategory(cat.id)}
               className={`p-4 rounded-2xl transition-all duration-300 text-center flex flex-col items-center justify-center gap-2 border cursor-pointer hover:-translate-y-1 group ${
                 isSelected
-                  ? 'bg-white/95 backdrop-blur-xl border-[#006b2c] shadow-md ring-2 ring-[#006b2c]/20'
-                  : 'bg-white/70 backdrop-blur-md hover:bg-white/95 border-white/80 shadow-xs hover:shadow-md hover:border-white'
+                  ? 'bg-white/45 backdrop-blur-md border-[#006b2c] shadow-sm ring-2 ring-[#006b2c]/30'
+                  : 'bg-white/30 backdrop-blur-md hover:bg-white/50 border-white/50 shadow-xs hover:shadow-sm hover:border-white/80'
               }`}
             >
               <div
                 className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 shadow-2xs ${
-                  isSelected ? 'bg-white shadow-xs' : 'bg-[#eff4ff]/80 backdrop-blur-xs'
+                  isSelected ? 'bg-white/60 shadow-xs border border-white/70' : 'bg-white/30 backdrop-blur-xs border border-white/45'
                 }`}
               >
                 {getCategoryIcon(cat.id)}

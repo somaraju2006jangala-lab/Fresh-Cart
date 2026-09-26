@@ -701,9 +701,9 @@ function FreshCartStore() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff] relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center bg-[#030305] relative overflow-hidden">
         <CursorReactiveBackground />
-        <div className="relative z-10 flex flex-col items-center gap-3 bg-white/80 backdrop-blur-xl p-8 rounded-3xl border border-white/80 shadow-xl">
+        <div className="relative z-10 flex flex-col items-center gap-3 bg-white/40 backdrop-blur-md p-8 rounded-3xl border border-white/55 shadow-xl">
           <span className="w-8 h-8 border-3 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
           <span className="text-[13px] font-semibold text-[#565e74]">{t('loading')}</span>
         </div>
@@ -712,7 +712,7 @@ function FreshCartStore() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f8f9ff] text-[#0b1c30] relative overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-[#030305] text-[#f1f5f9] relative overflow-hidden">
       {/* Interactive Cursor-Reactive Glassmorphism Background */}
       <CursorReactiveBackground />
 
@@ -863,14 +863,14 @@ function FreshCartStore() {
                   </h2>
                 </div>
 
-                {/* Filter Chips */}
-                <div className="flex items-center gap-1 bg-white/70 backdrop-blur-md p-1.5 rounded-2xl border border-white/80 shadow-2xs">
+                {/* Filter Chips - Crystal Glass */}
+                <div className="flex items-center gap-1 bg-white/35 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-2xs">
                   <button
                     type="button"
                     onClick={() => setStockFilter('all')}
                     className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'all'
-                        ? 'bg-white text-[#0b1c30] shadow-xs'
+                        ? 'bg-white/60 text-[#0b1c30] shadow-xs border border-white/60'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
@@ -881,7 +881,7 @@ function FreshCartStore() {
                     onClick={() => setStockFilter('organic')}
                     className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'organic'
-                        ? 'bg-white text-[#0b1c30] shadow-xs'
+                        ? 'bg-white/60 text-[#0b1c30] shadow-xs border border-white/60'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
@@ -892,7 +892,7 @@ function FreshCartStore() {
                     onClick={() => setStockFilter('quickPrep')}
                     className={`px-3.5 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                       stockFilter === 'quickPrep'
-                        ? 'bg-white text-[#0b1c30] shadow-xs'
+                        ? 'bg-white/60 text-[#0b1c30] shadow-xs border border-white/60'
                         : 'text-[#565e74] hover:text-[#0b1c30]'
                     }`}
                   >
@@ -903,7 +903,7 @@ function FreshCartStore() {
 
               {/* Products Grid */}
               {filteredProducts.length === 0 ? (
-                <div className="text-center py-16 bg-white/80 backdrop-blur-xl rounded-3xl border border-white/80 p-8 shadow-md">
+                <div className="text-center py-16 bg-white/35 backdrop-blur-md rounded-3xl border border-white/50 p-8 shadow-md">
                   <Sparkles className="w-10 h-10 text-[#006b2c] mx-auto mb-3 opacity-60" />
                   <h3 className="text-[18px] font-bold text-[#0b1c30]">
                     {t('noItemsFound')}

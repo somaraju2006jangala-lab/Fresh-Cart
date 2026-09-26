@@ -95,7 +95,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     <div className="min-h-[85vh] flex flex-col items-center justify-center px-4 py-12">
       {/* Top Banner Navigation */}
       <div className="w-full max-w-md mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#006b2c] bg-[#eff4ff] px-3 py-1 rounded-full border border-[#cbd5e1]/50">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#006b2c] bg-white/35 backdrop-blur-xs px-3 py-1 rounded-full border border-white/50">
           <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
           <span>Customer Access Portal</span>
         </div>
@@ -111,11 +111,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         )}
       </div>
 
-      {/* Main Login Card */}
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/80 overflow-hidden">
+      {/* Main Login Card - Crystal Clear Glass */}
+      <div className="w-full max-w-md bg-white/35 backdrop-blur-md rounded-3xl shadow-xl border border-white/55 overflow-hidden">
         {/* Brand Banner Top */}
-        <div className="bg-linear-to-b from-white/90 to-white/60 backdrop-blur-md p-6 sm:p-8 text-center border-b border-white/70">
-          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/90 shadow-2xs border border-white/80 mb-4">
+        <div className="bg-white/20 backdrop-blur-xs p-6 sm:p-8 text-center border-b border-white/50">
+          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/40 backdrop-blur-xs shadow-2xs border border-white/60 mb-4">
             <img
               src={BRAND_LOGO_URL}
               alt="FreshCart Logo"
@@ -130,11 +130,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </p>
 
           {/* 1-Click Demo Login Pill */}
-          <div className="mt-4 pt-3 border-t border-dashed border-[#dce9ff]/80">
+          <div className="mt-4 pt-3 border-t border-dashed border-white/40">
             <button
               type="button"
               onClick={handleFillDemo}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 hover:bg-white text-[#006b2c] text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs border border-white/80 shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/35 hover:bg-white/60 text-[#006b2c] text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs border border-white/55 shadow-2xs cursor-pointer"
               title="Auto-fill pre-seeded customer credentials"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#006b2c]" />
@@ -177,7 +177,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 }}
                 placeholder="customer@freshcart.com"
                 autoComplete="email"
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/75 backdrop-blur-sm border border-slate-200/80 text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c] focus:border-transparent transition-all shadow-2xs"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all shadow-2xs"
               />
             </div>
           </div>
@@ -217,7 +217,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 }}
                 placeholder="••••••••••••"
                 autoComplete="current-password"
-                className="w-full pl-10 pr-11 py-2.5 rounded-xl bg-white/75 backdrop-blur-sm border border-slate-200/80 text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c] focus:border-transparent transition-all font-body shadow-2xs"
+                className="w-full pl-10 pr-11 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all font-body shadow-2xs"
               />
               <button
                 type="button"
@@ -264,7 +264,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         </form>
 
         {/* Register Account Footer */}
-        <div className="bg-white/50 backdrop-blur-sm px-6 sm:px-8 py-4 border-t border-white/70 text-center">
+        <div className="bg-white/20 backdrop-blur-xs px-6 sm:px-8 py-4 border-t border-white/50 text-center">
           <p className="text-[13px] text-[#565e74]">
             New to FreshCart?{' '}
             <button
@@ -279,11 +279,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password Modal - Crystal Glass */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-white/80">
-            <div className="p-5 border-b border-[#e5eeff]/80 flex items-center justify-between bg-white/50 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white/45 backdrop-blur-xl rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-white/60">
+            <div className="p-5 border-b border-white/50 flex items-center justify-between bg-white/30 backdrop-blur-md">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#006b2c] text-white flex items-center justify-center shadow-2xs">
                   <KeyRound className="w-4 h-4 text-[#7ffc97]" />
@@ -300,7 +300,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="w-8 h-8 rounded-lg text-[#565e74] hover:bg-[#e5eeff] hover:text-[#0b1c30] flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-lg text-[#565e74] hover:bg-white/60 hover:text-[#0b1c30] flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -338,7 +338,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#cbd5e1] text-[13px] bg-[#f8f9ff] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/60 text-[13px] bg-white/40 focus:bg-white/70 focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]"
                 />
               </div>
 
@@ -346,7 +346,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#565e74] hover:bg-[#f1f5f9] transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#565e74] hover:bg-white/40 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

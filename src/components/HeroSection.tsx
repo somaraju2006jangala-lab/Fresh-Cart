@@ -109,7 +109,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       )}
 
       {/* Real-time Inventory Sync Status Ticker */}
-      <div className="w-full bg-white/50 backdrop-blur-md border-b border-white/60 py-1.5 px-4 sm:px-6">
+      <div className="w-full bg-white/35 backdrop-blur-md border-b border-white/50 py-1.5 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-[12px]">
           <div className="flex items-center gap-2 text-[#3e4a3d]">
             <span className="relative flex h-2 w-2">
@@ -138,7 +138,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left Text & Search Block */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 backdrop-blur-md text-[#131b2e] text-[12px] font-semibold border border-white/80 shadow-2xs">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/35 backdrop-blur-xs text-[#131b2e] text-[12px] font-semibold border border-white/50 shadow-2xs">
               <Sprout className="w-4 h-4 text-[#006b2c]" />
               <span>{t('heroBadge')}</span>
             </div>
@@ -152,9 +152,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               {t('heroSubheading')}
             </p>
 
-            {/* Quick Hero Search Input */}
+            {/* Quick Hero Search Input - Crystal Glass */}
             <div className="relative w-full max-w-xl pt-1">
-              <form onSubmit={handleHeroSubmit} className="relative flex items-center bg-white/85 backdrop-blur-xl rounded-2xl shadow-md border border-white/90 hover:border-slate-300 transition-all">
+              <form onSubmit={handleHeroSubmit} className="relative flex items-center bg-white/35 backdrop-blur-md rounded-2xl shadow-xs border border-white/50 hover:border-white/80 focus-within:bg-white/55 transition-all">
                 <span className="pl-3.5 text-[#6e7b6c]">
                   <Zap className="w-5 h-5 text-[#006b2c]" />
                 </span>
@@ -164,7 +164,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   value={heroSearch}
                   onChange={(e) => setHeroSearch(e.target.value)}
                   placeholder={t('heroSearchPlaceholder')}
-                  className="w-full pl-2.5 pr-24 py-3 bg-transparent text-[14px] text-[#0b1c30] placeholder:text-[#6e7b6c] focus:outline-hidden"
+                  className="w-full pl-2.5 pr-24 py-3 bg-transparent text-[14px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden"
                 />
                 <button
                   type="submit"
@@ -195,7 +195,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </div>
             </div>
 
-            {/* Aisle Filter Buttons */}
+            {/* Aisle Filter Buttons - Crystal Glass */}
             <div className="flex flex-wrap items-center gap-1.5 pt-3">
               <button
                 type="button"
@@ -204,7 +204,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'all'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('allAisles')}
@@ -216,7 +216,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'produce'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('catProduce')}
@@ -228,7 +228,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'dairy'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('catDairy')}
@@ -240,7 +240,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'bakery'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('catBakery')}
@@ -252,7 +252,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'beverages'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('catBeverages')}
@@ -264,7 +264,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
                   selectedCategory === 'grains'
                     ? 'bg-[#006b2c] text-white shadow-xs'
-                    : 'bg-white/60 backdrop-blur-sm text-[#3e4a3d] hover:bg-white/95 border border-white/70 shadow-2xs'
+                    : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
                 }`}
               >
                 {t('catGrains')}
@@ -272,9 +272,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </div>
           </div>
 
-          {/* Right Hero Image Card with Cold-Chain Speed Hub */}
+          {/* Right Hero Image Card with Cold-Chain Speed Hub - Crystal Glass */}
           <div className="lg:col-span-5 relative">
-            <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-white/80 backdrop-blur-xl border border-white/80 group">
+            <div className="relative rounded-3xl overflow-hidden shadow-xl bg-white/35 backdrop-blur-md border border-white/50 group">
               <img
                 src={HERO_IMAGE_URL}
                 alt="Farm fresh organic vegetables and milk"
@@ -282,9 +282,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               />
 
               {/* Floating Speed Hub Banner */}
-              <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur-xl rounded-2xl p-3.5 shadow-xl border border-white/80 flex items-center justify-between">
+              <div className="absolute bottom-3 left-3 right-3 bg-white/40 backdrop-blur-md rounded-2xl p-3.5 shadow-lg border border-white/60 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#eff4ff] flex items-center justify-center text-[#006b2c] shrink-0 shadow-2xs">
+                  <div className="w-10 h-10 rounded-full bg-white/40 border border-white/50 flex items-center justify-center text-[#006b2c] shrink-0 shadow-2xs">
                     <Zap className="w-5 h-5 text-[#006b2c]" />
                   </div>
                   <div>

@@ -83,7 +83,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       id={`product-card-${product.id}`}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className={`relative bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm hover:shadow-[0_16px_36px_-6px_rgba(0,107,44,0.12)] transition-[transform,box-shadow,border-color] duration-300 ease-out flex flex-col justify-between overflow-hidden border border-white/80 hover:border-white group will-change-transform ${
+      className={`relative bg-white/35 backdrop-blur-md rounded-2xl shadow-xs hover:shadow-[0_16px_36px_-6px_rgba(0,107,44,0.12)] transition-[transform,box-shadow,border-color,background-color] duration-300 ease-out flex flex-col justify-between overflow-hidden border border-white/50 hover:border-white/85 hover:bg-white/45 group will-change-transform ${
         isOutOfStock ? 'opacity-85' : ''
       }`}
     >
@@ -98,7 +98,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         className="cursor-pointer relative z-0"
         onClick={() => onOpenDetails(product)}
       >
-        <div className="relative h-48 w-full bg-[#eff4ff]/70 overflow-hidden">
+        <div className="relative h-48 w-full bg-white/15 backdrop-blur-xs overflow-hidden">
           <img
             src={product.image}
             alt={product.title}
@@ -108,8 +108,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             loading="lazy"
           />
 
-          {/* Badge with glass styling */}
-          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-lg bg-white/90 backdrop-blur-md text-[11px] text-[#0b1c30] font-semibold shadow-xs border border-white/80 transition-transform group-hover:scale-102">
+          {/* Badge with crystal glass styling */}
+          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-lg bg-white/65 backdrop-blur-md text-[11px] text-[#0b1c30] font-semibold shadow-2xs border border-white/70 transition-transform group-hover:scale-102">
             {product.badge}
           </span>
         </div>
@@ -136,19 +136,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             id={`add-to-cart-${product.id}`}
             type="button"
             disabled
-            className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-[#f1f5f9]/80 backdrop-blur-xs text-[#94a3b8] cursor-not-allowed border border-[#e2e8f0]"
+            className="w-full py-2.5 px-3 rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 bg-white/20 backdrop-blur-xs text-[#94a3b8] cursor-not-allowed border border-white/40"
           >
             <span>{t('unavailable')}</span>
           </button>
         ) : (
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-white/70 backdrop-blur-md rounded-lg p-0.5 border border-[#e2e8f0]/80 shadow-2xs">
+            <div className="flex items-center bg-white/40 backdrop-blur-md rounded-lg p-0.5 border border-white/55 shadow-2xs">
               <button
                 type="button"
                 title="Decrease quantity"
                 onClick={handleDecrement}
                 disabled={qty <= 1}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/90 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/70 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
@@ -160,7 +160,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 title="Increase quantity"
                 onClick={handleIncrement}
                 disabled={qty >= product.stock}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/90 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/70 text-[#0b1c30] active:scale-95 transition-all disabled:opacity-40 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>

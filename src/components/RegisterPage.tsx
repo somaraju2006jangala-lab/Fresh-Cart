@@ -109,16 +109,16 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           <span>Back to Sign In</span>
         </button>
 
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-[#eff4ff] px-2.5 py-1 rounded-full border border-[#cbd5e1]/40">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] bg-white/35 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/50">
           New Customer Registration
         </span>
       </div>
 
-      {/* Main Register Card */}
-      <div className="w-full max-w-lg bg-white/80 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/80 overflow-hidden">
+      {/* Main Register Card - Crystal Clear Glass */}
+      <div className="w-full max-w-lg bg-white/35 backdrop-blur-md rounded-3xl shadow-xl border border-white/55 overflow-hidden">
         {/* Header */}
-        <div className="bg-linear-to-b from-white/90 to-white/60 backdrop-blur-md p-6 sm:p-7 text-center border-b border-white/70">
-          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/90 shadow-2xs border border-white/80 mb-3">
+        <div className="bg-white/20 backdrop-blur-xs p-6 sm:p-7 text-center border-b border-white/50">
+          <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/40 backdrop-blur-xs shadow-2xs border border-white/60 mb-3">
             <img
               src={BRAND_LOGO_URL}
               alt="FreshCart Logo"
@@ -132,7 +132,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             Unlock fast 30-min neighborhood delivery, order history, and exclusive organic perks
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#dcfce7]/90 text-[#15803d] text-[11px] font-semibold border border-emerald-200 shadow-2xs">
+          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/35 backdrop-blur-xs text-[#15803d] text-[11px] font-semibold border border-white/60 shadow-2xs">
             <Sparkles className="w-3 h-3 text-[#16a34a]" />
             <span>New Member Bonus: 10% Off Your First Order</span>
           </div>
@@ -168,7 +168,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Jordan Miller"
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
               />
             </div>
           </div>
@@ -191,7 +191,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="jordan@example.com"
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
                 />
               </div>
             </div>
@@ -211,7 +211,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(555) 019-2834"
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
                 />
               </div>
             </div>
@@ -234,7 +234,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Apartment, suite, street address..."
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
               />
             </div>
           </div>
@@ -257,7 +257,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
                 />
                 <button
                   type="button"
@@ -286,7 +286,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter password"
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#f8f9ff] border border-[#cbd5e1] text-[13px] text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-[#006b2c]"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border border-white/55 text-[13px] text-[#0b1c30] placeholder:text-[#565e74]/70 focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] focus:border-white/80 transition-all"
                 />
                 <button
                   type="button"
@@ -302,7 +302,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
 
           {/* Password Strength Indicator */}
           {password.length > 0 && (
-            <div className="space-y-1.5 p-3 rounded-xl bg-[#f8fafc] border border-[#e2e8f0]">
+            <div className="space-y-1.5 p-3 rounded-xl bg-white/25 backdrop-blur-xs border border-white/45">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-[#565e74] font-medium">Password Strength:</span>
                 <span
@@ -326,7 +326,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                           : strengthScore <= 3
                             ? 'bg-amber-400'
                             : 'bg-emerald-500'
-                        : 'bg-[#e2e8f0]'
+                        : 'bg-white/40'
                       }`}
                   />
                 ))}
@@ -349,7 +349,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           )}
 
           {/* Security Notice */}
-          <div className="p-3 rounded-xl bg-[#eff4ff] border border-[#d3e4fe] flex items-start gap-2 text-[11px] text-[#3b4759]">
+          <div className="p-3 rounded-xl bg-white/30 backdrop-blur-xs border border-white/50 flex items-start gap-2 text-[11px] text-[#3b4759]">
             <ShieldCheck className="w-4 h-4 text-[#006b2c] shrink-0 mt-0.5" />
             <span>
               <strong>Zero Plain-Text Storage:</strong> FreshCart cryptographically hashes your credentials using Web Crypto SHA-256 + individual salt before saving.
@@ -378,7 +378,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
         </form>
 
         {/* Existing account link */}
-        <div className="bg-white/50 backdrop-blur-sm px-6 sm:px-7 py-4 border-t border-white/70 text-center">
+        <div className="bg-white/20 backdrop-blur-xs px-6 sm:px-7 py-4 border-t border-white/50 text-center">
           <p className="text-[13px] text-[#565e74]">
             Already have an account?{' '}
             <button
