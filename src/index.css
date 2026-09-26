@@ -381,6 +381,37 @@
   -webkit-backdrop-filter: blur(12px) !important;
 }
 
+/* Safety overrides: strip opaque white-to-gray linear gradients on order cards & ledger */
+.from-white,
+.from-white\/100,
+.to-\[\#f8fafc\],
+[class*="from-white"][class*="to-"] {
+  background-image: none !important;
+}
+
+.bg-gradient-to-br.from-white.to-\[\#f8fafc\] {
+  background-image: none !important;
+  background-color: rgba(10, 14, 23, 0.35) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+}
+
+/* Safety overrides for delivery charges & live tester panels */
+.bg-\[\#eff4ff\]\/60 {
+  background-color: rgba(10, 14, 23, 0.32) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.bg-\[\#f1f5f9\]\/50 {
+  background-color: rgba(10, 14, 23, 0.22) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+
 /* Global full-viewport background layer */
 #global-black-liquid-background {
   position: fixed !important;

@@ -1523,19 +1523,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {activeTab === 'orders' && (
           selectedOtpOrder ? (
             /* Dedicated OTP Verification Page */
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs overflow-hidden p-4 sm:p-6 space-y-6">
+            <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl overflow-hidden p-4 sm:p-6 space-y-6">
               {/* Top Navigation: Back to Customer Orders */}
-              <div className="flex items-center justify-between pb-4 border-b border-[#e2e8f0]">
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <button
                   type="button"
                   id="back-to-customer-orders-btn"
                   onClick={() => setSelectedOtpOrderId(null)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#cbd5e1] bg-white hover:bg-[#f8fafc] text-[#334155] hover:text-[#0b1c30] text-[13px] font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
+                  className="px-3.5 py-1.5 rounded-lg border border-white/15 bg-black/30 hover:bg-black/50 text-slate-200 hover:text-white text-[13px] font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-2xs backdrop-blur-md"
                 >
-                  <ArrowLeft className="w-4 h-4 text-[#006b2c]" />
+                  <ArrowLeft className="w-4 h-4 text-[#10b981]" />
                   <span>Back to Customer Orders</span>
                 </button>
-                <span className="text-[12px] font-semibold text-[#64748b]">
+                <span className="text-[12px] font-semibold text-[#94a3b8]">
                   Customer Orders Ledger &rsaquo; OTP Verification
                 </span>
               </div>
@@ -1554,33 +1554,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               */}
               <div className="max-w-xl space-y-5">
                 <div>
-                  <h3 className="text-[22px] font-bold text-[#0b1c30] font-display">
+                  <h3 className="text-[22px] font-bold text-white font-display">
                     OTP Verification
                   </h3>
-                  <p className="text-[12px] text-[#64748b] mt-0.5">
+                  <p className="text-[12px] text-[#94a3b8] mt-0.5">
                     Order handover verification with customer
                   </p>
                 </div>
 
-                <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-5 space-y-3 font-mono text-[14px]">
+                <div className="bg-black/25 backdrop-blur-md border border-white/12 rounded-xl p-5 space-y-3 font-mono text-[14px]">
                   <div>
-                    <span className="font-semibold text-[#64748b]">Order ID: </span>
-                    <span className="font-bold text-[#006b2c]">
+                    <span className="font-semibold text-[#94a3b8]">Order ID: </span>
+                    <span className="font-bold text-[#10b981]">
                       {selectedOtpOrder.id.startsWith('#') ? selectedOtpOrder.id : `#${selectedOtpOrder.id}`}
                     </span>
                   </div>
                   <div>
-                    <span className="font-semibold text-[#64748b]">Customer: </span>
-                    <span className="font-bold text-[#0b1c30]">{selectedOtpOrder.customerName}</span>
+                    <span className="font-semibold text-[#94a3b8]">Customer: </span>
+                    <span className="font-bold text-white">{selectedOtpOrder.customerName}</span>
                   </div>
                   <div className="pt-2">
-                    <span className="font-semibold text-[#64748b]">Mobile: </span>
-                    <span className="font-bold text-[#0b1c30] tracking-wider">
+                    <span className="font-semibold text-[#94a3b8]">Mobile: </span>
+                    <span className="font-bold text-white tracking-wider">
                       {maskMobileNumber(selectedOtpOrder.customerPhone)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-[#64748b]">Status: </span>
+                    <span className="font-semibold text-[#94a3b8]">Status: </span>
                     <span
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-bold border font-sans ${
                         selectedOtpOrder.status === 'Picking'
@@ -1609,7 +1609,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <div className="space-y-3 pt-2">
                     <label
                       htmlFor="separate-otp-input"
-                      className="block text-[13px] font-bold text-[#0b1c30]"
+                      className="block text-[13px] font-bold text-white"
                     >
                       Enter OTP:
                     </label>
@@ -1622,7 +1622,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         onChange={(e) => handleOtpInputChange(selectedOtpOrder.id, e.target.value)}
                         placeholder="[ ______ ]"
                         autoFocus
-                        className="w-40 h-10 px-3 font-mono text-[16px] tracking-widest text-center font-bold bg-white border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] focus:border-[#006b2c]"
+                        className="w-40 h-10 px-3 font-mono text-[16px] tracking-widest text-center font-bold bg-black/30 text-white border border-white/15 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981] placeholder:text-slate-500"
                         disabled={orderVerifying[selectedOtpOrder.id] || orderResending[selectedOtpOrder.id]}
                       />
                       <button
@@ -1637,7 +1637,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         className={`h-10 px-5 rounded-lg text-[13px] font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer ${
                           (orderOtpInputs[selectedOtpOrder.id] || '').length === 6 && !orderVerifying[selectedOtpOrder.id]
                             ? 'bg-[#006b2c] hover:bg-[#005221] text-white'
-                            : 'bg-[#e2e8f0] text-[#94a3b8] cursor-not-allowed'
+                            : 'bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed'
                         }`}
                       >
                         {orderVerifying[selectedOtpOrder.id] ? (
@@ -1656,7 +1656,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         onClick={() => handleResendOtp(selectedOtpOrder)}
                         disabled={orderVerifying[selectedOtpOrder.id] || orderResending[selectedOtpOrder.id]}
                         title="Invalidates previous OTP and generates a new one"
-                        className="h-10 px-3.5 rounded-lg text-[12px] font-semibold text-[#475569] hover:text-[#0b1c30] bg-white border border-[#cbd5e1] hover:bg-[#f8fafc] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="h-10 px-3.5 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white bg-black/30 border border-white/15 hover:bg-black/50 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         {orderResending[selectedOtpOrder.id] ? (
                           <>
@@ -1707,15 +1707,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 ) : (
                   /* Delivered State */
                   <div className="pt-2 space-y-3">
-                    <div className="bg-[#f0fdf4] border border-[#bbf7d0] p-4 rounded-xl flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#dcfce7] text-[#16a34a] flex items-center justify-center shrink-0">
-                        <CheckCircle className="w-5 h-5 text-[#16a34a]" />
+                    <div className="bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-xl flex items-center gap-3 backdrop-blur-md">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-[#10b981] flex items-center justify-center shrink-0">
+                        <CheckCircle className="w-5 h-5 text-[#10b981]" />
                       </div>
                       <div>
-                        <h4 className="text-[14px] font-bold text-[#15803d]">
+                        <h4 className="text-[14px] font-bold text-emerald-400">
                           OTP Verified. Order completed.
                         </h4>
-                        <p className="text-[12px] text-[#166534] mt-0.5">
+                        <p className="text-[12px] text-emerald-200/80 mt-0.5">
                           Order has been successfully handed over to customer. OTP is retired and cannot be reused.
                           {selectedOtpOrder.otpVerifiedAt && ` (Verified: ${formatOrderDateTime(selectedOtpOrder.otpVerifiedAt)})`}
                         </p>
@@ -1726,26 +1726,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs overflow-hidden space-y-5 p-4 sm:p-6">
+            <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl overflow-hidden space-y-5 p-4 sm:p-6">
             {/* Header / Subheader */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#e2e8f0]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#dcfce7] text-[#006b2c] flex items-center justify-center">
-                    <ShoppingBag className="w-4 h-4 text-[#006b2c]" />
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-[#10b981] flex items-center justify-center">
+                    <ShoppingBag className="w-4 h-4 text-[#10b981]" />
                   </div>
-                  <h3 className="text-[18px] font-bold text-[#0b1c30] font-display">
+                  <h3 className="text-[18px] font-bold text-white font-display">
                     {t('customerOrdersHeading')}
                   </h3>
                 </div>
-                <p className="text-[12px] text-[#64748b] mt-1">
+                <p className="text-[12px] text-[#94a3b8] mt-1">
                   {t('customerOrdersSubheading')}
                 </p>
               </div>
 
               {/* Status counter badges */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-bold">
+                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[12px] font-bold">
                   Total: {customerOrders.length}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-[#fef3c7] text-[#92400e] text-[12px] font-bold flex items-center gap-1.5">
@@ -1780,13 +1780,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         value={orderSearch}
                         onChange={(e) => setOrderSearch(e.target.value)}
                         placeholder={t('filterOrdersPlaceholder')}
-                        className="w-full h-8 pl-8 pr-7 py-1 border border-[#cbd5e1] rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 focus:ring-[#006b2c]/30 focus:border-[#006b2c]"
+                        className="w-full h-8 pl-8 pr-7 py-1 border border-white/15 rounded-md text-[12px] bg-black/30 text-white placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 focus:ring-[#10b981]/40 focus:border-[#10b981]"
                       />
                       {orderSearch && (
                         <button
                           type="button"
                           onClick={() => setOrderSearch('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#0b1c30]"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-white"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1800,7 +1800,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       id="admin-order-status-filter"
                       value={orderStatusFilter}
                       onChange={(e) => setOrderStatusFilter(e.target.value)}
-                      className="w-[170px] h-8 px-2.5 py-1 border border-[#cbd5e1] rounded-md text-[12px] bg-white text-[#334155] focus:outline-hidden focus:ring-1.5 focus:ring-[#006b2c]/30 focus:border-[#006b2c] cursor-pointer"
+                      className="w-[170px] h-8 px-2.5 py-1 border border-white/15 rounded-md text-[12px] bg-black/30 text-slate-200 focus:outline-hidden focus:ring-1.5 focus:ring-[#10b981]/40 focus:border-[#10b981] cursor-pointer"
                     >
                       <option value="all">{t('allOrderStatuses')}</option>
                       <option value="Picking">Picking</option>
@@ -1816,9 +1816,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     >
                       <label
                         htmlFor="admin-order-custom-history-input"
-                        className="text-[12px] font-bold text-[#334155] flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="text-[12px] font-bold text-slate-300 flex items-center gap-1 shrink-0 whitespace-nowrap"
                       >
-                        <Calendar className="w-3.5 h-3.5 text-[#006b2c]" />
+                        <Calendar className="w-3.5 h-3.5 text-[#10b981]" />
                         <span>Order History:</span>
                       </label>
 
@@ -1833,10 +1833,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           }}
                           placeholder="Enter period"
                           aria-label="Enter period"
-                          className={`w-full h-8 pl-2.5 pr-7 py-1 border rounded-md text-[12px] bg-white text-[#0b1c30] placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
+                          className={`w-full h-8 pl-2.5 pr-7 py-1 border rounded-md text-[12px] bg-black/30 text-white placeholder:text-[#94a3b8] focus:outline-hidden focus:ring-1.5 ${
                             historySearchError
                               ? 'border-[#ef4444] focus:ring-[#ef4444]/30 focus:border-[#ef4444]'
-                              : 'border-[#cbd5e1] focus:ring-[#006b2c]/30 focus:border-[#006b2c]'
+                              : 'border-white/15 focus:ring-[#10b981]/40 focus:border-[#10b981]'
                           }`}
                         />
                         <button
@@ -1844,7 +1844,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           id="admin-order-custom-history-search-btn"
                           title="Search"
                           aria-label="Search order history"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-[#006b2c] hover:text-[#005221] hover:bg-[#006b2c]/10 rounded transition-colors cursor-pointer flex items-center justify-center"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-[#10b981] hover:text-[#34d399] hover:bg-emerald-500/10 rounded transition-colors cursor-pointer flex items-center justify-center"
                         >
                           <Search className="w-3.5 h-3.5" />
                         </button>
@@ -1856,7 +1856,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           id="admin-order-custom-history-clear-btn"
                           onClick={handleClearHistorySearch}
                           title="Clear period filter"
-                          className="h-8 px-2.5 py-1 rounded-md bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#64748b] hover:text-[#0b1c30] text-[12px] font-medium transition-colors cursor-pointer shrink-0"
+                          className="h-8 px-2.5 py-1 rounded-md bg-black/30 border border-white/15 hover:bg-black/50 text-[#94a3b8] hover:text-white text-[12px] font-medium transition-colors cursor-pointer shrink-0"
                         >
                           Reset
                         </button>
@@ -1868,7 +1868,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
               {/* Validation Error Message */}
               {historySearchError && (
-                <div className="text-[11px] text-[#dc2626] font-medium flex items-center gap-1 justify-end pl-1">
+                <div className="text-[11px] text-[#f87171] font-medium flex items-center gap-1 justify-end pl-1">
                   <AlertTriangle className="w-3 h-3 shrink-0" />
                   <span>{historySearchError}</span>
                 </div>
@@ -1878,13 +1878,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               {periodDisplayMessage && (
                 <div
                   id="order-period-display"
-                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-[#e8f5e9] border border-[#a7f3d0] text-[11px] text-[#065f46] font-medium self-end ml-auto max-w-fit"
+                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-emerald-950/30 border border-emerald-500/30 text-[11px] text-emerald-300 font-medium self-end ml-auto max-w-fit backdrop-blur-md"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
                     <span className="font-semibold">{periodDisplayMessage}</span>
                   </div>
-                  <span className="text-[11px] text-[#047857] font-bold ml-2">
+                  <span className="text-[11px] text-emerald-400 font-bold ml-2">
                     {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
                   </span>
                 </div>
@@ -1894,8 +1894,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {/* Orders List / Cards */}
             {filteredOrders.length === 0 ? (
               <div className="py-16 text-center text-[#94a3b8]">
-                <ShoppingBag className="w-12 h-12 mx-auto mb-2 opacity-30 text-[#006b2c]" />
-                <p className="text-[14px] font-semibold text-[#475569]">
+                <ShoppingBag className="w-12 h-12 mx-auto mb-2 opacity-30 text-[#10b981]" />
+                <p className="text-[14px] font-semibold text-slate-300">
                   {activeHistoryPeriod ? 'No orders found for this period.' : t('noOrdersFound')}
                 </p>
                 <p className="text-[12px] text-[#94a3b8] mt-1">
@@ -1939,10 +1939,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   return (
                     <div
                       key={order.id}
-                      className="border border-[#e2e8f0] rounded-xl p-4 sm:p-5 bg-gradient-to-br from-white to-[#f8fafc] hover:shadow-md transition-shadow duration-150 space-y-4"
+                      className="border border-white/12 rounded-xl p-4 sm:p-5 bg-black/30 backdrop-blur-md hover:bg-black/40 hover:border-white/20 hover:shadow-xl transition-all duration-150 space-y-4"
                     >
                       {/* Top Action Bar */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#e2e8f0]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
                         <div className="flex items-center gap-2">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
@@ -1969,7 +1969,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               setCopiedOrderId(order.id);
                               setTimeout(() => setCopiedOrderId(null), 2000);
                             }}
-                            className="px-2.5 py-1 text-[11px] font-semibold text-[#475569] hover:text-[#0b1c30] bg-white border border-[#cbd5e1] rounded-lg hover:bg-[#f8fafc] transition-colors flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:text-white bg-black/30 border border-white/15 rounded-lg hover:bg-black/50 transition-colors flex items-center gap-1 cursor-pointer backdrop-blur-xs"
                           >
                             {copiedOrderId === order.id ? (
                               <>
@@ -1991,9 +1991,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               id={`order-otp-btn-${order.id}`}
                               onClick={() => setSelectedOtpOrderId(order.id)}
                               title={`Open OTP Verification page for ${displayOrderId}`}
-                              className="px-2.5 py-1 text-[11px] font-bold text-[#006b2c] hover:text-[#005221] bg-[#dcfce7]/70 hover:bg-[#dcfce7] border border-[#86efac] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
                             >
-                              <ShieldCheck className="w-3.5 h-3.5 text-[#16a34a]" />
+                              <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
                               <span>OTP</span>
                             </button>
                           )}
@@ -2015,59 +2015,59 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       </div>
 
                       {/* Structured Order Record Box matching user's exact specification */}
-                      <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 sm:p-5 font-mono text-[13px] text-[#0f172a] space-y-2 shadow-2xs">
+                      <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-xl p-4 sm:p-5 font-mono text-[13px] text-[#f8fafc] space-y-2 shadow-2xs">
                         <div>
-                          <span className="font-semibold text-[#64748b]">Order ID: </span>
-                          <span className="font-bold text-[#006b2c]">{displayOrderId}</span>
+                          <span className="font-semibold text-[#94a3b8]">Order ID: </span>
+                          <span className="font-bold text-[#10b981]">{displayOrderId}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-[#64748b]">Customer: </span>
-                          <span className="font-bold text-[#0b1c30]">{order.customerName}</span>
+                          <span className="font-semibold text-[#94a3b8]">Customer: </span>
+                          <span className="font-bold text-white">{order.customerName}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-[#64748b]">User ID: </span>
-                          <span className="font-semibold text-[#0b1c30]">{order.customerId || 'N/A'}</span>
+                          <span className="font-semibold text-[#94a3b8]">User ID: </span>
+                          <span className="font-semibold text-slate-200">{order.customerId || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-[#64748b]">Registered Mobile: </span>
-                          <span className="font-semibold text-[#0b1c30]">{maskMobileNumber(order.customerPhone)}</span>
+                          <span className="font-semibold text-[#94a3b8]">Registered Mobile: </span>
+                          <span className="font-semibold text-slate-200">{maskMobileNumber(order.customerPhone)}</span>
                         </div>
                         {order.customerEmail && (
                           <div>
-                            <span className="font-semibold text-[#64748b]">Email: </span>
-                            <span className="text-[#334155]">{order.customerEmail}</span>
+                            <span className="font-semibold text-[#94a3b8]">Email: </span>
+                            <span className="text-slate-300">{order.customerEmail}</span>
                           </div>
                         )}
                         <div>
-                          <span className="font-semibold text-[#64748b]">Date & Time: </span>
-                          <span className="font-medium text-[#0b1c30]">{formattedDateTime}</span>
+                          <span className="font-semibold text-[#94a3b8]">Date & Time: </span>
+                          <span className="font-medium text-slate-200">{formattedDateTime}</span>
                         </div>
                         {order.otpVerifiedAt && (
                           <div>
-                            <span className="font-semibold text-[#64748b]">OTP Verified At: </span>
-                            <span className="font-medium text-[#16a34a]">{formatOrderDateTime(order.otpVerifiedAt)}</span>
+                            <span className="font-semibold text-[#94a3b8]">OTP Verified At: </span>
+                            <span className="font-medium text-[#10b981]">{formatOrderDateTime(order.otpVerifiedAt)}</span>
                           </div>
                         )}
                         <div className="pt-2">
-                          <span className="font-semibold text-[#64748b] block mb-1">Products:</span>
+                          <span className="font-semibold text-[#94a3b8] block mb-1">Products:</span>
                           <ul className="space-y-1 pl-2">
                             {order.items.map((item, idx) => {
                               const formattedItem = formatOrderProductItem(item);
                               return (
-                                <li key={idx} className="text-[#0b1c30] font-medium">
+                                <li key={idx} className="text-slate-200 font-medium">
                                   - {formattedItem.title} — {formattedItem.qtyAndUnit} — {formattedItem.linePrice}
                                 </li>
                               );
                             })}
                           </ul>
                         </div>
-                        <div className="pt-2 border-t border-[#e2e8f0]">
-                          <span className="font-semibold text-[#64748b]">Total: </span>
-                          <span className="font-bold text-[#006b2c]">{formatINR(order.total)}</span>
+                        <div className="pt-2 border-t border-white/10">
+                          <span className="font-semibold text-[#94a3b8]">Total: </span>
+                          <span className="font-bold text-[#10b981]">{formatINR(order.total)}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-[#64748b]">Status: </span>
-                          <span className="font-bold text-[#006b2c]">{order.status}</span>
+                          <span className="font-semibold text-[#94a3b8]">Status: </span>
+                          <span className="font-bold text-[#10b981]">{order.status}</span>
                         </div>
                       </div>
                     </div>
@@ -2081,23 +2081,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* Tab 5: Settings - Customizable Delivery Charges Rules */}
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-xs p-5 sm:p-6 space-y-6">
+          <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl p-5 sm:p-6 space-y-6">
             {/* Header */}
-            <div className="pb-4 border-b border-[#e2e8f0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="pb-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-[18px] font-bold text-[#0f172a] font-display flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-[#006b2c]" />
+                <h3 className="text-[18px] font-bold text-white font-display flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-[#10b981]" />
                   <span>Delivery Charges</span>
                 </h3>
-                <p className="text-[12px] text-[#565e74] mt-0.5">
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">
                   Configure custom delivery charge rules based on customer cart minimum order amounts.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-[#eff4ff] px-3 py-1.5 rounded-xl border border-[#dbeafe]">
-                  <span className="text-[12px] font-semibold text-[#1e40af]">Rules Active:</span>
-                  <span className="text-[13px] font-extrabold text-[#1d4ed8] tabular-nums">
+                <div className="flex items-center gap-1.5 bg-sky-950/30 px-3 py-1.5 rounded-xl border border-sky-500/20 backdrop-blur-xs">
+                  <span className="text-[12px] font-semibold text-sky-300">Rules Active:</span>
+                  <span className="text-[13px] font-extrabold text-sky-400 tabular-nums">
                     {rules.length}
                   </span>
                 </div>
@@ -2107,9 +2107,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     .find((r) => r.deliveryCharge === 0);
                   if (freeRule) {
                     return (
-                      <div className="flex items-center gap-1.5 bg-[#dcfce7] px-3 py-1.5 rounded-xl border border-[#86efac]">
-                        <span className="text-[12px] font-semibold text-[#15803d]">Free Delivery From:</span>
-                        <span className="text-[13px] font-extrabold text-[#15803d] tabular-nums">
+                      <div className="flex items-center gap-1.5 bg-emerald-950/30 px-3 py-1.5 rounded-xl border border-emerald-500/20 backdrop-blur-xs">
+                        <span className="text-[12px] font-semibold text-emerald-300">Free Delivery From:</span>
+                        <span className="text-[13px] font-extrabold text-emerald-400 tabular-nums">
                           {formatINR(freeRule.minOrderAmount)}
                         </span>
                       </div>
@@ -2124,9 +2124,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {saveRulesSuccess && (
               <div
                 id="admin-delivery-charges-success"
-                className="p-3 bg-[#dcfce7] text-[#15803d] rounded-xl text-[13px] font-semibold border border-[#86efac] flex items-center gap-2 animate-fadeIn"
+                className="p-3 bg-emerald-950/40 text-emerald-300 rounded-xl text-[13px] font-semibold border border-emerald-500/30 flex items-center gap-2 animate-fadeIn backdrop-blur-md"
               >
-                <CheckCircle className="w-4 h-4 shrink-0 text-[#15803d]" />
+                <CheckCircle className="w-4 h-4 shrink-0 text-[#10b981]" />
                 <span>{saveRulesSuccess}</span>
               </div>
             )}
@@ -2134,21 +2134,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {saveRulesError && (
               <div
                 id="admin-delivery-charges-error"
-                className="p-3 bg-[#fee2e2] text-[#ba1a1a] rounded-xl text-[13px] font-semibold border border-[#fecaca] flex items-center gap-2"
+                className="p-3 bg-rose-950/40 text-rose-300 rounded-xl text-[13px] font-semibold border border-rose-500/30 flex items-center gap-2 backdrop-blur-md"
               >
-                <AlertTriangle className="w-4 h-4 shrink-0 text-[#ba1a1a]" />
+                <AlertTriangle className="w-4 h-4 shrink-0 text-[#f87171]" />
                 <span>{saveRulesError}</span>
               </div>
             )}
 
             {/* Section 1: Add New Delivery Rule Form */}
-            <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 sm:p-5 space-y-3">
+            <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-xl p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-[14px] font-bold text-[#0f172a] flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-[#006b2c]" />
+                <h4 className="text-[14px] font-bold text-white flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-[#10b981]" />
                   <span>Add New Delivery Charge Rule</span>
                 </h4>
-                <span className="text-[11px] font-medium text-[#64748b]">
+                <span className="text-[11px] font-medium text-[#94a3b8]">
                   Rules are evaluated by highest applicable minimum order
                 </span>
               </div>
@@ -2158,12 +2158,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <div className="sm:col-span-5">
                   <label
                     htmlFor="admin-min-order-input"
-                    className="block text-[12px] font-bold text-[#334155] mb-1"
+                    className="block text-[12px] font-bold text-slate-300 mb-1"
                   >
                     Minimum Order Amount
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#94a3b8] pointer-events-none">
                       ₹
                     </span>
                     <input
@@ -2177,7 +2177,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         if (addRuleError) setAddRuleError('');
                       }}
                       placeholder="e.g. 1500"
-                      className="w-full pl-8 pr-3 py-2 text-[14px] font-semibold bg-white border border-[#cbd5e1] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] transition-all tabular-nums"
+                      className="w-full pl-8 pr-3 py-2 text-[14px] font-semibold bg-black/30 border border-white/15 text-white rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#10b981] transition-all tabular-nums placeholder:text-[#94a3b8]"
                     />
                   </div>
                 </div>
@@ -2187,7 +2187,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <div className="flex items-center justify-between mb-1">
                     <label
                       htmlFor="admin-charge-input"
-                      className="block text-[12px] font-bold text-[#334155]"
+                      className="block text-[12px] font-bold text-slate-300"
                     >
                       Delivery Charge
                     </label>
@@ -2207,14 +2207,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       className={`text-[11px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer border ${
                         newIsFree
                           ? 'bg-[#006b2c] text-white border-[#006b2c]'
-                          : 'bg-[#e2e8f0] text-[#334155] border-[#cbd5e1] hover:bg-[#cbd5e1]'
+                          : 'bg-black/30 text-slate-200 border-white/15 hover:bg-black/50'
                       }`}
                     >
                       {newIsFree ? '✓ FREE Selected' : 'Select FREE'}
                     </button>
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                    <span className="absolute left-3 top-2.5 text-[14px] font-bold text-[#94a3b8] pointer-events-none">
                       ₹
                     </span>
                     <input
@@ -2234,10 +2234,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         if (addRuleError) setAddRuleError('');
                       }}
                       placeholder="e.g. 12 (or select FREE)"
-                      className={`w-full pl-8 pr-3 py-2 text-[14px] font-semibold rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] transition-all tabular-nums ${
+                      className={`w-full pl-8 pr-3 py-2 text-[14px] font-semibold rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#10b981] transition-all tabular-nums placeholder:text-[#94a3b8] ${
                         newIsFree
-                          ? 'bg-[#dcfce7] border-[#86efac] text-[#15803d]'
-                          : 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                          ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                          : 'bg-black/30 border border-white/15 text-white'
                       }`}
                     />
                   </div>
@@ -2260,9 +2260,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               {addRuleError && (
                 <div
                   id="admin-rule-add-error"
-                  className="p-2.5 bg-[#fee2e2] text-[#ba1a1a] rounded-lg text-[12px] font-semibold border border-[#fecaca] flex items-center gap-1.5"
+                  className="p-2.5 bg-rose-950/40 text-rose-300 rounded-lg text-[12px] font-semibold border border-rose-500/30 flex items-center gap-1.5 backdrop-blur-md"
                 >
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-[#ba1a1a]" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-[#f87171]" />
                   <span>{addRuleError}</span>
                 </div>
               )}
@@ -2271,28 +2271,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             {/* Section 2: Delivery Charges Rules Table */}
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="text-[13px] font-bold text-[#0f172a] uppercase tracking-wide">
+                <span className="text-[13px] font-bold text-white uppercase tracking-wide">
                   Configured Delivery Rules ({rules.length})
                 </span>
-                <span className="text-[11px] text-[#64748b]">
+                <span className="text-[11px] text-[#94a3b8]">
                   Rules are automatically sorted from lowest to highest Minimum Order Amount
                 </span>
               </div>
 
-              <div className="overflow-x-auto border border-[#e2e8f0] rounded-xl shadow-2xs">
+              <div className="overflow-x-auto border border-white/12 rounded-xl shadow-2xs bg-black/20 backdrop-blur-md">
                 <table className="w-full text-left border-collapse text-[13px]" id="delivery-rules-table">
                   <thead>
-                    <tr className="bg-[#f8fafc] border-b border-[#e2e8f0] text-[#475569] font-bold text-[12px]">
+                    <tr className="bg-black/35 border-b border-white/10 text-slate-300 font-bold text-[12px]">
                       <th className="py-3 px-4">Minimum Order</th>
                       <th className="py-3 px-4">Delivery Charge</th>
                       <th className="py-3 px-4 hidden md:table-cell">Rule Application</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#e2e8f0]">
+                  <tbody className="divide-y divide-white/5">
                     {rules.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-8 text-center text-[#64748b]">
+                        <td colSpan={4} className="py-8 text-center text-[#94a3b8]">
                           No delivery rules configured. Click &ldquo;Reset to Defaults&rdquo; below or add a custom rule.
                         </td>
                       </tr>
@@ -2303,11 +2303,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                         if (isEditing) {
                           return (
-                            <tr key={rule.id} className="bg-[#f0fdf4] border-l-4 border-l-[#006b2c]">
+                            <tr key={rule.id} className="bg-emerald-950/30 border-l-4 border-l-[#10b981]">
                               {/* Edit Min Order */}
                               <td className="py-3 px-4">
                                 <div className="relative max-w-[140px]">
-                                  <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#64748b]">
+                                  <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#94a3b8]">
                                     ₹
                                   </span>
                                   <input
@@ -2320,7 +2320,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                       setEditMinOrder(e.target.value);
                                       if (editRuleError) setEditRuleError('');
                                     }}
-                                    className="w-full pl-6 pr-2 py-1.5 text-[13px] font-bold bg-white border border-[#cbd5e1] rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] tabular-nums"
+                                    className="w-full pl-6 pr-2 py-1.5 text-[13px] font-bold bg-black/35 text-white border border-white/20 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#10b981] tabular-nums"
                                   />
                                 </div>
                               </td>
@@ -2329,7 +2329,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2 max-w-[200px]">
                                   <div className="relative flex-1">
-                                    <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#64748b]">
+                                    <span className="absolute left-2.5 top-2 text-[12px] font-bold text-[#94a3b8]">
                                       ₹
                                     </span>
                                     <input
@@ -2348,10 +2348,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                         }
                                         if (editRuleError) setEditRuleError('');
                                       }}
-                                      className={`w-full pl-6 pr-2 py-1.5 text-[13px] font-bold rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#006b2c] tabular-nums ${
+                                      className={`w-full pl-6 pr-2 py-1.5 text-[13px] font-bold rounded-lg focus:outline-hidden focus:ring-1 focus:ring-[#10b981] tabular-nums ${
                                         editIsFree
-                                          ? 'bg-[#dcfce7] border-[#86efac] text-[#15803d]'
-                                          : 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                                          ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                                          : 'bg-black/35 border border-white/20 text-white'
                                       }`}
                                     />
                                   </div>
@@ -2369,21 +2369,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                     className={`px-2 py-1 rounded text-[11px] font-bold transition-all border cursor-pointer ${
                                       editIsFree
                                         ? 'bg-[#006b2c] text-white border-[#006b2c]'
-                                        : 'bg-[#f1f5f9] text-[#334155] border-[#cbd5e1] hover:bg-[#e2e8f0]'
+                                        : 'bg-black/30 text-slate-200 border-white/15 hover:bg-black/50'
                                     }`}
                                   >
                                     FREE
                                   </button>
                                 </div>
                                 {editRuleError && (
-                                  <p className="text-[11px] text-[#ba1a1a] font-semibold mt-1">
+                                  <p className="text-[11px] text-[#f87171] font-semibold mt-1">
                                     {editRuleError}
                                   </p>
                                 )}
                               </td>
 
                               {/* Rule Edit Range Note */}
-                              <td className="py-3 px-4 hidden md:table-cell text-[#64748b] text-[12px]">
+                              <td className="py-3 px-4 hidden md:table-cell text-[#94a3b8] text-[12px]">
                                 Editing rule...
                               </td>
 
@@ -2402,7 +2402,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                   type="button"
                                   id={`admin-cancel-rule-btn-${rule.id}`}
                                   onClick={handleCancelEdit}
-                                  className="px-2.5 py-1.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[12px] font-semibold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  className="px-2.5 py-1.5 bg-black/30 hover:bg-black/50 text-slate-200 border border-white/15 text-[12px] font-semibold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                   <span>Cancel</span>
@@ -2413,34 +2413,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         }
 
                         return (
-                          <tr key={rule.id} className="hover:bg-[#f8fafc] transition-colors">
+                          <tr key={rule.id} className="hover:bg-white/5 transition-colors border-b border-white/5">
                             {/* Minimum Order */}
-                            <td className="py-3 px-4 font-bold text-[#0f172a] tabular-nums">
+                            <td className="py-3 px-4 font-bold text-white tabular-nums">
                               {formatINR(rule.minOrderAmount)}
                             </td>
 
                             {/* Delivery Charge */}
                             <td className="py-3 px-4 tabular-nums">
                               {rule.deliveryCharge === 0 ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#dcfce7] text-[#15803d] border border-[#86efac]">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-950/40 text-emerald-300 border border-emerald-500/30">
                                   FREE
                                 </span>
                               ) : (
-                                <span className="font-extrabold text-[#0f172a]">
+                                <span className="font-extrabold text-white">
                                   {formatINR(rule.deliveryCharge)}
                                 </span>
                               )}
                             </td>
 
                             {/* Rule Range / Condition */}
-                            <td className="py-3 px-4 hidden md:table-cell text-[#565e74] text-[12px]">
+                            <td className="py-3 px-4 hidden md:table-cell text-slate-300 text-[12px]">
                               {nextRule ? (
                                 <span>
-                                  Applies for subtotals from <strong className="text-[#0f172a]">{formatINR(rule.minOrderAmount)}</strong> to <strong className="text-[#0f172a]">{formatINR(nextRule.minOrderAmount - 1)}</strong>
+                                  Applies for subtotals from <strong className="text-white">{formatINR(rule.minOrderAmount)}</strong> to <strong className="text-white">{formatINR(nextRule.minOrderAmount - 1)}</strong>
                                 </span>
                               ) : (
                                 <span>
-                                  Applies for subtotals <strong className="text-[#0f172a]">≥ {formatINR(rule.minOrderAmount)}</strong>
+                                  Applies for subtotals <strong className="text-white">≥ {formatINR(rule.minOrderAmount)}</strong>
                                 </span>
                               )}
                             </td>
@@ -2451,7 +2451,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                 type="button"
                                 id={`admin-edit-rule-btn-${rule.id}`}
                                 onClick={() => handleStartEdit(rule)}
-                                className="px-2.5 py-1 text-[12px] font-semibold text-[#1e40af] bg-[#eff4ff] hover:bg-[#dbeafe] rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                                className="px-2.5 py-1 text-[12px] font-semibold text-sky-400 bg-sky-950/40 hover:bg-sky-900/50 border border-sky-500/20 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                                 <span>Edit</span>
@@ -2460,7 +2460,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                 type="button"
                                 id={`admin-delete-rule-btn-${rule.id}`}
                                 onClick={() => handleDeleteRule(rule.id)}
-                                className="px-2.5 py-1 text-[12px] font-semibold text-[#ba1a1a] bg-[#fee2e2]/60 hover:bg-[#fee2e2] rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                                className="px-2.5 py-1 text-[12px] font-semibold text-rose-400 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/20 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>Delete</span>
@@ -2476,7 +2476,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
 
             {/* Section 3: Save and Reset Actions Bar */}
-            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-[#e2e8f0]">
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-white/10">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -2499,34 +2499,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   type="button"
                   id="admin-reset-delivery-rules-btn"
                   onClick={handleResetToDefaultRules}
-                  className="px-4 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] text-[13px] font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="px-4 py-2.5 bg-black/30 hover:bg-black/50 border border-white/15 text-slate-200 text-[13px] font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset to Defaults</span>
                 </button>
               </div>
 
-              <span className="text-[12px] text-[#64748b]">
+              <span className="text-[12px] text-[#94a3b8]">
                 Changes affect customer Cart and Checkout immediately upon save.
               </span>
             </div>
 
             {/* Section 4: Live Rule Application Simulator / Tester */}
-            <div className="bg-[#eff4ff]/60 border border-[#bfdbfe] rounded-xl p-4 sm:p-5 space-y-3">
+            <div className="bg-black/30 backdrop-blur-md border border-white/15 rounded-xl p-4 sm:p-5 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h4 className="text-[14px] font-bold text-[#1e3a8a] flex items-center gap-1.5">
-                    <Truck className="w-4 h-4 text-[#1d4ed8]" />
+                  <h4 className="text-[14px] font-bold text-white flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-sky-400" />
                     <span>Live Rule Application Tester (Customer Perspective)</span>
                   </h4>
-                  <p className="text-[11px] text-[#3b82f6] mt-0.5">
+                  <p className="text-[11px] text-sky-300/80 mt-0.5">
                     Test how different customer cart subtotals match the configured rules in real time.
                   </p>
                 </div>
 
                 {/* Quick Test Presets */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-[#1e40af]">Quick Test:</span>
+                  <span className="text-[11px] font-bold text-slate-300">Quick Test:</span>
                   {[
                     { label: '₹200', val: 200 },
                     { label: '₹1,000', val: 1000 },
@@ -2540,8 +2540,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       onClick={() => setTestSubtotalInput(String(preset.val))}
                       className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
                         testSubtotalInput === String(preset.val)
-                          ? 'bg-[#1d4ed8] text-white border-[#1d4ed8]'
-                          : 'bg-white text-[#1e40af] border-[#bfdbfe] hover:bg-[#dbeafe]'
+                          ? 'bg-sky-600 text-white border-sky-500'
+                          : 'bg-black/30 text-sky-200 border-white/15 hover:bg-white/10'
                       }`}
                     >
                       {preset.label}
@@ -2553,11 +2553,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
                 {/* Input Subtotal */}
                 <div className="sm:col-span-5">
-                  <label htmlFor="admin-test-subtotal-input" className="block text-[12px] font-bold text-[#1e3a8a] mb-1">
+                  <label htmlFor="admin-test-subtotal-input" className="block text-[12px] font-bold text-slate-200 mb-1">
                     Simulate Cart Subtotal (₹)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-[14px] font-bold text-[#64748b] pointer-events-none">
+                    <span className="absolute left-3 top-2 text-[14px] font-bold text-[#94a3b8] pointer-events-none">
                       ₹
                     </span>
                     <input
@@ -2568,7 +2568,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       value={testSubtotalInput}
                       onChange={(e) => setTestSubtotalInput(e.target.value)}
                       placeholder="e.g. 1750"
-                      className="w-full pl-8 pr-3 py-2 text-[14px] font-bold bg-white border border-[#93c5fd] rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#1d4ed8] tabular-nums"
+                      className="w-full pl-8 pr-3 py-2 text-[14px] font-bold bg-black/30 border border-white/15 text-white rounded-xl focus:outline-hidden focus:ring-2 focus:ring-sky-500 tabular-nums placeholder:text-[#94a3b8]"
                     />
                   </div>
                 </div>
@@ -2581,26 +2581,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   const finalTotal = testNum + appliedCharge;
 
                   return (
-                    <div className="sm:col-span-7 bg-white p-3.5 rounded-xl border border-[#93c5fd] shadow-2xs space-y-1.5 text-[12px]">
-                      <div className="flex justify-between text-[#475569]">
+                    <div className="sm:col-span-7 bg-black/25 backdrop-blur-md p-3.5 rounded-xl border border-white/12 shadow-2xs space-y-1.5 text-[12px]">
+                      <div className="flex justify-between text-slate-400">
                         <span>Simulated Subtotal:</span>
-                        <span className="font-bold text-[#0f172a] tabular-nums">{formatINR(testNum)}</span>
+                        <span className="font-bold text-white tabular-nums">{formatINR(testNum)}</span>
                       </div>
-                      <div className="flex justify-between text-[#475569]">
+                      <div className="flex justify-between text-slate-400">
                         <span>Highest Minimum Order Reached:</span>
-                        <span className="font-bold text-[#1d4ed8] tabular-nums">
+                        <span className="font-bold text-sky-400 tabular-nums">
                           {matchedRule ? `Rule ≥ ${formatINR(matchedRule.minOrderAmount)}` : 'None'}
                         </span>
                       </div>
-                      <div className="flex justify-between text-[#475569]">
+                      <div className="flex justify-between text-slate-400">
                         <span>Delivery Charges:</span>
-                        <span className={`font-extrabold tabular-nums ${appliedCharge === 0 ? 'text-[#006b2c]' : 'text-[#0f172a]'}`}>
+                        <span className={`font-extrabold tabular-nums ${appliedCharge === 0 ? 'text-[#10b981]' : 'text-white'}`}>
                           {appliedCharge === 0 ? 'FREE' : formatINR(appliedCharge)}
                         </span>
                       </div>
-                      <div className="flex justify-between pt-1.5 border-t border-[#e2e8f0] text-[13px] font-extrabold text-[#0f172a]">
+                      <div className="flex justify-between pt-1.5 border-t border-white/10 text-[13px] font-extrabold text-white">
                         <span>Customer Final Total:</span>
-                        <span className="text-[#006b2c] tabular-nums">{formatINR(finalTotal)}</span>
+                        <span className="text-[#10b981] tabular-nums">{formatINR(finalTotal)}</span>
                       </div>
                     </div>
                   );
@@ -2613,8 +2613,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 const matchedRule = getApplicableDeliveryChargeRule(rules, testNum);
 
                 return (
-                  <div className="pt-2 border-t border-[#bfdbfe]/60">
-                    <span className="text-[11px] font-bold text-[#1e40af] uppercase tracking-wider block mb-1.5">
+                  <div className="pt-2 border-t border-white/10">
+                    <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
                       Rule Evaluation Trace (Cart Subtotal = {formatINR(testNum)}):
                     </span>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -2625,12 +2625,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         return (
                           <div
                             key={r.id}
-                            className={`p-2 rounded-lg border text-[11px] transition-all ${
+                            className={`p-2 rounded-lg border text-[11px] transition-all backdrop-blur-xs ${
                               isApplied
-                                ? 'bg-[#dcfce7] border-[#22c55e] text-[#15803d] font-bold shadow-2xs ring-1 ring-[#22c55e]'
+                                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 font-bold shadow-2xs ring-1 ring-emerald-500/30'
                                 : isReached
-                                ? 'bg-white border-[#cbd5e1] text-[#475569]'
-                                : 'bg-[#f1f5f9]/50 border-dashed border-[#cbd5e1] text-[#94a3b8]'
+                                ? 'bg-black/25 border-white/12 text-slate-300'
+                                : 'bg-black/15 border-dashed border-white/10 text-slate-500'
                             }`}
                           >
                             <div className="flex justify-between items-center">
@@ -2641,11 +2641,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             </div>
                             <div className="text-[10px] mt-0.5">
                               {isApplied ? (
-                                <span className="text-[#15803d] font-extrabold">← Applied</span>
+                                <span className="text-emerald-400 font-extrabold">← Applied</span>
                               ) : isReached ? (
-                                <span className="text-[#64748b]">Reached (overridden)</span>
+                                <span className="text-slate-400">Reached (overridden)</span>
                               ) : (
-                                <span className="text-[#94a3b8]">Not reached</span>
+                                <span className="text-slate-500">Not reached</span>
                               )}
                             </div>
                           </div>
