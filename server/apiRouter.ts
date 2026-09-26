@@ -7,6 +7,7 @@ import {
   verifyOrderOtp,
   resendOrderOtp,
   getOrderOtpStatus,
+  maskMobileNumber,
 } from './otpService.ts';
 import { getSmsProviderConfig } from './smsProvider.ts';
 
@@ -26,17 +27,27 @@ function sendJson(res: any, statusCode: number, data: any) {
 }
 
 export const apiRouter = express.Router();
-apiRouter.use(express.json());
+
+// Safe body parser: if req.body is already parsed (as on Vercel), do not re-read stream
+apiRouter.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 /**
  * POST /api/otp/generate
  * Generates an OTP, hashes it securely, and attempts SMS dispatch via isolated provider.
  */
-apiRouter.post('/api/otp/generate', async (req: Request, res: Response) => {
+apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: Request, res: Response) => {
   try {
-    const { orderId, customerId, customerPhone } = req.body;
+    const { orderId, customerId, customerPhone } = req.body || {};
+
+    console.log(`[OTP Server] POST /api/otp/generate - Order: ${orderId}, Customer: ${customerId}, Phone: ${customerPhone ? maskMobileNumber(customerPhone) : 'NONE'}`);
 
     if (!orderId || !customerPhone) {
+      console.warn(`[OTP Server] Missing orderId or customerPhone in /api/otp/generate request`);
       sendJson(res, 400, {
         success: false,
         error: 'Order ID and customer registered mobile number are required.',
@@ -50,8 +61,14 @@ apiRouter.post('/api/otp/generate', async (req: Request, res: Response) => {
       customerPhone
     );
 
+    console.log(`[OTP Server] Generate result for ${orderId}: Sent=${result.delivery?.sent}, Provider=${result.delivery?.provider}`);
+    if (!result.delivery?.sent) {
+      console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
+    }
+
     sendJson(res, 200, result);
   } catch (err: any) {
+    console.error(`[OTP Server] Exception in /api/otp/generate:`, err?.message);
     sendJson(res, 500, {
       success: false,
       error: err.message || 'Failed to generate order OTP on backend.',
@@ -63,9 +80,11 @@ apiRouter.post('/api/otp/generate', async (req: Request, res: Response) => {
  * POST /api/otp/verify
  * Validates entered OTP against backend salted SHA-256 hash.
  */
-apiRouter.post('/api/otp/verify', (req: Request, res: Response) => {
+apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], (req: Request, res: Response) => {
   try {
-    const { orderId, otp } = req.body;
+    const { orderId, otp } = req.body || {};
+
+    console.log(`[OTP Server] POST /api/otp/verify - Order: ${orderId}`);
 
     if (!orderId || !otp) {
       sendJson(res, 400, {
@@ -77,8 +96,10 @@ apiRouter.post('/api/otp/verify', (req: Request, res: Response) => {
     }
 
     const result = verifyOrderOtp(orderId, otp);
+    console.log(`[OTP Server] Verify result for ${orderId}: Success=${result.success}, Status=${result.status}`);
     sendJson(res, 200, result);
-  } catch {
+  } catch (err: any) {
+    console.error(`[OTP Server] Exception in /api/otp/verify:`, err?.message);
     sendJson(res, 500, {
       success: false,
       error: 'Backend error verifying OTP.',
@@ -91,9 +112,11 @@ apiRouter.post('/api/otp/verify', (req: Request, res: Response) => {
  * POST /api/otp/resend
  * Generates a new OTP, immediately invalidating the previous OTP.
  */
-apiRouter.post('/api/otp/resend', async (req: Request, res: Response) => {
+apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Request, res: Response) => {
   try {
-    const { orderId, customerId, customerPhone } = req.body;
+    const { orderId, customerId, customerPhone } = req.body || {};
+
+    console.log(`[OTP Server] POST /api/otp/resend - Order: ${orderId}, Customer: ${customerId}, Phone: ${customerPhone ? maskMobileNumber(customerPhone) : 'NONE'}`);
 
     if (!orderId) {
       sendJson(res, 400, { success: false, error: 'Order ID is required.' });
@@ -101,8 +124,15 @@ apiRouter.post('/api/otp/resend', async (req: Request, res: Response) => {
     }
 
     const result = await resendOrderOtp(orderId, customerId, customerPhone);
+
+    console.log(`[OTP Server] Resend result for ${orderId}: Sent=${result.delivery?.sent}, Provider=${result.delivery?.provider}`);
+    if (!result.delivery?.sent) {
+      console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
+    }
+
     sendJson(res, 200, result);
   } catch (err: any) {
+    console.error(`[OTP Server] Exception in /api/otp/resend:`, err?.message);
     sendJson(res, 500, {
       success: false,
       error: err.message || 'Failed to resend OTP.',

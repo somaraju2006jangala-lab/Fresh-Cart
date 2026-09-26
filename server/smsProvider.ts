@@ -29,8 +29,11 @@ export interface SmsDeliveryResult {
  * Normalizes phone numbers to standard E.164 (+91XXXXXXXXXX for 10-digit Indian numbers)
  */
 export function formatE164Phone(phone: string): string {
-  const cleaned = phone.replace(/[^\d+]/g, '');
+  let cleaned = phone.replace(/[^\d+]/g, '');
   if (cleaned.startsWith('+')) return cleaned;
+  if (cleaned.length === 11 && cleaned.startsWith('0')) {
+    cleaned = cleaned.slice(1);
+  }
   if (cleaned.length === 10) return `+91${cleaned}`;
   if (cleaned.length === 12 && cleaned.startsWith('91')) return `+${cleaned}`;
   return `+${cleaned}`;
@@ -120,7 +123,8 @@ export async function dispatchOtpSms(
       const apiKey = process.env.FAST2SMS_API_KEY!;
       const phone10 = extract10DigitPhone(recipientPhone);
 
-      const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+      // Attempt 1: route 'q' with full custom message
+      let response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
         method: 'POST',
         headers: {
           authorization: apiKey,
@@ -135,7 +139,32 @@ export async function dispatchOtpSms(
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      let data = await response.json().catch(() => ({}));
+
+      // If route 'q' rejected (e.g. DND number in India), fallback to transactional 'otp' route
+      if (!response.ok || data.return !== true) {
+        const fallbackRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+          method: 'POST',
+          headers: {
+            authorization: apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            route: 'otp',
+            variables_values: otp,
+            numbers: phone10,
+          }),
+        }).catch(() => null);
+
+        if (fallbackRes && fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json().catch(() => ({}));
+          if (fallbackData.return === true) {
+            response = fallbackRes;
+            data = fallbackData;
+          }
+        }
+      }
+
       if (response.ok && data.return === true) {
         return {
           sent: true,
@@ -145,11 +174,12 @@ export async function dispatchOtpSms(
           message: `OTP SMS dispatched to customer mobile (${phone10}).`,
         };
       } else {
+        const errorDetail = Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Fast2SMS delivery rejected.');
         return {
           sent: false,
           provider: 'Fast2SMS',
           status: 'FAILED',
-          message: Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Fast2SMS delivery rejected.'),
+          message: `Fast2SMS rejected: ${errorDetail}`,
         };
       }
     } catch (err: any) {

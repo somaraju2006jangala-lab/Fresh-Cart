@@ -651,24 +651,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           },
         }));
       } else {
+        const errorMsg = res.error || res.delivery?.message || res.message || 'Failed to send OTP. Please try again.';
         setOrderOtpFeedback((prev) => ({
           ...prev,
           [order.id]: {
             type: 'error',
-            message: 'Failed to send OTP. Please try again.',
+            message: errorMsg,
           },
         }));
-        console.error('[OTP SMS Delivery Failed]:', res.delivery?.message || res.error || 'Failed to send OTP.');
+        console.error('[OTP SMS Delivery Failed]:', errorMsg);
       }
     } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to send OTP. Please check server connection.';
       setOrderOtpFeedback((prev) => ({
         ...prev,
         [order.id]: {
           type: 'error',
-          message: 'Failed to send OTP. Please try again.',
+          message: errorMsg,
         },
       }));
-      console.error('[OTP SMS Delivery Failed]: Network or server error.', err?.message);
+      console.error('[OTP SMS Delivery Failed]: Network or server error.', errorMsg);
     } finally {
       setOrderSendingOtp((prev) => ({ ...prev, [order.id]: false }));
     }
