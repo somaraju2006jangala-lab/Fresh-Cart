@@ -13,8 +13,8 @@ import dotenv from 'dotenv';
 
 // Ensure environment variables are loaded in local development
 try {
-  dotenv.config();
-  dotenv.config({ path: '.env.local', override: false });
+  dotenv.config({ quiet: true } as any);
+  dotenv.config({ path: '.env.local', quiet: true, override: false } as any);
 } catch {
   // Ignore in production/serverless environments where dotenv might be unnecessary
 }
@@ -38,15 +38,6 @@ export interface SmsDeliveryResult {
  * Cleanly reads an environment variable, trimming whitespace and optional wrapping quotes.
  */
 function getCleanEnv(key: string): string | undefined {
-  // In dev, reload env in case .env was recently modified
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-    try {
-      dotenv.config({ override: true });
-    } catch {
-      // ignore
-    }
-  }
-
   const val = process.env[key];
   if (!val) return undefined;
   const trimmed = val.trim();
@@ -91,17 +82,41 @@ export function extract10DigitPhone(phone: string): string {
 }
 
 /**
+ * Helper to fetch a clean environment variable by primary name or fallback aliases.
+ */
+function getEnvWithFallbacks(primary: string, fallbacks: string[] = []): string | undefined {
+  const allKeys = [primary, ...fallbacks];
+  for (const k of allKeys) {
+    const val = getCleanEnv(k);
+    if (val) return val;
+  }
+  return undefined;
+}
+
+/**
  * Checks environment variables for real SMS provider credentials.
  *
  * 1. When the required Twilio variables are available: Provider = Twilio
  * 2. When FAST2SMS_API_KEY is available: Provider = Fast2SMS
  * 3. If neither provider is configured: Provider = None
+ *
+ * Supports common alias names (e.g. TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM_NUMBER, FAST2SMS_KEY)
+ * to prevent variable name mismatches.
  */
 export function getSmsProviderConfig(): SmsProviderConfig {
-  const twilioSid = getCleanEnv('TWILIO_ACCOUNT_SID');
-  const twilioAuthToken = getCleanEnv('TWILIO_AUTH_TOKEN');
-  const twilioPhone = getCleanEnv('TWILIO_PHONE_NUMBER');
-  const fast2smsKey = getCleanEnv('FAST2SMS_API_KEY');
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    try {
+      dotenv.config({ override: true, quiet: true } as any);
+      dotenv.config({ path: '.env.local', override: true, quiet: true } as any);
+    } catch {
+      // ignore
+    }
+  }
+
+  const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
+  const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
+  const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE']);
+  const fast2smsKey = getEnvWithFallbacks('FAST2SMS_API_KEY', ['FAST2SMS_KEY', 'FAST_2_SMS_KEY', 'FAST_2_SMS_API_KEY']);
 
   // 1. When the required Twilio variables are available: Provider = Twilio
   if (twilioSid && twilioAuthToken && twilioPhone) {
@@ -158,9 +173,9 @@ export async function dispatchOtpSms(
   // 1. TWILIO PROVIDER
   if (config.activeProvider === 'twilio') {
     try {
-      const twilioSid = getCleanEnv('TWILIO_ACCOUNT_SID')!;
-      const twilioAuthToken = getCleanEnv('TWILIO_AUTH_TOKEN')!;
-      const twilioPhone = getCleanEnv('TWILIO_PHONE_NUMBER')!;
+      const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID'])!;
+      const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN'])!;
+      const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE'])!;
       const e164Phone = formatE164Phone(recipientPhone);
 
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
@@ -211,7 +226,7 @@ export async function dispatchOtpSms(
   // 2. FAST2SMS PROVIDER
   if (config.activeProvider === 'fast2sms') {
     try {
-      const apiKey = getCleanEnv('FAST2SMS_API_KEY')!;
+      const apiKey = getEnvWithFallbacks('FAST2SMS_API_KEY', ['FAST2SMS_KEY', 'FAST_2_SMS_KEY', 'FAST_2_SMS_API_KEY'])!;
       const phone10 = extract10DigitPhone(recipientPhone);
 
       // Attempt 1: route 'q' with full custom message

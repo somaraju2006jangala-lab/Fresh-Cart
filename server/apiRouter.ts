@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+try {
+  dotenv.config({ quiet: true } as any);
+} catch {
+  // ignore
+}
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
