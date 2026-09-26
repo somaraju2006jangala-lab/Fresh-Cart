@@ -14,13 +14,46 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-// Ensure environment variables are loaded in local development
-try {
-  dotenv.config({ quiet: true } as any);
-  dotenv.config({ path: '.env.local', quiet: true, override: false } as any);
-} catch {
-  // Ignore in production/serverless environments where dotenv might be unnecessary
+/**
+ * Synchronously loads .env and .env.local from both import.meta.url relative path
+ * and process.cwd() relative path.
+ * Guarantees that non-empty values from .env are populated into process.env even if
+ * empty strings or undefined exist in the shell environment.
+ */
+export function ensureEnvLoaded(): void {
+  try {
+    const candidates = [
+      fileURLToPath(new URL('../.env', import.meta.url)),
+      fileURLToPath(new URL('../.env.local', import.meta.url)),
+      path.resolve(process.cwd(), '.env'),
+      path.resolve(process.cwd(), '.env.local'),
+    ];
+
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const parsed = dotenv.parse(content);
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && typeof v === 'string' && v.trim().length > 0) {
+              // Populate if currently missing or empty in process.env
+              if (!process.env[k] || process.env[k]!.trim().length === 0) {
+                process.env[k] = v.trim();
+              }
+            }
+          }
+        } catch {
+          // ignore error reading candidate
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
 }
+
+// Ensure environment variables are loaded immediately on module initialization
+ensureEnvLoaded();
 
 export interface SmsProviderConfig {
   providerName: 'Twilio' | 'Fast2SMS' | 'None';
@@ -110,27 +143,7 @@ function getEnvWithFallbacks(primary: string, fallbacks: string[] = []): string 
  * to prevent variable name mismatches.
  */
 export function getSmsProviderConfig(): SmsProviderConfig {
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-    try {
-      const loadNonEmptyEnv = (filePath: string) => {
-        if (fs.existsSync(filePath)) {
-          const content = fs.readFileSync(filePath, 'utf-8');
-          const parsed = dotenv.parse(content);
-          for (const [k, v] of Object.entries(parsed)) {
-            if (v && v.trim().length > 0) {
-              process.env[k] = v.trim();
-            }
-          }
-        }
-      };
-      loadNonEmptyEnv(fileURLToPath(new URL('../.env', import.meta.url)));
-      loadNonEmptyEnv(fileURLToPath(new URL('../.env.local', import.meta.url)));
-      loadNonEmptyEnv(path.resolve(process.cwd(), '.env'));
-      loadNonEmptyEnv(path.resolve(process.cwd(), '.env.local'));
-    } catch {
-      // ignore
-    }
-  }
+  ensureEnvLoaded();
 
   const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
   const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
@@ -183,6 +196,7 @@ export function getSafeEnvStatus(): {
   TWILIO_AUTH_TOKEN: 'configured' | 'missing';
   TWILIO_PHONE_NUMBER: 'configured' | 'missing';
 } {
+  ensureEnvLoaded();
   const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
   const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
   const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE']);
