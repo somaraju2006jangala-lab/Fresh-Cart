@@ -36,6 +36,7 @@ import {
   KeyRound,
   Percent,
   Truck,
+  Send,
 } from 'lucide-react';
 import { generateOrderOtp, verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
 
@@ -447,8 +448,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [orderOtpInputs, setOrderOtpInputs] = useState<Record<string, string>>({});
   const [orderVerifying, setOrderVerifying] = useState<Record<string, boolean>>({});
   const [orderSendingOtp, setOrderSendingOtp] = useState<Record<string, boolean>>({});
-  const [orderSendError, setOrderSendError] = useState<Record<string, string>>({});
-  const [orderResending, setOrderResending] = useState<Record<string, boolean>>({});
   const [orderOtpFeedback, setOrderOtpFeedback] = useState<
     Record<string, { type: 'success' | 'error' | 'expired'; message: string; remainingAttempts?: number }>
   >({});
@@ -589,7 +588,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             ...prev,
             [order.id]: {
               type: 'expired',
-              message: 'OTP expired.',
+              message: 'OTP expired. Please send a new OTP.',
             },
           }));
         } else {
@@ -616,71 +615,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  const handleTriggerOtpForOrder = async (order: CustomerOrder) => {
-    if (order.status !== 'Picking') {
-      return;
-    }
-
-    if (!order.customerPhone || !order.customerPhone.trim()) {
-      setOrderSendError((prev) => ({
-        ...prev,
-        [order.id]: 'Failed to send OTP. Please try again.',
-      }));
-      console.error('[OTP SMS Delivery Failed]: Order has no registered mobile number linked to customer.', {
-        orderId: order.id,
-        customerName: order.customerName,
-      });
-      return;
-    }
-
-    setOrderSendingOtp((prev) => ({ ...prev, [order.id]: true }));
-    setOrderSendError((prev) => {
-      const next = { ...prev };
-      delete next[order.id];
-      return next;
-    });
-
-    try {
-      const res = await generateOrderOtp(
-        order.id,
-        order.customerId || order.customerName,
-        order.customerPhone
-      );
-
-      if (res.success && res.delivery?.sent) {
-        // SMS successfully sent:
-        // 1. Open the existing OTP Verification page
-        setSelectedOtpOrderId(order.id);
-        // 2. Show appropriate message: "OTP sent successfully to ******1234"
-        setOrderOtpFeedback((prev) => ({
-          ...prev,
-          [order.id]: {
-            type: 'success',
-            message: `OTP sent successfully to ${maskMobileNumber(order.customerPhone)}`,
-          },
-        }));
-      } else {
-        // SMS failed:
-        // Do NOT open the OTP verification flow as if the SMS was sent
-        setOrderSendError((prev) => ({
-          ...prev,
-          [order.id]: 'Failed to send OTP. Please try again.',
-        }));
-        // Log actual backend/provider error for debugging without exposing secrets
-        console.error('[OTP SMS Delivery Failed]:', res.delivery?.message || res.error || 'SMS carrier dispatch rejected.');
-      }
-    } catch (err: any) {
-      setOrderSendError((prev) => ({
-        ...prev,
-        [order.id]: 'Failed to send OTP. Please try again.',
-      }));
-      console.error('[OTP SMS Delivery Failed]: Network or backend communication exception.', err?.message);
-    } finally {
-      setOrderSendingOtp((prev) => ({ ...prev, [order.id]: false }));
-    }
-  };
-
-  const handleResendOtp = async (order: CustomerOrder) => {
+  const handleSendOtp = async (order: CustomerOrder) => {
     if (order.status === 'Delivered') {
       return;
     }
@@ -692,10 +627,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           message: 'Failed to send OTP. Please try again.',
         },
       }));
-      console.error('[OTP SMS Delivery Failed (Resend)]: Order has no customer phone number to resend OTP.');
+      console.error('[OTP SMS Delivery Failed]: Order has no customer registered mobile number.', {
+        orderId: order.id,
+        customerName: order.customerName,
+      });
       return;
     }
-    setOrderResending((prev) => ({ ...prev, [order.id]: true }));
+
+    setOrderSendingOtp((prev) => ({ ...prev, [order.id]: true }));
     try {
       const res = await resendOrderOtp(
         order.id,
@@ -719,7 +658,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             message: 'Failed to send OTP. Please try again.',
           },
         }));
-        console.error('[OTP SMS Delivery Failed (Resend)]:', res.delivery?.message || res.error || 'Failed to resend OTP.');
+        console.error('[OTP SMS Delivery Failed]:', res.delivery?.message || res.error || 'Failed to send OTP.');
       }
     } catch (err: any) {
       setOrderOtpFeedback((prev) => ({
@@ -729,9 +668,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           message: 'Failed to send OTP. Please try again.',
         },
       }));
-      console.error('[OTP SMS Delivery Failed (Resend)]: Network or server error.', err?.message);
+      console.error('[OTP SMS Delivery Failed]: Network or server error.', err?.message);
     } finally {
-      setOrderResending((prev) => ({ ...prev, [order.id]: false }));
+      setOrderSendingOtp((prev) => ({ ...prev, [order.id]: false }));
     }
   };
 
@@ -1702,7 +1641,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         placeholder="[ ______ ]"
                         autoFocus
                         className="w-40 h-10 px-3 font-mono text-[16px] tracking-widest text-center font-bold bg-black/30 text-white border border-white/15 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981] placeholder:text-slate-500"
-                        disabled={orderVerifying[selectedOtpOrder.id] || orderResending[selectedOtpOrder.id]}
+                        disabled={orderVerifying[selectedOtpOrder.id] || orderSendingOtp[selectedOtpOrder.id]}
                       />
                       <button
                         type="button"
@@ -1710,7 +1649,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         onClick={() => handleVerifyOtp(selectedOtpOrder)}
                         disabled={
                           orderVerifying[selectedOtpOrder.id] ||
-                          orderResending[selectedOtpOrder.id] ||
+                          orderSendingOtp[selectedOtpOrder.id] ||
                           (orderOtpInputs[selectedOtpOrder.id] || '').length !== 6
                         }
                         className={`h-10 px-5 rounded-lg text-[13px] font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer ${
@@ -1731,21 +1670,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                       <button
                         type="button"
-                        id="separate-otp-resend-btn"
-                        onClick={() => handleResendOtp(selectedOtpOrder)}
-                        disabled={orderVerifying[selectedOtpOrder.id] || orderResending[selectedOtpOrder.id]}
-                        title="Invalidates previous OTP and generates a new one"
-                        className="h-10 px-3.5 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white bg-black/30 border border-white/15 hover:bg-black/50 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        id="separate-otp-send-btn"
+                        onClick={() => handleSendOtp(selectedOtpOrder)}
+                        disabled={orderVerifying[selectedOtpOrder.id] || orderSendingOtp[selectedOtpOrder.id]}
+                        title="Send or resend OTP to customer's registered mobile number"
+                        className="h-10 px-4 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white bg-black/30 border border-white/15 hover:bg-black/50 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
-                        {orderResending[selectedOtpOrder.id] ? (
+                        {orderSendingOtp[selectedOtpOrder.id] ? (
                           <>
                             <div className="w-3 h-3 border-2 border-[#475569] border-t-transparent rounded-full animate-spin" />
                             <span>Sending...</span>
                           </>
                         ) : (
                           <>
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            <span>Resend OTP</span>
+                            <Send className="w-3.5 h-3.5 text-[#10b981]" />
+                            <span>Send OTP</span>
                           </>
                         )}
                       </button>
@@ -1774,10 +1713,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         {orderOtpFeedback[selectedOtpOrder.id].type === 'expired' && (
                           <button
                             type="button"
-                            onClick={() => handleResendOtp(selectedOtpOrder)}
+                            id="separate-otp-resend-btn"
+                            onClick={() => handleSendOtp(selectedOtpOrder)}
                             className="underline font-bold text-[#b45309] hover:text-[#78350f] cursor-pointer ml-2 text-[12px]"
                           >
-                            Resend OTP
+                            Send OTP
                           </button>
                         )}
                       </div>
@@ -2063,38 +2003,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
-                          {/* Small "OTP" button to trigger real SMS delivery and open separate OTP Verification page on success */}
+                          {/* Small "OTP" button to open separate OTP Verification page */}
                           {order.status === 'Picking' && (
                             <button
                               type="button"
                               id={`order-otp-btn-${order.id}`}
-                              onClick={() => handleTriggerOtpForOrder(order)}
-                              disabled={orderSendingOtp[order.id]}
-                              title={`Send OTP SMS to customer ${maskMobileNumber(order.customerPhone)}`}
-                              className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs disabled:opacity-60"
+                              onClick={() => setSelectedOtpOrderId(order.id)}
+                              title={`Open OTP Verification page for ${displayOrderId}`}
+                              className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
                             >
-                              {orderSendingOtp[order.id] ? (
-                                <>
-                                  <div className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                                  <span>Sending...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
-                                  <span>OTP</span>
-                                </>
-                              )}
+                              <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
+                              <span>OTP</span>
                             </button>
-                          )}
-
-                          {orderSendError[order.id] && (
-                            <div
-                              id={`order-otp-error-${order.id}`}
-                              className="text-[11px] font-semibold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs"
-                            >
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                              <span>{orderSendError[order.id]}</span>
-                            </div>
                           )}
 
                           {/* Automatic read-only status display — manual status control removed */}

@@ -193,8 +193,8 @@ export function verifyOrderOtp(
     persistStore();
     return {
       success: false,
-      error: 'OTP expired.',
-      message: 'OTP expired.',
+      error: 'OTP expired. Please send a new OTP.',
+      message: 'OTP expired. Please send a new OTP.',
       status: 'Picking',
       isExpired: true,
       remainingAttempts: 0,
