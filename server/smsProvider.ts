@@ -11,6 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 // Ensure environment variables are loaded in local development
@@ -134,6 +135,8 @@ export function getSmsProviderConfig(): SmsProviderConfig {
           }
         }
       };
+      loadNonEmptyEnv(fileURLToPath(new URL('../.env', import.meta.url)));
+      loadNonEmptyEnv(fileURLToPath(new URL('../.env.local', import.meta.url)));
       loadNonEmptyEnv(path.resolve(process.cwd(), '.env'));
       loadNonEmptyEnv(path.resolve(process.cwd(), '.env.local'));
     } catch {
@@ -181,6 +184,39 @@ export function getSmsProviderConfig(): SmsProviderConfig {
     isConfigured: false,
     missingConfig: missing,
   };
+}
+
+/**
+ * Safely inspects the availability of each Twilio environment variable
+ * without ever exposing or printing secrets.
+ */
+export function getSafeEnvStatus(): {
+  TWILIO_ACCOUNT_SID: 'configured' | 'missing';
+  TWILIO_AUTH_TOKEN: 'configured' | 'missing';
+  TWILIO_PHONE_NUMBER: 'configured' | 'missing';
+} {
+  const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
+  const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
+  const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE']);
+
+  return {
+    TWILIO_ACCOUNT_SID: twilioSid ? 'configured' : 'missing',
+    TWILIO_AUTH_TOKEN: twilioAuthToken ? 'configured' : 'missing',
+    TWILIO_PHONE_NUMBER: twilioPhone ? 'configured' : 'missing',
+  };
+}
+
+/**
+ * Logs safe environment variable statuses conforming to:
+ * TWILIO_ACCOUNT_SID: configured / missing
+ * TWILIO_AUTH_TOKEN: configured / missing
+ * TWILIO_PHONE_NUMBER: configured / missing
+ */
+export function logSafeEnvStatus(): void {
+  const status = getSafeEnvStatus();
+  console.log(`[OTP Server] TWILIO_ACCOUNT_SID: ${status.TWILIO_ACCOUNT_SID}`);
+  console.log(`[OTP Server] TWILIO_AUTH_TOKEN: ${status.TWILIO_AUTH_TOKEN}`);
+  console.log(`[OTP Server] TWILIO_PHONE_NUMBER: ${status.TWILIO_PHONE_NUMBER}`);
 }
 
 /**

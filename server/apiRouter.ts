@@ -14,7 +14,7 @@ import {
   getOrderOtpStatus,
   maskMobileNumber,
 } from './otpService.ts';
-import { getSmsProviderConfig } from './smsProvider.ts';
+import { getSmsProviderConfig, logSafeEnvStatus } from './smsProvider.ts';
 
 function sendJson(res: any, statusCode: number, data: any) {
   if (typeof res.status === 'function') {
@@ -59,6 +59,8 @@ apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: 
       });
       return;
     }
+
+    logSafeEnvStatus();
 
     const result = await generateOrderOtp(
       orderId,
@@ -127,6 +129,8 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
       sendJson(res, 400, { success: false, error: 'Order ID is required.' });
       return;
     }
+
+    logSafeEnvStatus();
 
     const result = await resendOrderOtp(orderId, customerId, customerPhone);
 
