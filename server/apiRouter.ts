@@ -144,7 +144,7 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
  * GET /api/otp/status/:orderId
  * Returns current safe verification status of an order (no plain OTP).
  */
-apiRouter.get('/api/otp/status/:orderId', (req: Request, res: Response) => {
+apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:orderId'], (req: Request, res: Response) => {
   try {
     const orderId = decodeURIComponent(req.params.orderId);
     const status = getOrderOtpStatus(orderId);
@@ -158,7 +158,7 @@ apiRouter.get('/api/otp/status/:orderId', (req: Request, res: Response) => {
  * GET /api/otp/provider-config
  * Reports isolated SMS provider configuration status without revealing secrets.
  */
-apiRouter.get('/api/otp/provider-config', (_req: Request, res: Response) => {
+apiRouter.get(['/api/otp/provider-config', '/otp/provider-config', '/provider-config'], (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
 });
 

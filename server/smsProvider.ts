@@ -4,38 +4,80 @@
  * Supports live carrier delivery via:
  * 1. Twilio (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
  * 2. Fast2SMS for India (FAST2SMS_API_KEY)
- * 3. Generic SMS Gateway (SMS_GATEWAY_URL, optional SMS_GATEWAY_API_KEY)
  *
  * If credentials are not present, it strictly does NOT pretend that an SMS was sent,
  * does NOT create fake SMS logs, and clearly identifies the missing provider configuration.
  */
 
+import dotenv from 'dotenv';
+
+// Ensure environment variables are loaded in local development
+try {
+  dotenv.config();
+  dotenv.config({ path: '.env.local', override: false });
+} catch {
+  // Ignore in production/serverless environments where dotenv might be unnecessary
+}
+
 export interface SmsProviderConfig {
-  providerName: string;
+  providerName: 'Twilio' | 'Fast2SMS' | 'None';
   isConfigured: boolean;
-  activeProvider?: 'twilio' | 'fast2sms' | 'generic';
+  activeProvider?: 'twilio' | 'fast2sms';
   missingConfig?: string[];
 }
 
 export interface SmsDeliveryResult {
   sent: boolean;
-  provider: string;
+  provider: 'Twilio' | 'Fast2SMS' | 'None';
   status: 'DELIVERED_TO_CARRIER' | 'PROVIDER_NOT_CONFIGURED' | 'FAILED';
   carrierMessageId?: string;
   message: string;
 }
 
 /**
+ * Cleanly reads an environment variable, trimming whitespace and optional wrapping quotes.
+ */
+function getCleanEnv(key: string): string | undefined {
+  // In dev, reload env in case .env was recently modified
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    try {
+      dotenv.config({ override: true });
+    } catch {
+      // ignore
+    }
+  }
+
+  const val = process.env[key];
+  if (!val) return undefined;
+  const trimmed = val.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    const unquoted = trimmed.slice(1, -1).trim();
+    return unquoted || undefined;
+  }
+  return trimmed || undefined;
+}
+
+/**
  * Normalizes phone numbers to standard E.164 (+91XXXXXXXXXX for 10-digit Indian numbers)
  */
 export function formatE164Phone(phone: string): string {
-  let cleaned = phone.replace(/[^\d+]/g, '');
-  if (cleaned.startsWith('+')) return cleaned;
+  if (!phone) return '';
+  let cleaned = phone.trim().replace(/[^\d+]/g, '');
+  if (cleaned.startsWith('+')) {
+    return '+' + cleaned.replace(/\D/g, '');
+  }
   if (cleaned.length === 11 && cleaned.startsWith('0')) {
     cleaned = cleaned.slice(1);
   }
-  if (cleaned.length === 10) return `+91${cleaned}`;
-  if (cleaned.length === 12 && cleaned.startsWith('91')) return `+${cleaned}`;
+  if (cleaned.length === 10) {
+    return `+91${cleaned}`;
+  }
+  if (cleaned.length === 12 && cleaned.startsWith('91')) {
+    return `+${cleaned}`;
+  }
   return `+${cleaned}`;
 }
 
@@ -43,32 +85,25 @@ export function formatE164Phone(phone: string): string {
  * Extracts pure 10-digit phone for Indian national gateways like Fast2SMS
  */
 export function extract10DigitPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
+  const digits = (phone || '').replace(/\D/g, '');
   if (digits.length >= 10) return digits.slice(-10);
   return digits;
 }
 
 /**
  * Checks environment variables for real SMS provider credentials.
+ *
+ * 1. When the required Twilio variables are available: Provider = Twilio
+ * 2. When FAST2SMS_API_KEY is available: Provider = Fast2SMS
+ * 3. If neither provider is configured: Provider = None
  */
 export function getSmsProviderConfig(): SmsProviderConfig {
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
-  const fast2smsKey = process.env.FAST2SMS_API_KEY;
-  const gatewayUrl = process.env.SMS_GATEWAY_URL;
+  const twilioSid = getCleanEnv('TWILIO_ACCOUNT_SID');
+  const twilioAuthToken = getCleanEnv('TWILIO_AUTH_TOKEN');
+  const twilioPhone = getCleanEnv('TWILIO_PHONE_NUMBER');
+  const fast2smsKey = getCleanEnv('FAST2SMS_API_KEY');
 
-  // Check Fast2SMS
-  if (fast2smsKey && fast2smsKey.trim()) {
-    return {
-      providerName: 'Fast2SMS',
-      isConfigured: true,
-      activeProvider: 'fast2sms',
-    };
-  }
-
-  // Check Twilio
-  const hasTwilioPartial = Boolean(twilioSid || twilioAuthToken || twilioPhone);
+  // 1. When the required Twilio variables are available: Provider = Twilio
   if (twilioSid && twilioAuthToken && twilioPhone) {
     return {
       providerName: 'Twilio',
@@ -77,16 +112,19 @@ export function getSmsProviderConfig(): SmsProviderConfig {
     };
   }
 
-  // Check Generic Webhook
-  if (gatewayUrl && gatewayUrl.trim()) {
+  // 2. When FAST2SMS_API_KEY is available: Provider = Fast2SMS
+  if (fast2smsKey) {
     return {
-      providerName: 'Custom SMS Gateway',
+      providerName: 'Fast2SMS',
       isConfigured: true,
-      activeProvider: 'generic',
+      activeProvider: 'fast2sms',
     };
   }
 
+  // 3. If neither provider is configured: Provider = None
   const missing: string[] = [];
+  const hasTwilioPartial = Boolean(twilioSid || twilioAuthToken || twilioPhone);
+
   if (hasTwilioPartial) {
     if (!twilioSid) missing.push('TWILIO_ACCOUNT_SID');
     if (!twilioAuthToken) missing.push('TWILIO_AUTH_TOKEN');
@@ -96,7 +134,7 @@ export function getSmsProviderConfig(): SmsProviderConfig {
   }
 
   return {
-    providerName: 'Unconfigured SMS Provider',
+    providerName: 'None',
     isConfigured: false,
     missingConfig: missing,
   };
@@ -117,10 +155,63 @@ export async function dispatchOtpSms(
   const config = getSmsProviderConfig();
   const smsBody = `Your FreshCart order verification OTP is ${otp}. This OTP is valid for 10 minutes.`;
 
-  // 1. FAST2SMS PROVIDER
+  // 1. TWILIO PROVIDER
+  if (config.activeProvider === 'twilio') {
+    try {
+      const twilioSid = getCleanEnv('TWILIO_ACCOUNT_SID')!;
+      const twilioAuthToken = getCleanEnv('TWILIO_AUTH_TOKEN')!;
+      const twilioPhone = getCleanEnv('TWILIO_PHONE_NUMBER')!;
+      const e164Phone = formatE164Phone(recipientPhone);
+
+      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+      const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+
+      const params = new URLSearchParams();
+      params.append('To', e164Phone);
+      params.append('From', twilioPhone);
+      params.append('Body', smsBody);
+
+      const response = await fetch(twilioUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.sid) {
+        return {
+          sent: true,
+          provider: 'Twilio',
+          status: 'DELIVERED_TO_CARRIER',
+          carrierMessageId: data.sid,
+          message: `OTP SMS delivered to carrier route for ${e164Phone}.`,
+        };
+      } else {
+        const errorDetail = data.message || `Twilio dispatch rejected (Status ${response.status}).`;
+        return {
+          sent: false,
+          provider: 'Twilio',
+          status: 'FAILED',
+          message: errorDetail,
+        };
+      }
+    } catch (err: any) {
+      return {
+        sent: false,
+        provider: 'Twilio',
+        status: 'FAILED',
+        message: err.message || 'Twilio network request error.',
+      };
+    }
+  }
+
+  // 2. FAST2SMS PROVIDER
   if (config.activeProvider === 'fast2sms') {
     try {
-      const apiKey = process.env.FAST2SMS_API_KEY!;
+      const apiKey = getCleanEnv('FAST2SMS_API_KEY')!;
       const phone10 = extract10DigitPhone(recipientPhone);
 
       // Attempt 1: route 'q' with full custom message
@@ -192,109 +283,15 @@ export async function dispatchOtpSms(
     }
   }
 
-  // 2. TWILIO PROVIDER
-  if (config.activeProvider === 'twilio') {
-    try {
-      const twilioSid = process.env.TWILIO_ACCOUNT_SID!;
-      const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN!;
-      const twilioPhone = process.env.TWILIO_PHONE_NUMBER!;
-      const e164Phone = formatE164Phone(recipientPhone);
+  // 3. UNCONFIGURED (Provider = None)
+  const missingSummary = config.missingConfig && config.missingConfig.length > 0
+    ? config.missingConfig.join(', ')
+    : 'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, (or FAST2SMS_API_KEY)';
 
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-      const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
-
-      const params = new URLSearchParams();
-      params.append('To', e164Phone);
-      params.append('From', twilioPhone);
-      params.append('Body', smsBody);
-
-      const response = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.sid) {
-        return {
-          sent: true,
-          provider: 'Twilio',
-          status: 'DELIVERED_TO_CARRIER',
-          carrierMessageId: data.sid,
-          message: `OTP SMS delivered to carrier route for ${e164Phone}.`,
-        };
-      } else {
-        return {
-          sent: false,
-          provider: 'Twilio',
-          status: 'FAILED',
-          message: data.message || `Twilio dispatch rejected (Status ${response.status}).`,
-        };
-      }
-    } catch (err: any) {
-      return {
-        sent: false,
-        provider: 'Twilio',
-        status: 'FAILED',
-        message: err.message || 'Twilio network request error.',
-      };
-    }
-  }
-
-  // 3. GENERIC CUSTOM SMS GATEWAY
-  if (config.activeProvider === 'generic') {
-    try {
-      const gatewayUrl = process.env.SMS_GATEWAY_URL!;
-      const apiKey = process.env.SMS_GATEWAY_API_KEY;
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-      const response = await fetch(gatewayUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          to: recipientPhone,
-          message: smsBody,
-          otp,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (response.ok) {
-        return {
-          sent: true,
-          provider: 'Custom SMS Gateway',
-          status: 'DELIVERED_TO_CARRIER',
-          carrierMessageId: data.id || `gw-${Date.now()}`,
-          message: 'OTP SMS delivered to custom gateway.',
-        };
-      } else {
-        return {
-          sent: false,
-          provider: 'Custom SMS Gateway',
-          status: 'FAILED',
-          message: data.message || `Gateway returned HTTP ${response.status}.`,
-        };
-      }
-    } catch (err: any) {
-      return {
-        sent: false,
-        provider: 'Custom SMS Gateway',
-        status: 'FAILED',
-        message: err.message || 'Custom gateway network request failed.',
-      };
-    }
-  }
-
-  // 4. UNCONFIGURED
   return {
     sent: false,
-    provider: 'None (Unconfigured)',
+    provider: 'None',
     status: 'PROVIDER_NOT_CONFIGURED',
-    message: `SMS provider is not configured. Missing environment variables: ${config.missingConfig?.join(', ')}. Configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER or FAST2SMS_API_KEY in Vercel / .env.`,
+    message: `SMS provider is not configured. Missing environment variables: ${missingSummary}.`,
   };
 }
