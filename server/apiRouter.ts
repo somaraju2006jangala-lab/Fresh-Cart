@@ -6,10 +6,11 @@ import {
   verifyOrderOtp,
   resendOrderOtp,
   getOrderOtpStatus,
+  getCustomerOrderOtp,
   maskMobileNumber,
   normalizeAndValidateIndianMobile,
 } from './otpService.ts';
-import { ensureEnvLoaded, getSmsProviderConfig, logSafeEnvStatus } from './smsProvider.ts';
+import { ensureEnvLoaded, getSmsProviderConfig } from './smsProvider.ts';
 
 ensureEnvLoaded();
 
@@ -40,34 +41,26 @@ apiRouter.use((req, res, next) => {
 
 /**
  * POST /api/otp/generate
- * Generates an OTP, hashes it securely, and attempts SMS dispatch via isolated provider.
+ * Generates an OTP, hashes it securely, and stores it on the backend.
  */
 apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: Request, res: Response) => {
   try {
     const { orderId, customerId, customerPhone } = req.body || {};
-    const norm = normalizeAndValidateIndianMobile(customerPhone);
 
-    if (!orderId || !norm.isValid) {
-      console.warn(`[OTP Server] Missing or invalid Indian mobile number for order ${orderId}, customer ${customerId || 'unknown'}`);
+    if (!orderId) {
       sendJson(res, 400, {
         success: false,
-        error: 'Valid Indian mobile number is not available for this customer.',
-        message: 'Valid Indian mobile number is not available for this customer.',
+        error: 'Order ID is required.',
+        message: 'Order ID is required.',
       });
       return;
     }
 
-    logSafeEnvStatus();
-
     const result = await generateOrderOtp(
       orderId,
       customerId || 'guest',
-      norm.msg91Format
+      customerPhone || ''
     );
-
-    if (!result.delivery?.sent) {
-      console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
-    }
 
     sendJson(res, 200, result);
   } catch (err: any) {
@@ -81,7 +74,7 @@ apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: 
 
 /**
  * POST /api/otp/verify
- * Validates entered OTP against backend salted SHA-256 hash.
+ * Validates entered OTP against backend stored Order Handover OTP.
  */
 apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Request, res: Response) => {
   try {
@@ -121,26 +114,7 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
       return;
     }
 
-    if (customerPhone) {
-      const norm = normalizeAndValidateIndianMobile(customerPhone);
-      if (!norm.isValid) {
-        sendJson(res, 400, {
-          success: false,
-          error: 'Valid Indian mobile number is not available for this customer.',
-          message: 'Valid Indian mobile number is not available for this customer.',
-        });
-        return;
-      }
-    }
-
-    logSafeEnvStatus();
-
     const result = await resendOrderOtp(orderId, customerId, customerPhone);
-
-    if (!result.delivery?.sent) {
-      console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
-    }
-
     sendJson(res, 200, result);
   } catch (err: any) {
     console.error(`[OTP Server] Exception in /api/otp/resend:`, err?.message);
@@ -152,8 +126,56 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
 });
 
 /**
+ * GET /api/otp/customer-order-otp/:orderId
+ * Dedicated endpoint for authenticated customers to retrieve the Order Handover OTP for their own order.
+ * - Customer must provide customerId (via query ?customerId=... or header x-customer-id).
+ * - Customer can only view their own active order OTP.
+ * - Unauthorized customer queries return 403 Forbidden.
+ * - Delivered orders return status: 'USED' and do not expose active OTP.
+ */
+apiRouter.get(
+  [
+    '/api/otp/customer-order-otp/:orderId',
+    '/otp/customer-order-otp/:orderId',
+    '/customer-order-otp/:orderId',
+  ],
+  (req: Request, res: Response) => {
+    try {
+      const orderId = decodeURIComponent(req.params.orderId);
+      const customerId =
+        (req.query.customerId as string) ||
+        (req.headers['x-customer-id'] as string) ||
+        '';
+
+      const result = getCustomerOrderOtp(orderId, customerId);
+
+      if (!result.success) {
+        if (result.error?.includes('Access denied')) {
+          sendJson(res, 403, result);
+          return;
+        }
+        if (result.error?.includes('Authentication required')) {
+          sendJson(res, 401, result);
+          return;
+        }
+        sendJson(res, 404, result);
+        return;
+      }
+
+      sendJson(res, 200, result);
+    } catch (err: any) {
+      console.error(`[OTP Server] Error in customer-order-otp:`, err?.message);
+      sendJson(res, 500, {
+        success: false,
+        error: 'Failed to retrieve Customer Order Handover OTP.',
+      });
+    }
+  }
+);
+
+/**
  * GET /api/otp/status/:orderId
- * Returns current safe verification status of an order (no plain OTP).
+ * Returns safe verification status of an order (no plain OTP).
  */
 apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:orderId'], (req: Request, res: Response) => {
   try {

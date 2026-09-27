@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product, InventoryLog, Coupon, CustomerOrder, DeliveryChargeRule } from '../types';
 import { USER_AVATAR_URL } from '../data/products';
 import { formatINR } from '../utils/currency';
@@ -36,9 +36,8 @@ import {
   KeyRound,
   Percent,
   Truck,
-  Send,
 } from 'lucide-react';
-import { generateOrderOtp, verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
+import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
 
@@ -449,7 +448,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // OTP Verification States for Admin Customer Orders Ledger
   const [orderOtpInputs, setOrderOtpInputs] = useState<Record<string, string>>({});
   const [orderVerifying, setOrderVerifying] = useState<Record<string, boolean>>({});
-  const [orderSendingOtp, setOrderSendingOtp] = useState<Record<string, boolean>>({});
   const [orderOtpFeedback, setOrderOtpFeedback] = useState<
     Record<string, { type: 'success' | 'error' | 'expired'; message: string; remainingAttempts?: number }>
   >({});
@@ -616,69 +614,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setOrderVerifying((prev) => ({ ...prev, [order.id]: false }));
     }
   };
-
-  const handleSendOtp = async (order: CustomerOrder) => {
-    if (order.status === 'Delivered') {
-      return;
-    }
-
-    const resolvedPhone = getCustomerPhoneForOrder(order);
-    const validation = validateIndianMobileNumber(resolvedPhone);
-
-    if (!validation.isValid || !validation.normalized) {
-      setOrderOtpFeedback((prev) => ({
-        ...prev,
-        [order.id]: {
-          type: 'error',
-          message: 'Valid Indian mobile number is not available for this customer.',
-        },
-      }));
-      return;
-    }
-
-    setOrderSendingOtp((prev) => ({ ...prev, [order.id]: true }));
-    try {
-      const res = await resendOrderOtp(
-        order.id,
-        order.customerId || order.customerName,
-        validation.normalized
-      );
-      if (res.success && res.delivery?.sent) {
-        setOrderOtpInputs((prev) => ({ ...prev, [order.id]: '' }));
-        setOrderOtpFeedback((prev) => ({
-          ...prev,
-          [order.id]: {
-            type: 'success',
-            message: `OTP sent successfully to ${formatIndianDisplayNumber(validation.normalized)}`,
-          },
-        }));
-      } else {
-        const errorMsg =
-          res.error ||
-          res.delivery?.message ||
-          res.message ||
-          'Valid Indian mobile number is not available for this customer.';
-        setOrderOtpFeedback((prev) => ({
-          ...prev,
-          [order.id]: {
-            type: 'error',
-            message: errorMsg,
-          },
-        }));
-      }
-    } catch (err: any) {
-      setOrderOtpFeedback((prev) => ({
-        ...prev,
-        [order.id]: {
-          type: 'error',
-          message: err?.message || 'Valid Indian mobile number is not available for this customer.',
-        },
-      }));
-    } finally {
-      setOrderSendingOtp((prev) => ({ ...prev, [order.id]: false }));
-    }
-  };
-
 
   const periodDisplayMessage = activeHistoryPeriod ? activeHistoryPeriod.displayMessage : null;
 
@@ -1588,6 +1523,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                 <div className="bg-black/25 backdrop-blur-md border border-white/12 rounded-xl p-5 space-y-3 font-mono text-[14px]">
                   <div>
+                    <span className="font-semibold text-[#94a3b8]">Order ID: </span>
+                    <span className="font-bold text-[#10b981]">
+                      {selectedOtpOrder.id.startsWith('#') ? selectedOtpOrder.id : `#${selectedOtpOrder.id}`}
+                    </span>
+                  </div>
+                  <div>
                     <span className="font-semibold text-[#94a3b8]">Customer: </span>
                     <span className="font-bold text-white">{selectedOtpOrder.customerName}</span>
                   </div>
@@ -1596,15 +1537,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <span className="font-semibold text-slate-200">{selectedOtpOrder.customerId || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-[#94a3b8]">Mobile: </span>
-                    <span className="font-bold text-white tracking-wider">
-                      {formatIndianDisplayNumber(getCustomerPhoneForOrder(selectedOtpOrder)) || 'Not available'}
+                    <span className="font-semibold text-[#94a3b8]">
+                      {(() => {
+                        const rawPhone = getCustomerPhoneForOrder(selectedOtpOrder);
+                        const validated = validateIndianMobileNumber(rawPhone);
+                        return validated.isValid && validated.normalized ? 'Masked Mobile: ' : 'Mobile: ';
+                      })()}
                     </span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-[#94a3b8]">Order ID: </span>
-                    <span className="font-bold text-[#10b981]">
-                      {selectedOtpOrder.id.startsWith('#') ? selectedOtpOrder.id : `#${selectedOtpOrder.id}`}
+                    <span className="font-bold text-white tracking-wider">
+                      {(() => {
+                        const rawPhone = getCustomerPhoneForOrder(selectedOtpOrder);
+                        const validated = validateIndianMobileNumber(rawPhone);
+                        if (validated.isValid && validated.normalized) {
+                          return maskMobileNumber(validated.normalized);
+                        }
+                        if (rawPhone && rawPhone.trim()) {
+                          const digits = rawPhone.replace(/\D/g, '');
+                          if (digits.length >= 4) {
+                            return `******${digits.slice(-4)}`;
+                          }
+                        }
+                        return 'Not available';
+                      })()}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1639,7 +1593,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       htmlFor="separate-otp-input"
                       className="block text-[13px] font-bold text-white"
                     >
-                      Enter OTP:
+                      Order Handover OTP
                     </label>
                     <div className="flex flex-wrap items-center gap-3">
                       <input
@@ -1648,10 +1602,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         maxLength={6}
                         value={orderOtpInputs[selectedOtpOrder.id] || ''}
                         onChange={(e) => handleOtpInputChange(selectedOtpOrder.id, e.target.value)}
-                        placeholder="[ ______ ]"
+                        placeholder="[ Enter OTP ]"
                         autoFocus
-                        className="w-40 h-10 px-3 font-mono text-[16px] tracking-widest text-center font-bold bg-black/30 text-white border border-white/15 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981] placeholder:text-slate-500"
-                        disabled={orderVerifying[selectedOtpOrder.id] || orderSendingOtp[selectedOtpOrder.id]}
+                        className="w-44 h-10 px-3 font-mono text-[16px] tracking-widest text-center font-bold bg-black/30 text-white border border-white/15 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981] placeholder:text-slate-500"
+                        disabled={orderVerifying[selectedOtpOrder.id]}
                       />
                       <button
                         type="button"
@@ -1659,7 +1613,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         onClick={() => handleVerifyOtp(selectedOtpOrder)}
                         disabled={
                           orderVerifying[selectedOtpOrder.id] ||
-                          orderSendingOtp[selectedOtpOrder.id] ||
                           (orderOtpInputs[selectedOtpOrder.id] || '').length !== 6
                         }
                         className={`h-10 px-5 rounded-lg text-[13px] font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer ${
@@ -1675,27 +1628,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </>
                         ) : (
                           <span>Verify OTP</span>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        id="separate-otp-send-btn"
-                        onClick={() => handleSendOtp(selectedOtpOrder)}
-                        disabled={orderVerifying[selectedOtpOrder.id] || orderSendingOtp[selectedOtpOrder.id]}
-                        title="Send or resend OTP to customer's registered mobile number"
-                        className="h-10 px-4 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white bg-black/30 border border-white/15 hover:bg-black/50 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        {orderSendingOtp[selectedOtpOrder.id] ? (
-                          <>
-                            <div className="w-3 h-3 border-2 border-[#475569] border-t-transparent rounded-full animate-spin" />
-                            <span>Sending...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-3.5 h-3.5 text-[#10b981]" />
-                            <span>Send OTP</span>
-                          </>
                         )}
                       </button>
                     </div>
@@ -1720,16 +1652,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           )}
                           <span>{orderOtpFeedback[selectedOtpOrder.id].message}</span>
                         </div>
-                        {orderOtpFeedback[selectedOtpOrder.id].type === 'expired' && (
-                          <button
-                            type="button"
-                            id="separate-otp-resend-btn"
-                            onClick={() => handleSendOtp(selectedOtpOrder)}
-                            className="underline font-bold text-[#b45309] hover:text-[#78350f] cursor-pointer ml-2 text-[12px]"
-                          >
-                            Send OTP
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>
@@ -2015,14 +1937,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
-                          {/* Small "OTP" button to open separate OTP Verification page and send OTP */}
+                          {/* Small "OTP" button to open separate OTP Verification page */}
                           {order.status === 'Picking' && (
                             <button
                               type="button"
                               id={`order-otp-btn-${order.id}`}
                               onClick={() => {
                                 setSelectedOtpOrderId(order.id);
-                                handleSendOtp(order);
                               }}
                               title={`Open OTP Verification page for ${displayOrderId}`}
                               className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"

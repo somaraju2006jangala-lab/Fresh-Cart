@@ -1,24 +1,14 @@
 /**
- * Frontend client service for interacting with the backend OTP API.
- * Follows strict security rules:
- * - All OTP generation, hashing, attempt tracking, and verification are performed by the backend.
- * - OTP is never exposed in frontend code, localStorage, or console logs.
+ * Frontend client service for interacting with the backend Order Handover OTP API.
  */
-
-export interface SmsDeliveryResult {
-  sent: boolean;
-  provider: string;
-  status: 'DELIVERED_TO_CARRIER' | 'PROVIDER_NOT_CONFIGURED' | 'FAILED';
-  carrierMessageId?: string;
-  message: string;
-}
 
 export interface OtpGenerateResult {
   success: boolean;
   orderId?: string;
   maskedPhone?: string;
   expiresAt?: number;
-  delivery?: SmsDeliveryResult;
+  otp?: string;
+  message?: string;
   error?: string;
 }
 
@@ -38,7 +28,7 @@ export interface OtpResendResult {
   error?: string;
   maskedPhone?: string;
   expiresAt?: number;
-  delivery?: SmsDeliveryResult;
+  otp?: string;
 }
 
 export interface OtpStatusResult {
@@ -85,12 +75,6 @@ export async function generateOrderOtp(
     return {
       success: false,
       error: err?.message || 'Could not contact server to initiate OTP.',
-      delivery: {
-        sent: false,
-        provider: 'None',
-        status: 'FAILED',
-        message: 'Could not contact server to initiate OTP.',
-      },
     };
   }
 }
@@ -137,25 +121,66 @@ export async function resendOrderOtp(
     return {
       success: false,
       error: err?.message || 'Failed to contact backend to resend OTP.',
-      delivery: {
-        sent: false,
-        provider: 'None',
-        status: 'FAILED',
-        message: 'Failed to contact backend to resend OTP.',
-      },
     };
   }
 }
 
+export interface CustomerOtpResult {
+  success: boolean;
+  orderId?: string;
+  otp?: string;
+  expiresAt?: number;
+  isExpired?: boolean;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
 /**
- * Queries safe order verification status from backend without exposing plain OTP.
+ * Queries safe order verification status from backend.
+ * Admin passes { role: 'admin' } to verify.
  */
-export async function getOrderOtpStatus(orderId: string): Promise<OtpStatusResult | null> {
+export async function getOrderOtpStatus(
+  orderId: string,
+  options?: { customerId?: string; role?: 'admin' | 'customer' }
+): Promise<OtpStatusResult | null> {
   try {
-    const res = await fetch(`/api/otp/status/${encodeURIComponent(orderId)}`);
+    const params = new URLSearchParams();
+    if (options?.customerId) params.set('customerId', options.customerId);
+    if (options?.role) params.set('role', options.role);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/otp/status/${encodeURIComponent(orderId)}${qs}`, {
+      headers: options?.role === 'admin' ? { 'x-admin-role': 'admin' } : {},
+    });
     if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Retrieves the Order Handover OTP strictly for the authenticated customer who placed the order.
+ * Backend verifies customer ownership and prevents cross-customer OTP exposure.
+ */
+export async function getCustomerOrderOtp(
+  orderId: string,
+  customerId: string
+): Promise<CustomerOtpResult> {
+  try {
+    const res = await fetch(
+      `/api/otp/customer-order-otp/${encodeURIComponent(orderId)}?customerId=${encodeURIComponent(customerId)}`,
+      {
+        headers: {
+          'x-customer-id': customerId,
+        },
+      }
+    );
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Failed to fetch Order Handover OTP.',
+    };
   }
 }

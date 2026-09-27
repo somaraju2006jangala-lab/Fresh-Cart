@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { CartItem, Product, CustomerAddress } from '../types';
@@ -26,7 +26,9 @@ import {
   Mail,
   Calendar,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
+import { getCustomerOrderOtp, resendOrderOtp } from '../services/otpClientService';
 
 interface CustomerDashboardProps {
   cart: CartItem[];
@@ -49,7 +51,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onBackToStorefront,
   onLogout,
 }) => {
-  const { currentUser, orders, updateProfile, addAddress, removeAddress } = useAuth();
+  const { currentUser, orders, updateProfile, addAddress, removeAddress, refreshOrders } = useAuth();
   const { t } = useLanguage();
 
   const getStatusLabel = (status: string) => {
@@ -89,6 +91,100 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   const activeOrders = orders.filter((o) => o.status !== 'Delivered');
   const pastOrders = orders.filter((o) => o.status === 'Delivered');
+
+  // Order Handover OTP State for Customer Orders
+  const [customerOrderOtps, setCustomerOrderOtps] = useState<
+    Record<string, { otp?: string; expiresAt?: number; isExpired?: boolean; loading?: boolean }>
+  >({});
+  const [resendingOtp, setResendingOtp] = useState<Record<string, boolean>>({});
+
+  // Fetch active OTP from backend for Picking orders
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    activeOrders.forEach((order) => {
+      if (order.status === 'Picking' && !customerOrderOtps[order.id]) {
+        getCustomerOrderOtp(order.id, currentUser.id).then((res) => {
+          if (res.success && res.otp) {
+            setCustomerOrderOtps((prev) => ({
+              ...prev,
+              [order.id]: {
+                otp: res.otp,
+                expiresAt: res.expiresAt,
+                isExpired: res.isExpired || (res.expiresAt ? Date.now() > res.expiresAt : false),
+                loading: false,
+              },
+            }));
+          }
+        });
+      }
+    });
+  }, [activeOrders, currentUser?.id, customerOrderOtps]);
+
+  // Periodic 1-second check for OTP expiration
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCustomerOrderOtps((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [orderId, data] of Object.entries(next)) {
+          if (data.expiresAt && !data.isExpired && Date.now() > data.expiresAt) {
+            next[orderId] = { ...data, isExpired: true };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync with storage and periodically poll orders so delivered status reflects automatically
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'freshcart_customer_orders') {
+        refreshOrders();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    const pollInterval = setInterval(() => {
+      if (activeOrders.some((o) => o.status === 'Picking')) {
+        refreshOrders();
+      }
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(pollInterval);
+    };
+  }, [activeOrders, refreshOrders]);
+
+  const handleCustomerResendOtp = async (orderId: string, phone?: string) => {
+    if (resendingOtp[orderId] || !currentUser?.id) return;
+    setResendingOtp((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await resendOrderOtp(
+        orderId,
+        currentUser.id,
+        phone || currentUser.phone || ''
+      );
+      if (res.success && res.otp) {
+        setCustomerOrderOtps((prev) => ({
+          ...prev,
+          [orderId]: {
+            otp: res.otp,
+            expiresAt: res.expiresAt || Date.now() + 10 * 60 * 1000,
+            isExpired: false,
+            loading: false,
+          },
+        }));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setResendingOtp((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
 
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -408,7 +504,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-[16px] font-bold text-[#0b1c30] font-display">
-                            Order #{order.id}
+                            Order {order.id.startsWith('#') ? order.id : `#${order.id}`}
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
                             ● {getStatusLabel(order.status)}
@@ -430,6 +526,64 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    {/* Order Handover OTP Section for Picking Status */}
+                    {order.status === 'Picking' && (
+                      <div
+                        id={`order-handover-otp-${order.id.replace('#', '')}`}
+                        className="p-4 sm:p-5 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2.5 shadow-xs animate-in fade-in duration-200"
+                      >
+                        <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-[#15803d] uppercase tracking-wider">
+                          <ShieldCheck className="w-4 h-4 text-[#16a34a]" />
+                          <span>Order Handover OTP</span>
+                        </div>
+
+                        {customerOrderOtps[order.id]?.isExpired ? (
+                          <div className="space-y-2 py-1">
+                            <div className="text-[13px] font-semibold text-[#dc2626] flex items-center justify-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 shrink-0 text-[#dc2626]" />
+                              <span>OTP expired. Please request a new OTP.</span>
+                            </div>
+                            <button
+                              type="button"
+                              id={`customer-resend-expired-btn-${order.id.replace('#', '')}`}
+                              onClick={() => handleCustomerResendOtp(order.id, order.customerPhone)}
+                              disabled={resendingOtp[order.id]}
+                              className="px-4 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                            >
+                              {resendingOtp[order.id] ? 'Generating New OTP...' : 'Request New OTP'}
+                            </button>
+                          </div>
+                        ) : customerOrderOtps[order.id]?.otp ? (
+                          <div className="space-y-1.5">
+                            <div
+                              id={`customer-order-otp-${order.id.replace('#', '')}`}
+                              className="font-mono text-[32px] sm:text-[36px] font-extrabold tracking-widest text-[#006b2c] select-all leading-tight py-0.5"
+                            >
+                              {customerOrderOtps[order.id]?.otp}
+                            </div>
+                            <p className="text-[12px] text-[#166534] font-medium">
+                              Please provide this OTP when receiving your order.
+                            </p>
+                            <div className="pt-1">
+                              <button
+                                type="button"
+                                id={`customer-resend-otp-btn-${order.id.replace('#', '')}`}
+                                onClick={() => handleCustomerResendOtp(order.id, order.customerPhone)}
+                                disabled={resendingOtp[order.id]}
+                                className="text-[11px] font-semibold text-[#15803d] hover:text-[#006b2c] underline cursor-pointer disabled:opacity-50"
+                              >
+                                {resendingOtp[order.id] ? 'Generating New OTP...' : 'Resend OTP'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-[#565e74] py-2 animate-pulse">
+                            Loading Order Handover OTP...
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Multi-step Live Tracking Progress Bar */}
                     <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-4">

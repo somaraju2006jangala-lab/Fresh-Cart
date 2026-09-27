@@ -15,8 +15,9 @@ import {
   UserCheck,
   Tag,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
-import { generateOrderOtp } from '../services/otpClientService';
+import { generateOrderOtp, resendOrderOtp } from '../services/otpClientService';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -62,11 +63,33 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
   const [checkoutCouponError, setCheckoutCouponError] = useState('');
 
+  // Order Handover OTP States for successful order placement screen
+  const [orderHandoverOtp, setOrderHandoverOtp] = useState<string | null>(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
+  const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);
+  const [placedOrderId, setPlacedOrderId] = useState<string>('');
+
   useEffect(() => {
     if (currentUser?.address) {
       setAddress(currentUser.address);
     }
   }, [currentUser]);
+
+  // Check OTP 10-minute expiry
+  useEffect(() => {
+    if (!otpExpiresAt || !orderHandoverOtp) return;
+
+    const checkExpiry = () => {
+      if (Date.now() > otpExpiresAt) {
+        setIsOtpExpired(true);
+      }
+    };
+
+    checkExpiry();
+    const interval = setInterval(checkExpiry, 1000);
+    return () => clearInterval(interval);
+  }, [otpExpiresAt, orderHandoverOtp]);
 
   if (!isOpen) return null;
 
@@ -121,7 +144,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsSubmitting(false);
       const orderNum = Math.floor(1000 + Math.random() * 9000);
       const generatedOrder = `#FC-${orderNum}`;
@@ -150,24 +173,58 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend OTP generation & isolated SMS provider dispatch only for valid Indian mobile
-      if (customerPhone) {
-        generateOrderOtp(
+      // Trigger backend Order Handover OTP generation for the new order
+      try {
+        const otpRes = await generateOrderOtp(
           generatedOrder,
           newCustomerOrder.customerId || 'guest_user',
-          customerPhone
+          customerPhone || ''
         );
+
+        if (otpRes.success && otpRes.otp) {
+          setOrderHandoverOtp(otpRes.otp);
+          setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
+          setIsOtpExpired(false);
+        }
+      } catch {
+        // ignore
       }
 
+      setPlacedOrderId(generatedOrder);
       onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');
       onClearCart();
     }, 800);
   };
 
+  const handleCustomerResendOtp = async () => {
+    if (!placedOrderId || isResendingOtp) return;
+    setIsResendingOtp(true);
+    try {
+      const customerPhone = currentUser?.phone?.trim() || '';
+      const res = await resendOrderOtp(
+        placedOrderId,
+        currentUser?.id || 'guest_user',
+        customerPhone
+      );
+      if (res.success && res.otp) {
+        setOrderHandoverOtp(res.otp);
+        setOtpExpiresAt(res.expiresAt || (Date.now() + 10 * 60 * 1000));
+        setIsOtpExpired(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsResendingOtp(false);
+    }
+  };
 
   const handleDone = () => {
     setStep('details');
+    setOrderHandoverOtp(null);
+    setOtpExpiresAt(null);
+    setIsOtpExpired(false);
+    setPlacedOrderId('');
     onClose();
   };
 
@@ -373,7 +430,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </form>
         ) : (
           /* Step: Success Screen */
-          <div className="p-6 text-center space-y-4">
+          <div className="p-5 sm:p-6 text-center space-y-4 max-h-[75vh] overflow-y-auto">
             <div className="w-16 h-16 rounded-full bg-[#dcfce7] text-[#15803d] flex items-center justify-center mx-auto shadow-inner">
               <CheckCircle className="w-8 h-8 text-[#006b2c]" />
             </div>
@@ -411,6 +468,60 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Order Handover OTP Card */}
+            {orderHandoverOtp && (
+              <div
+                id="order-handover-otp-section"
+                className="p-4 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2 shadow-xs animate-in fade-in duration-200"
+              >
+                <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold text-[#15803d] uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 text-[#16a34a]" />
+                  <span>Order Handover OTP</span>
+                </div>
+
+                {!isOtpExpired ? (
+                  <div className="space-y-1">
+                    <div
+                      id="customer-order-handover-otp"
+                      className="font-mono text-[32px] sm:text-[36px] font-extrabold tracking-widest text-[#006b2c] select-all leading-tight py-0.5"
+                    >
+                      {orderHandoverOtp}
+                    </div>
+                    <p className="text-[12px] text-[#166534] font-medium">
+                      Please provide this OTP when receiving your order.
+                    </p>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        id="customer-resend-otp-btn"
+                        onClick={handleCustomerResendOtp}
+                        disabled={isResendingOtp}
+                        className="text-[11px] font-semibold text-[#15803d] hover:text-[#006b2c] underline cursor-pointer disabled:opacity-50"
+                      >
+                        {isResendingOtp ? 'Generating New OTP...' : 'Resend OTP'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 py-1">
+                    <div className="text-[13px] font-semibold text-[#dc2626] flex items-center justify-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-[#dc2626]" />
+                      <span>OTP expired. Please request a new OTP.</span>
+                    </div>
+                    <button
+                      type="button"
+                      id="customer-request-new-otp-btn"
+                      onClick={handleCustomerResendOtp}
+                      disabled={isResendingOtp}
+                      className="px-4 py-1.5 rounded-lg bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {isResendingOtp ? 'Generating New OTP...' : 'Request New OTP'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live Tracking Visual */}
             <div className="bg-[#eff4ff] p-4 rounded-xl border border-[#d3e4fe] space-y-3 text-left">

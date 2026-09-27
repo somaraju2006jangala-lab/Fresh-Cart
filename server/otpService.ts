@@ -1,14 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import {
-  sendMsg91Otp,
-  resendMsg91Otp,
-  verifyMsg91Otp,
-  getSmsProviderConfig,
   maskMobileNumber,
-  formatMsg91Phone,
   normalizeAndValidateIndianMobile,
-  type SmsDeliveryResult,
+  getSmsProviderConfig,
 } from './smsProvider.ts';
 
 export interface StoredOtpRecord {
@@ -18,6 +14,7 @@ export interface StoredOtpRecord {
   maskedPhone: string;
   hashedOtp: string;
   salt: string;
+  otp: string; // Stored securely on backend for order handover verification
   expiresAt: number; // 10 minutes expiry timestamp (ms)
   attempts: number;
   maxAttempts: number; // 5 attempts limit
@@ -68,57 +65,99 @@ loadStore();
 export { maskMobileNumber, normalizeAndValidateIndianMobile };
 
 /**
- * Generates an OTP request for an order via official MSG91 Send OTP API,
- * establishes a 10-minute expiry, and saves record to order store.
+ * Generates a random 6-digit numeric OTP (100000 - 999999).
+ */
+export function generateRandom6DigitOtp(): string {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+/**
+ * Hashes an OTP with a unique cryptographic salt using SHA-256.
+ */
+export function hashOtp(otp: string, salt: string): string {
+  return crypto.createHash('sha256').update(otp + salt).digest('hex');
+}
+
+/**
+ * Generates a random 6-digit Order Handover OTP for an order, establishes a 10-minute expiry,
+ * and stores the record securely on the backend.
  */
 export async function generateOrderOtp(
   orderId: string,
-  customerId: string,
-  customerPhone: string
+  customerId?: string,
+  customerPhone?: string
 ): Promise<{
   success: boolean;
   orderId: string;
   maskedPhone: string;
   expiresAt: number;
-  delivery: SmsDeliveryResult;
+  otp: string;
+  message: string;
   error?: string;
 }> {
-  const norm = normalizeAndValidateIndianMobile(customerPhone);
-  if (!norm.isValid) {
+  if (!orderId) {
     return {
       success: false,
-      orderId,
-      maskedPhone: '******0000',
+      orderId: '',
+      maskedPhone: 'Not available',
       expiresAt: 0,
-      delivery: {
-        sent: false,
-        provider: 'MSG91',
-        status: 'FAILED',
-        message: 'Valid Indian mobile number is not available for this customer.',
-      },
-      error: 'Valid Indian mobile number is not available for this customer.',
+      otp: '',
+      message: 'Order ID is required.',
+      error: 'Order ID is required.',
     };
+  }
+
+  // Format and mask phone if provided and valid, otherwise display 'Not available'
+  let formattedPhone = '';
+  let maskedPhone = 'Not available';
+
+  if (customerPhone && typeof customerPhone === 'string' && customerPhone.trim()) {
+    const norm = normalizeAndValidateIndianMobile(customerPhone);
+    if (norm.isValid) {
+      formattedPhone = norm.e164Format;
+      maskedPhone = norm.maskedPhone;
+    } else {
+      const cleanDigits = customerPhone.replace(/\D/g, '');
+      if (cleanDigits.length >= 4) {
+        maskedPhone = `******${cleanDigits.slice(-4)}`;
+      }
+    }
   }
 
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
 
-  // Invalidate any previous OTP for this order before generating a new one
+  // If an active UNUSED and unexpired OTP already exists for this order, reuse it (one fixed OTP per order)
   const existing = otpStore.get(orderId) || otpStore.get(altId);
+  if (existing && existing.status === 'UNUSED' && Date.now() < existing.expiresAt) {
+    return {
+      success: true,
+      orderId,
+      maskedPhone: existing.maskedPhone,
+      expiresAt: existing.expiresAt,
+      otp: existing.otp,
+      message: 'Order Handover OTP active.',
+    };
+  }
+
+  // Invalidate any previous expired/unused record before generating fresh OTP
   if (existing && existing.status !== 'USED') {
     existing.status = 'EXPIRED';
   }
 
+  const otp = generateRandom6DigitOtp();
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hashedOtp = hashOtp(otp, salt);
   const now = Date.now();
   const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
-  const maskedPhone = norm.maskedPhone;
 
   const record: StoredOtpRecord = {
     orderId,
-    customerId,
-    customerPhone: norm.msg91Format,
+    customerId: customerId || 'guest',
+    customerPhone: formattedPhone,
     maskedPhone,
-    hashedOtp: '',
-    salt: '',
+    hashedOtp,
+    salt,
+    otp,
     expiresAt,
     attempts: 0,
     maxAttempts: 5,
@@ -130,23 +169,116 @@ export async function generateOrderOtp(
   otpStore.set(altId, record);
   persistStore();
 
-  // Attempt real SMS delivery via official MSG91 Send OTP API
-  const delivery = await sendMsg91Otp(norm.msg91Format, { customerId });
+  console.log(`[Order Handover OTP] Order: ${orderId} | Customer: ${customerId || 'guest'} | Mobile: ${maskedPhone} (Expires in 10 minutes)`);
 
   return {
-    success: delivery.sent,
+    success: true,
     orderId,
     maskedPhone,
     expiresAt,
-    delivery,
-    ...(delivery.sent ? {} : { error: delivery.message || 'SMS delivery failed.' }),
+    otp,
+    message: 'Order Handover OTP generated.',
   };
 }
 
 /**
- * Verifies submitted OTP against MSG91's official OTP verification API.
- * Ensures used OTPs cannot be reused, respects lockout and expiry,
- * and updates order handover status to Delivered on success.
+ * Resends a fresh random 6-digit Order Handover OTP for an order,
+ * immediately invalidating the previous OTP and resetting the 10-minute expiry.
+ */
+export async function resendOrderOtp(
+  orderId: string,
+  fallbackCustomerId?: string,
+  fallbackCustomerPhone?: string
+): Promise<{
+  success: boolean;
+  orderId?: string;
+  message?: string;
+  error?: string;
+  maskedPhone?: string;
+  expiresAt?: number;
+  otp?: string;
+}> {
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const existing = otpStore.get(orderId) || otpStore.get(altId);
+  const customerId = fallbackCustomerId || existing?.customerId || 'guest';
+  const customerPhone = fallbackCustomerPhone || existing?.customerPhone || '';
+
+  let formattedPhone = existing?.customerPhone || '';
+  let maskedPhone = existing?.maskedPhone || 'Not available';
+
+  if (customerPhone && typeof customerPhone === 'string' && customerPhone.trim()) {
+    const norm = normalizeAndValidateIndianMobile(customerPhone);
+    if (norm.isValid) {
+      formattedPhone = norm.e164Format;
+      maskedPhone = norm.maskedPhone;
+    } else if (maskedPhone === 'Not available' || maskedPhone === '******0000') {
+      const cleanDigits = customerPhone.replace(/\D/g, '');
+      if (cleanDigits.length >= 4) {
+        maskedPhone = `******${cleanDigits.slice(-4)}`;
+      }
+    }
+  }
+
+  if (existing && existing.status === 'USED') {
+    return {
+      success: false,
+      error: 'Order has already been verified and delivered.',
+      message: 'Order has already been verified and delivered.',
+    };
+  }
+
+  // Invalidate previous OTP immediately
+  if (existing) {
+    existing.status = 'EXPIRED';
+    persistStore();
+  }
+
+  const otp = generateRandom6DigitOtp();
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hashedOtp = hashOtp(otp, salt);
+  const now = Date.now();
+  const expiresAt = now + 10 * 60 * 1000;
+
+  const newRecord: StoredOtpRecord = {
+    orderId,
+    customerId,
+    customerPhone: formattedPhone,
+    maskedPhone,
+    hashedOtp,
+    salt,
+    otp,
+    expiresAt,
+    attempts: 0,
+    maxAttempts: 5,
+    status: 'UNUSED',
+    createdAt: new Date().toISOString(),
+  };
+
+  otpStore.set(orderId, newRecord);
+  otpStore.set(altId, newRecord);
+  persistStore();
+
+  console.log(`[Order Handover OTP Resend] Order: ${orderId} | Customer: ${customerId} | Mobile: ${maskedPhone} (Previous OTP invalidated)`);
+
+  return {
+    success: true,
+    orderId,
+    message: 'New 6-digit Order Handover OTP generated.',
+    maskedPhone,
+    expiresAt,
+    otp,
+  };
+}
+
+/**
+ * Verifies submitted OTP against the backend stored record.
+ * Rules:
+ * - Correct OTP -> status changes from Picking to Delivered.
+ * - Incorrect OTP -> show "Invalid OTP" and keep status as Picking.
+ * - Expired OTP -> show "OTP expired" and keep status as Picking.
+ * - Already-used OTP -> reject it.
+ * - After successful verification, the OTP must be marked as used.
+ * - A used OTP cannot be reused.
  */
 export async function verifyOrderOtp(
   orderId: string,
@@ -217,28 +349,19 @@ export async function verifyOrderOtp(
     };
   }
 
-  // 5. Check if MSG91 is configured
-  const provider = getSmsProviderConfig();
-  if (!provider.isConfigured) {
-    return {
-      success: false,
-      error: 'MSG91 is not configured. Missing environment variables: MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID.',
-      message: 'MSG91 is not configured. Missing environment variables: MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID.',
-      status: 'Picking',
-    };
-  }
+  // 5. Verification comparison (against plain OTP or SHA-256 hash)
+  const isMatch =
+    (record.otp && cleanInput === record.otp) ||
+    (record.hashedOtp && record.salt && hashOtp(cleanInput, record.salt) === record.hashedOtp);
 
-  // 6. Call official MSG91 OTP Verify API
-  const verifyResult = await verifyMsg91Otp(record.customerPhone, cleanInput, {
-    customerId: record.customerId,
-  });
-
-  if (verifyResult.success) {
-    // CORRECT OTP
+  if (isMatch) {
+    // CORRECT OTP -> status changes from Picking to Delivered
     const verifiedAt = new Date().toISOString();
     record.status = 'USED';
     record.verifiedAt = verifiedAt;
     persistStore();
+
+    console.log(`[Order Handover OTP] Order: ${orderId} | Status: Delivered (OTP Verified successfully)`);
 
     return {
       success: true,
@@ -247,123 +370,29 @@ export async function verifyOrderOtp(
       verifiedAt,
     };
   } else {
-    // INCORRECT OR EXPIRED OTP
+    // INCORRECT OTP -> show "Invalid OTP" and keep status as Picking
     record.attempts += 1;
     const remaining = Math.max(0, record.maxAttempts - record.attempts);
     if (remaining === 0) {
       record.status = 'LOCKED';
     }
-    if (verifyResult.isExpired) {
-      record.status = 'EXPIRED';
-    }
     persistStore();
 
-    const errorMessage = verifyResult.isExpired
-      ? 'OTP expired. Please send a new OTP.'
-      : 'Invalid OTP.';
+    console.log(`[Order Handover OTP] Order: ${orderId} | Incorrect OTP entered. Remaining attempts: ${remaining}`);
 
     return {
       success: false,
-      error: errorMessage,
-      message: errorMessage,
+      error: 'Invalid OTP.',
+      message: 'Invalid OTP.',
       status: 'Picking',
-      isExpired: verifyResult.isExpired,
       remainingAttempts: remaining,
     };
   }
 }
 
 /**
- * Resends a new OTP for an order via MSG91 official resend API,
- * immediately invalidating the previous OTP and resetting the 10-minute expiry.
- */
-export async function resendOrderOtp(
-  orderId: string,
-  fallbackCustomerId?: string,
-  fallbackCustomerPhone?: string
-): Promise<{
-  success: boolean;
-  message?: string;
-  error?: string;
-  maskedPhone?: string;
-  expiresAt?: number;
-  delivery?: SmsDeliveryResult;
-}> {
-  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const existing = otpStore.get(orderId) || otpStore.get(altId);
-  const customerId = fallbackCustomerId || existing?.customerId || 'guest';
-  const customerPhone = fallbackCustomerPhone || existing?.customerPhone;
-
-  if (!customerPhone) {
-    return {
-      success: false,
-      error: 'Valid Indian mobile number is not available for this customer.',
-      message: 'Valid Indian mobile number is not available for this customer.',
-    };
-  }
-
-  const norm = normalizeAndValidateIndianMobile(customerPhone);
-  if (!norm.isValid) {
-    return {
-      success: false,
-      error: 'Valid Indian mobile number is not available for this customer.',
-      message: 'Valid Indian mobile number is not available for this customer.',
-      maskedPhone: '******0000',
-    };
-  }
-
-  if (existing && existing.status === 'USED') {
-    return {
-      success: false,
-      error: 'Order has already been verified and delivered.',
-      message: 'Order has already been verified and delivered.',
-    };
-  }
-
-  // Invalidate previous OTP immediately
-  if (existing) {
-    existing.status = 'EXPIRED';
-    persistStore();
-  }
-
-  // Resend via MSG91 official retry API
-  const delivery = await resendMsg91Otp(norm.msg91Format, { customerId });
-  const now = Date.now();
-  const expiresAt = now + 10 * 60 * 1000;
-  const maskedPhone = norm.maskedPhone;
-
-  const newRecord: StoredOtpRecord = {
-    orderId,
-    customerId,
-    customerPhone: norm.msg91Format,
-    maskedPhone,
-    hashedOtp: '',
-    salt: '',
-    expiresAt,
-    attempts: 0,
-    maxAttempts: 5,
-    status: 'UNUSED',
-    createdAt: new Date().toISOString(),
-  };
-
-  otpStore.set(orderId, newRecord);
-  otpStore.set(altId, newRecord);
-  persistStore();
-
-  return {
-    success: delivery.sent,
-    message: delivery.sent
-      ? `New 6-digit OTP sent to ${maskedPhone}. 10-minute expiry reset.`
-      : (delivery.message || 'Valid Indian mobile number is not available for this customer.'),
-    error: delivery.sent ? undefined : (delivery.message || 'Valid Indian mobile number is not available for this customer.'),
-    maskedPhone,
-    expiresAt,
-    delivery,
-  };
-}
-
-/**
- * Fetches the current safe verification status of an order without exposing the OTP.
+ * Fetches the current verification status of an order.
+ * Returns safe status without revealing the secret OTP.
  */
 export function getOrderOtpStatus(orderId: string): {
   orderId: string;
@@ -384,23 +413,127 @@ export function getOrderOtpStatus(orderId: string): {
       orderId,
       hasRecord: false,
       status: 'NOT_FOUND',
-      maskedPhone: '******0000',
+      maskedPhone: 'Not available',
       expiresAt: 0,
       isExpired: false,
       providerConfigured: provider.isConfigured,
     };
   }
 
-  const isExpired = Date.now() > record.expiresAt;
+  const isExpired = Date.now() > record.expiresAt || record.status === 'EXPIRED';
+  const effectiveStatus = record.status === 'UNUSED' && isExpired ? 'EXPIRED' : record.status;
+  const safeMaskedPhone = record.maskedPhone && record.maskedPhone !== '******0000'
+    ? record.maskedPhone
+    : 'Not available';
+
   return {
     orderId,
     hasRecord: true,
-    status: record.status === 'UNUSED' && isExpired ? 'EXPIRED' : record.status,
-    maskedPhone: record.maskedPhone,
+    status: effectiveStatus,
+    maskedPhone: safeMaskedPhone,
     expiresAt: record.expiresAt,
     isExpired,
     verifiedAt: record.verifiedAt,
     providerConfigured: provider.isConfigured,
+  };
+}
+
+/**
+ * Retrieves the Order Handover OTP specifically for the authenticated customer who placed the order.
+ * - Customer can only view their own active order OTP.
+ * - If the order status is Delivered (USED), no active OTP is returned.
+ * - If the OTP has expired, returns isExpired: true and instructs to request a new OTP.
+ * - If another customer requests this order's OTP, returns 403 Forbidden.
+ */
+export function getCustomerOrderOtp(
+  orderId: string,
+  requestingCustomerId: string
+): {
+  success: boolean;
+  orderId: string;
+  otp?: string;
+  expiresAt: number;
+  isExpired: boolean;
+  status: 'UNUSED' | 'USED' | 'EXPIRED' | 'LOCKED' | 'NOT_FOUND';
+  error?: string;
+  message?: string;
+} {
+  if (!requestingCustomerId || !requestingCustomerId.trim()) {
+    return {
+      success: false,
+      orderId,
+      expiresAt: 0,
+      isExpired: false,
+      status: 'NOT_FOUND',
+      error: 'Authentication required. Customer identity must be provided.',
+    };
+  }
+
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const record = otpStore.get(orderId) || otpStore.get(altId);
+
+  if (!record) {
+    return {
+      success: false,
+      orderId,
+      expiresAt: 0,
+      isExpired: false,
+      status: 'NOT_FOUND',
+      error: 'Order not found.',
+    };
+  }
+
+  const isOwner =
+    record.customerId === requestingCustomerId ||
+    record.customerId === 'guest' ||
+    record.customerId === 'guest_user' ||
+    record.customerId === 'cust-guest';
+
+  if (!isOwner) {
+    console.warn(`[OTP Server] Unauthorized attempt: customer "${requestingCustomerId}" requested OTP for order "${orderId}" owned by "${record.customerId}".`);
+    return {
+      success: false,
+      orderId,
+      expiresAt: 0,
+      isExpired: false,
+      status: record.status,
+      error: 'Access denied: You can only view the OTP for your own order.',
+    };
+  }
+
+  const isExpired = Date.now() > record.expiresAt || record.status === 'EXPIRED';
+  const effectiveStatus = record.status === 'UNUSED' && isExpired ? 'EXPIRED' : record.status;
+
+  if (effectiveStatus === 'USED') {
+    return {
+      success: true,
+      orderId,
+      status: 'USED',
+      expiresAt: record.expiresAt,
+      isExpired: false,
+      message: 'Order Delivered',
+    };
+  }
+
+  if (effectiveStatus === 'EXPIRED') {
+    return {
+      success: true,
+      orderId,
+      status: 'EXPIRED',
+      expiresAt: record.expiresAt,
+      isExpired: true,
+      message: 'OTP expired. Please request a new OTP.',
+    };
+  }
+
+  return {
+    success: true,
+    orderId,
+    otp: record.otp,
+    expiresAt: record.expiresAt,
+    isExpired: false,
+    status: 'UNUSED',
+    message: `Order Handover OTP: ${record.otp}`,
   };
 }
 
@@ -421,4 +554,3 @@ export function validateIndianMobile(input: string): {
     error: norm.error,
   };
 }
-
