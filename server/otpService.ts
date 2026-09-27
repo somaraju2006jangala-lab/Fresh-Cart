@@ -1,7 +1,14 @@
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { dispatchOtpSms, getSmsProviderConfig, type SmsDeliveryResult } from './smsProvider.ts';
+import {
+  sendMsg91Otp,
+  resendMsg91Otp,
+  verifyMsg91Otp,
+  getSmsProviderConfig,
+  maskMobileNumber,
+  formatMsg91Phone,
+  type SmsDeliveryResult,
+} from './smsProvider.ts';
 
 export interface StoredOtpRecord {
   orderId: string;
@@ -41,7 +48,7 @@ function loadStore(): void {
       const records: StoredOtpRecord[] = JSON.parse(data);
       records.forEach((r) => otpStore.set(r.orderId, r));
     }
-  } catch (err) {
+  } catch {
     // Ignore error and initialize fresh map
   }
 }
@@ -57,29 +64,11 @@ function persistStore(): void {
 
 loadStore();
 
-/**
- * Mask mobile number to format: ******1234 (exact requirement: Example: ******1234)
- */
-export function maskMobileNumber(phone?: string): string {
-  if (!phone || typeof phone !== 'string') return '******0000';
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length >= 4) {
-    const last4 = digits.slice(-4);
-    return `******${last4}`;
-  }
-  return `******${phone.slice(-4)}`;
-}
+export { maskMobileNumber };
 
 /**
- * Hashes an OTP with cryptographic salt using SHA-256.
- */
-function hashOtp(otp: string, salt: string): string {
-  return crypto.createHash('sha256').update(otp.trim() + salt).digest('hex');
-}
-
-/**
- * Generates a unique 6-digit OTP for an order, hashes it securely,
- * establishes a 10-minute expiry, and invokes the isolated SMS provider.
+ * Generates an OTP request for an order via official MSG91 Send OTP API,
+ * establishes a 10-minute expiry, and saves record to order store.
  */
 export async function generateOrderOtp(
   orderId: string,
@@ -101,11 +90,6 @@ export async function generateOrderOtp(
     existing.status = 'EXPIRED';
   }
 
-  // Generate secure 6-digit number
-  const rawOtp = crypto.randomInt(100000, 1000000).toString();
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hashedOtp = hashOtp(rawOtp, salt);
-
   const now = Date.now();
   const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
   const maskedPhone = maskMobileNumber(customerPhone);
@@ -115,8 +99,8 @@ export async function generateOrderOtp(
     customerId,
     customerPhone,
     maskedPhone,
-    hashedOtp,
-    salt,
+    hashedOtp: '',
+    salt: '',
     expiresAt,
     attempts: 0,
     maxAttempts: 5,
@@ -128,8 +112,8 @@ export async function generateOrderOtp(
   otpStore.set(altId, record);
   persistStore();
 
-  // Attempt real SMS delivery via isolated SMS provider
-  const delivery = await dispatchOtpSms(customerPhone, rawOtp, orderId);
+  // Attempt real SMS delivery via official MSG91 Send OTP API
+  const delivery = await sendMsg91Otp(customerPhone);
 
   return {
     success: delivery.sent,
@@ -142,12 +126,14 @@ export async function generateOrderOtp(
 }
 
 /**
- * Verifies submitted OTP against the backend salted SHA-256 hash.
+ * Verifies submitted OTP against MSG91's official OTP verification API.
+ * Ensures used OTPs cannot be reused, respects lockout and expiry,
+ * and updates order handover status to Delivered on success.
  */
-export function verifyOrderOtp(
+export async function verifyOrderOtp(
   orderId: string,
   submittedOtp: string
-): {
+): Promise<{
   success: boolean;
   message?: string;
   error?: string;
@@ -155,8 +141,9 @@ export function verifyOrderOtp(
   verifiedAt?: string;
   isExpired?: boolean;
   remainingAttempts?: number;
-} {
-  const record = otpStore.get(orderId);
+}> {
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const record = otpStore.get(orderId) || otpStore.get(altId);
 
   if (!record) {
     return {
@@ -201,16 +188,32 @@ export function verifyOrderOtp(
     };
   }
 
-  // 4. Timing-safe comparison of SHA-256 salted hashes
-  const cleanInput = submittedOtp.trim();
-  const candidateHash = hashOtp(cleanInput, record.salt);
+  // 4. Input validation (must be 6 numeric digits)
+  const cleanInput = (submittedOtp || '').trim();
+  if (cleanInput.length !== 6 || !/^\d{6}$/.test(cleanInput)) {
+    return {
+      success: false,
+      error: 'Invalid OTP.',
+      message: 'Invalid OTP.',
+      status: 'Picking',
+    };
+  }
 
-  const bufA = Buffer.from(candidateHash, 'hex');
-  const bufB = Buffer.from(record.hashedOtp, 'hex');
+  // 5. Check if MSG91 is configured
+  const provider = getSmsProviderConfig();
+  if (!provider.isConfigured) {
+    return {
+      success: false,
+      error: 'MSG91 is not configured. Missing environment variables: MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID.',
+      message: 'MSG91 is not configured. Missing environment variables: MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID.',
+      status: 'Picking',
+    };
+  }
 
-  const matches = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+  // 6. Call official MSG91 OTP Verify API
+  const verifyResult = await verifyMsg91Otp(record.customerPhone, cleanInput);
 
-  if (matches) {
+  if (verifyResult.success) {
     // CORRECT OTP
     const verifiedAt = new Date().toISOString();
     record.status = 'USED';
@@ -224,26 +227,35 @@ export function verifyOrderOtp(
       verifiedAt,
     };
   } else {
-    // INCORRECT OTP
+    // INCORRECT OR EXPIRED OTP
     record.attempts += 1;
     const remaining = Math.max(0, record.maxAttempts - record.attempts);
     if (remaining === 0) {
       record.status = 'LOCKED';
     }
+    if (verifyResult.isExpired) {
+      record.status = 'EXPIRED';
+    }
     persistStore();
+
+    const errorMessage = verifyResult.isExpired
+      ? 'OTP expired. Please send a new OTP.'
+      : 'Invalid OTP.';
 
     return {
       success: false,
-      error: 'Invalid OTP.',
-      message: 'Invalid OTP.',
+      error: errorMessage,
+      message: errorMessage,
       status: 'Picking',
+      isExpired: verifyResult.isExpired,
       remainingAttempts: remaining,
     };
   }
 }
 
 /**
- * Resends a new OTP for an order, immediately invalidating the previous OTP.
+ * Resends a new OTP for an order via MSG91 official resend API,
+ * immediately invalidating the previous OTP and resetting the 10-minute expiry.
  */
 export async function resendOrderOtp(
   orderId: string,
@@ -283,18 +295,39 @@ export async function resendOrderOtp(
     persistStore();
   }
 
-  // Generate new OTP & dispatch real SMS
-  const result = await generateOrderOtp(
+  // Resend via MSG91 official retry API
+  const delivery = await resendMsg91Otp(customerPhone);
+  const now = Date.now();
+  const expiresAt = now + 10 * 60 * 1000;
+  const maskedPhone = maskMobileNumber(customerPhone);
+
+  const newRecord: StoredOtpRecord = {
     orderId,
     customerId,
-    customerPhone
-  );
+    customerPhone,
+    maskedPhone,
+    hashedOtp: '',
+    salt: '',
+    expiresAt,
+    attempts: 0,
+    maxAttempts: 5,
+    status: 'UNUSED',
+    createdAt: new Date().toISOString(),
+  };
+
+  otpStore.set(orderId, newRecord);
+  otpStore.set(altId, newRecord);
+  persistStore();
 
   return {
-    ...result,
-    message: result.success
-      ? `New 6-digit OTP sent to ${result.maskedPhone}. 10-minute expiry reset.`
-      : (result.delivery?.message || 'Failed to resend OTP.'),
+    success: delivery.sent,
+    message: delivery.sent
+      ? `New 6-digit OTP sent to ${maskedPhone}. 10-minute expiry reset.`
+      : (delivery.message || 'Failed to resend OTP.'),
+    error: delivery.sent ? undefined : delivery.message,
+    maskedPhone,
+    expiresAt,
+    delivery,
   };
 }
 
@@ -419,4 +452,3 @@ export function validateIndianMobile(input: string): {
     digits,
   };
 }
-

@@ -1,12 +1,14 @@
 /**
  * Isolated SMS / OTP Delivery Provider Module
  *
- * Supports live carrier delivery via:
- * 1. Twilio (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
- * 2. Fast2SMS for India (FAST2SMS_API_KEY)
+ * Dedicated live carrier delivery via MSG91 OTP API (v5):
+ * 1. Send OTP: POST https://control.msg91.com/api/v5/otp
+ * 2. Resend OTP: GET https://control.msg91.com/api/v5/otp/retry
+ * 3. Verify OTP: GET https://control.msg91.com/api/v5/otp/verify
  *
- * If credentials are not present, it strictly does NOT pretend that an SMS was sent,
- * does NOT create fake SMS logs, and clearly identifies the missing provider configuration.
+ * Credentials stored exclusively in environment variables:
+ * - MSG91_AUTH_KEY
+ * - MSG91_OTP_TEMPLATE_ID
  */
 
 import fs from 'fs';
@@ -36,7 +38,9 @@ export function ensureEnvLoaded(): void {
           const parsed = dotenv.parse(content);
           for (const [k, v] of Object.entries(parsed)) {
             if (v && typeof v === 'string' && v.trim().length > 0) {
-              process.env[k] = v.trim();
+              if (!process.env[k] || process.env[k] === 'YOUR_' + k) {
+                process.env[k] = v.trim();
+              }
             }
           }
         } catch {
@@ -53,15 +57,15 @@ export function ensureEnvLoaded(): void {
 ensureEnvLoaded();
 
 export interface SmsProviderConfig {
-  providerName: 'Twilio' | 'Fast2SMS' | 'None';
+  providerName: 'MSG91' | 'None';
   isConfigured: boolean;
-  activeProvider?: 'twilio' | 'fast2sms';
+  activeProvider?: 'msg91';
   missingConfig?: string[];
 }
 
 export interface SmsDeliveryResult {
   sent: boolean;
-  provider: 'Twilio' | 'Fast2SMS' | 'None';
+  provider: 'MSG91' | 'None';
   status: 'DELIVERED_TO_CARRIER' | 'PROVIDER_NOT_CONFIGURED' | 'FAILED';
   carrierMessageId?: string;
   message: string;
@@ -88,7 +92,7 @@ function getCleanEnv(key: string): string | undefined {
 }
 
 /**
- * Normalizes phone numbers to standard E.164 (+91XXXXXXXXXX for 10-digit Indian numbers)
+ * Normalizes phone numbers to standard E.164 format (+91XXXXXXXXXX)
  */
 export function formatE164Phone(phone: string): string {
   if (!phone) return '';
@@ -109,12 +113,49 @@ export function formatE164Phone(phone: string): string {
 }
 
 /**
- * Extracts pure 10-digit phone for Indian national gateways like Fast2SMS
+ * Normalizes customer mobile numbers for MSG91 in international format: 91XXXXXXXXXX
+ * Strictly strips accidental +91 +91, 0, or extra characters.
  */
-export function extract10DigitPhone(phone: string): string {
-  const digits = (phone || '').replace(/\D/g, '');
-  if (digits.length >= 10) return digits.slice(-10);
+export function formatMsg91Phone(phone: string): string {
+  if (!phone || typeof phone !== 'string') return '';
+  const digits = phone.trim().replace(/\D/g, '');
+
+  // Extract clean 10-digit national number if valid Indian mobile
+  if (digits.length >= 10) {
+    const last10 = digits.slice(-10);
+    if (/^[6-9]\d{9}$/.test(last10)) {
+      return `91${last10}`;
+    }
+  }
+
+  // Handle leading 0 prefix: e.g. 09876543210 -> 9876543210
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `91${digits.slice(1)}`;
+  }
+
+  // If 10 digits
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+
+  // If 12 digits starting with 91
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits;
+  }
+
   return digits;
+}
+
+/**
+ * Mask mobile number to format: ******1234
+ */
+export function maskMobileNumber(phone?: string): string {
+  if (!phone || typeof phone !== 'string') return '******0000';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length >= 4) {
+    return `******${digits.slice(-4)}`;
+  }
+  return `******${phone.slice(-4)}`;
 }
 
 /**
@@ -130,52 +171,33 @@ function getEnvWithFallbacks(primary: string, fallbacks: string[] = []): string 
 }
 
 /**
- * Checks environment variables for real SMS provider credentials.
- *
- * 1. When the required Twilio variables are available: Provider = Twilio
- * 2. When FAST2SMS_API_KEY is available: Provider = Fast2SMS
- * 3. If neither provider is configured: Provider = None
- *
- * Supports common alias names (e.g. TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM_NUMBER, FAST2SMS_KEY)
- * to prevent variable name mismatches.
+ * Checks environment variables for MSG91 provider credentials.
+ * Configured if MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID are present and not placeholder values.
  */
 export function getSmsProviderConfig(): SmsProviderConfig {
   ensureEnvLoaded();
 
-  const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
-  const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
-  const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE']);
-  const fast2smsKey = getEnvWithFallbacks('FAST2SMS_API_KEY', ['FAST2SMS_KEY', 'FAST_2_SMS_KEY', 'FAST_2_SMS_API_KEY']);
+  const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY']);
+  const templateId = getEnvWithFallbacks('MSG91_OTP_TEMPLATE_ID', ['MSG91_TEMPLATE_ID', 'OTP_TEMPLATE_ID', 'TEMPLATE_ID']);
 
-  // 1. When the required Twilio variables are available: Provider = Twilio
-  if (twilioSid && twilioAuthToken && twilioPhone) {
+  const isConfigured = Boolean(
+    authKey &&
+    templateId &&
+    authKey !== 'YOUR_MSG91_AUTH_KEY' &&
+    templateId !== 'YOUR_MSG91_OTP_TEMPLATE_ID'
+  );
+
+  if (isConfigured) {
     return {
-      providerName: 'Twilio',
+      providerName: 'MSG91',
       isConfigured: true,
-      activeProvider: 'twilio',
+      activeProvider: 'msg91',
     };
   }
 
-  // 2. When FAST2SMS_API_KEY is available: Provider = Fast2SMS
-  if (fast2smsKey) {
-    return {
-      providerName: 'Fast2SMS',
-      isConfigured: true,
-      activeProvider: 'fast2sms',
-    };
-  }
-
-  // 3. If neither provider is configured: Provider = None
   const missing: string[] = [];
-  const hasTwilioPartial = Boolean(twilioSid || twilioAuthToken || twilioPhone);
-
-  if (hasTwilioPartial) {
-    if (!twilioSid) missing.push('TWILIO_ACCOUNT_SID');
-    if (!twilioAuthToken) missing.push('TWILIO_AUTH_TOKEN');
-    if (!twilioPhone) missing.push('TWILIO_PHONE_NUMBER');
-  } else {
-    missing.push('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER', '(or FAST2SMS_API_KEY)');
-  }
+  if (!authKey || authKey === 'YOUR_MSG91_AUTH_KEY') missing.push('MSG91_AUTH_KEY');
+  if (!templateId || templateId === 'YOUR_MSG91_OTP_TEMPLATE_ID') missing.push('MSG91_OTP_TEMPLATE_ID');
 
   return {
     providerName: 'None',
@@ -185,46 +207,282 @@ export function getSmsProviderConfig(): SmsProviderConfig {
 }
 
 /**
- * Safely inspects the availability of each Twilio environment variable
+ * Safely inspects the availability of MSG91 environment variables
  * without ever exposing or printing secrets.
  */
 export function getSafeEnvStatus(): {
-  TWILIO_ACCOUNT_SID: 'configured' | 'missing';
-  TWILIO_AUTH_TOKEN: 'configured' | 'missing';
-  TWILIO_PHONE_NUMBER: 'configured' | 'missing';
+  MSG91_AUTH_KEY: 'configured' | 'missing';
+  MSG91_OTP_TEMPLATE_ID: 'configured' | 'missing';
 } {
   ensureEnvLoaded();
-  const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID']);
-  const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN']);
-  const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE']);
+  const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY']);
+  const templateId = getEnvWithFallbacks('MSG91_OTP_TEMPLATE_ID', ['MSG91_TEMPLATE_ID', 'OTP_TEMPLATE_ID', 'TEMPLATE_ID']);
 
   return {
-    TWILIO_ACCOUNT_SID: twilioSid ? 'configured' : 'missing',
-    TWILIO_AUTH_TOKEN: twilioAuthToken ? 'configured' : 'missing',
-    TWILIO_PHONE_NUMBER: twilioPhone ? 'configured' : 'missing',
+    MSG91_AUTH_KEY: (authKey && authKey !== 'YOUR_MSG91_AUTH_KEY') ? 'configured' : 'missing',
+    MSG91_OTP_TEMPLATE_ID: (templateId && templateId !== 'YOUR_MSG91_OTP_TEMPLATE_ID') ? 'configured' : 'missing',
   };
 }
 
 /**
- * Logs safe environment variable statuses conforming to:
- * TWILIO_ACCOUNT_SID: configured / missing
- * TWILIO_AUTH_TOKEN: configured / missing
- * TWILIO_PHONE_NUMBER: configured / missing
+ * Logs safe environment variable statuses conforming to specification:
+ * [OTP Server] MSG91_AUTH_KEY: configured / missing
+ * [OTP Server] MSG91_OTP_TEMPLATE_ID: configured / missing
  */
 export function logSafeEnvStatus(): void {
   const status = getSafeEnvStatus();
-  console.log(`[OTP Server] TWILIO_ACCOUNT_SID: ${status.TWILIO_ACCOUNT_SID}`);
-  console.log(`[OTP Server] TWILIO_AUTH_TOKEN: ${status.TWILIO_AUTH_TOKEN}`);
-  console.log(`[OTP Server] TWILIO_PHONE_NUMBER: ${status.TWILIO_PHONE_NUMBER}`);
+  console.log(`[OTP Server] MSG91_AUTH_KEY: ${status.MSG91_AUTH_KEY}`);
+  console.log(`[OTP Server] MSG91_OTP_TEMPLATE_ID: ${status.MSG91_OTP_TEMPLATE_ID}`);
 }
 
 /**
- * Dispatches an OTP via the configured live SMS provider.
- * Uses exact customer-facing message for orders or registrations:
- * Order: "Your FreshCart order verification OTP is 123456. This OTP is valid for 10 minutes."
- * Registration: "Your FreshCart registration verification OTP is 123456. This OTP is valid for 10 minutes."
+ * Sends an OTP via the official MSG91 OTP API (POST https://control.msg91.com/api/v5/otp).
  *
- * If unconfigured or provider rejects, returns sent: false without faking delivery.
+ * Parameters:
+ * - template_id: MSG91_OTP_TEMPLATE_ID
+ * - mobile: 91XXXXXXXXXX
+ * - otp_length: 6
+ * - otp_expiry: 10 (minutes)
+ * - otp: (optional 6-digit OTP to send specific code)
+ *
+ * Logs strictly:
+ * [OTP Server] Provider: MSG91
+ * [OTP Server] Phone: ******1234
+ * [OTP Server] Sent: true/false
+ * Never logs Auth Key, full phone, or OTP.
+ */
+export async function sendMsg91Otp(
+  recipientPhone: string,
+  options?: { otp?: string; purpose?: string }
+): Promise<SmsDeliveryResult> {
+  const config = getSmsProviderConfig();
+  const masked = maskMobileNumber(recipientPhone);
+
+  if (!config.isConfigured) {
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Sent: false`);
+    const missingSummary = config.missingConfig?.join(', ') || 'MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID';
+    return {
+      sent: false,
+      provider: 'None',
+      status: 'PROVIDER_NOT_CONFIGURED',
+      message: `SMS provider is not configured. Missing environment variables: ${missingSummary}.`,
+    };
+  }
+
+  const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
+  const templateId = getEnvWithFallbacks('MSG91_OTP_TEMPLATE_ID', ['MSG91_TEMPLATE_ID', 'OTP_TEMPLATE_ID', 'TEMPLATE_ID'])!;
+  const msg91Mobile = formatMsg91Phone(recipientPhone);
+
+  try {
+    const url = new URL('https://control.msg91.com/api/v5/otp');
+    url.searchParams.set('template_id', templateId);
+    url.searchParams.set('mobile', msg91Mobile);
+    url.searchParams.set('otp_length', '6');
+    url.searchParams.set('otp_expiry', '10');
+
+    if (options?.otp) {
+      url.searchParams.set('otp', options.otp);
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        authkey: authKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const isSuccess = Boolean(
+      (response.ok && data?.type === 'success') ||
+      data?.request_id ||
+      (data?.type !== 'error' && data?.message?.toLowerCase().includes('success'))
+    );
+
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Sent: ${isSuccess}`);
+
+    if (isSuccess) {
+      return {
+        sent: true,
+        provider: 'MSG91',
+        status: 'DELIVERED_TO_CARRIER',
+        carrierMessageId: data?.request_id || `msg91-${Date.now()}`,
+        message: `OTP SMS delivered via MSG91 to customer mobile (${masked}).`,
+      };
+    } else {
+      const errorDetail = data?.message || `MSG91 delivery rejected (Status ${response.status}).`;
+      console.warn(`[OTP Server] MSG91 delivery rejected: ${errorDetail}`);
+      return {
+        sent: false,
+        provider: 'MSG91',
+        status: 'FAILED',
+        message: 'OTP could not be sent. Please verify the mobile number or try again later.',
+      };
+    }
+  } catch (err: any) {
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Sent: false`);
+    console.warn(`[OTP Server] MSG91 network error:`, err?.message);
+    return {
+      sent: false,
+      provider: 'MSG91',
+      status: 'FAILED',
+      message: 'OTP could not be sent. Please verify the mobile number or try again later.',
+    };
+  }
+}
+
+/**
+ * Resends an OTP via official MSG91 Retry API (GET https://control.msg91.com/api/v5/otp/retry).
+ * Falls back to sendMsg91Otp if retry quota is exceeded.
+ */
+export async function resendMsg91Otp(
+  recipientPhone: string,
+  options?: { otp?: string }
+): Promise<SmsDeliveryResult> {
+  const config = getSmsProviderConfig();
+  const masked = maskMobileNumber(recipientPhone);
+
+  if (!config.isConfigured) {
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Sent: false`);
+    const missingSummary = config.missingConfig?.join(', ') || 'MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID';
+    return {
+      sent: false,
+      provider: 'None',
+      status: 'PROVIDER_NOT_CONFIGURED',
+      message: `SMS provider is not configured. Missing environment variables: ${missingSummary}.`,
+    };
+  }
+
+  const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
+  const msg91Mobile = formatMsg91Phone(recipientPhone);
+
+  try {
+    const url = new URL('https://control.msg91.com/api/v5/otp/retry');
+    url.searchParams.set('mobile', msg91Mobile);
+    url.searchParams.set('retrytype', 'text');
+    url.searchParams.set('authkey', authKey);
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        authkey: authKey,
+        Accept: 'application/json',
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const isSuccess = Boolean(response.ok && data?.type === 'success');
+
+    if (isSuccess) {
+      console.log(`[OTP Server] Provider: MSG91`);
+      console.log(`[OTP Server] Phone: ${masked}`);
+      console.log(`[OTP Server] Sent: true`);
+      return {
+        sent: true,
+        provider: 'MSG91',
+        status: 'DELIVERED_TO_CARRIER',
+        carrierMessageId: data?.request_id || `msg91-retry-${Date.now()}`,
+        message: `OTP SMS resent via MSG91 to customer mobile (${masked}).`,
+      };
+    } else {
+      // If retry is disallowed (e.g. max retries or no existing request), fall back to fresh Send OTP
+      console.log(`[OTP Server] MSG91 retry reported: ${data?.message || 'retry failed'}. Attempting fresh OTP dispatch...`);
+      return await sendMsg91Otp(recipientPhone, options);
+    }
+  } catch (err: any) {
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Sent: false`);
+    console.warn(`[OTP Server] MSG91 retry network error:`, err?.message);
+    // Fallback to fresh send
+    return await sendMsg91Otp(recipientPhone, options);
+  }
+}
+
+/**
+ * Verifies submitted OTP via official MSG91 Verify API:
+ * GET https://control.msg91.com/api/v5/otp/verify?otp=...&mobile=...
+ *
+ * Headers: authkey: <MSG91_AUTH_KEY>
+ *
+ * Returns verification result. Never logs Auth Key or actual OTP.
+ */
+export async function verifyMsg91Otp(
+  recipientPhone: string,
+  otp: string
+): Promise<{ success: boolean; message: string; isExpired?: boolean }> {
+  const config = getSmsProviderConfig();
+  const masked = maskMobileNumber(recipientPhone);
+
+  console.log(`[OTP Server] Provider: MSG91`);
+  console.log(`[OTP Server] Phone: ${masked}`);
+
+  if (!config.isConfigured) {
+    return {
+      success: false,
+      message: 'MSG91 is not configured. Missing environment variables: MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID.',
+    };
+  }
+
+  const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
+  const msg91Mobile = formatMsg91Phone(recipientPhone);
+
+  try {
+    const url = new URL('https://control.msg91.com/api/v5/otp/verify');
+    url.searchParams.set('otp', otp.trim());
+    url.searchParams.set('mobile', msg91Mobile);
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        authkey: authKey,
+        Accept: 'application/json',
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const messageLower = String(data?.message || '').toLowerCase();
+
+    // MSG91 returns type: 'success' and message: 'number_verified_successfully' or 'OTP verified success'
+    const isSuccess = Boolean(
+      response.ok &&
+      data?.type === 'success' &&
+      !messageLower.includes('not match') &&
+      !messageLower.includes('expired') &&
+      !messageLower.includes('invalid')
+    );
+
+    const isExpired = Boolean(messageLower.includes('expired'));
+
+    return {
+      success: isSuccess,
+      message: isSuccess
+        ? 'OTP Verified. Order completed.'
+        : isExpired
+        ? 'OTP expired. Please send a new OTP.'
+        : 'Invalid OTP.',
+      isExpired,
+    };
+  } catch (err: any) {
+    console.warn(`[OTP Server] MSG91 verify network error:`, err?.message);
+    return {
+      success: false,
+      message: 'Invalid OTP.',
+    };
+  }
+}
+
+/**
+ * Dispatches an OTP SMS via MSG91 (Order Handover).
  */
 export async function dispatchOtpSms(
   recipientPhone: string,
@@ -232,165 +490,5 @@ export async function dispatchOtpSms(
   _contextId: string,
   options?: { purpose?: 'order' | 'registration'; customMessage?: string }
 ): Promise<SmsDeliveryResult> {
-  const config = getSmsProviderConfig();
-  const purpose = options?.purpose || 'order';
-  const smsBody = options?.customMessage || (
-    purpose === 'registration'
-      ? `Your FreshCart registration verification OTP is ${otp}. This OTP is valid for 10 minutes.`
-      : `Your FreshCart order verification OTP is ${otp}. This OTP is valid for 10 minutes.`
-  );
-
-  const cleanPhone = formatE164Phone(recipientPhone);
-  const maskedPhone = cleanPhone.length >= 4 ? `******${cleanPhone.slice(-4)}` : '******0000';
-
-  console.log(`[SMS Provider] OTP request received`);
-  console.log(`[SMS Provider] Phone: ${maskedPhone}`);
-  console.log(`[SMS Provider] Provider: ${config.activeProvider === 'twilio' ? 'Twilio' : (config.activeProvider === 'fast2sms' ? 'Fast2SMS' : 'None')}`);
-
-  // 1. TWILIO PROVIDER
-  if (config.activeProvider === 'twilio') {
-    try {
-      const twilioSid = getEnvWithFallbacks('TWILIO_ACCOUNT_SID', ['TWILIO_SID'])!;
-      const twilioAuthToken = getEnvWithFallbacks('TWILIO_AUTH_TOKEN', ['TWILIO_TOKEN'])!;
-      const twilioPhone = getEnvWithFallbacks('TWILIO_PHONE_NUMBER', ['TWILIO_FROM_NUMBER', 'TWILIO_NUMBER', 'TWILIO_PHONE'])!;
-      const e164Phone = formatE164Phone(recipientPhone);
-
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-      const authHeader = 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
-
-      const params = new URLSearchParams();
-      const fromParam = twilioPhone.startsWith('MG') ? twilioPhone : (twilioPhone.startsWith('+') ? twilioPhone : formatE164Phone(twilioPhone));
-      params.append('To', e164Phone);
-      params.append('From', fromParam);
-      params.append('Body', smsBody);
-
-      const response = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.sid) {
-        console.log(`[SMS Provider] Sent: true`);
-        return {
-          sent: true,
-          provider: 'Twilio',
-          status: 'DELIVERED_TO_CARRIER',
-          carrierMessageId: data.sid,
-          message: `OTP SMS delivered to carrier route for ${e164Phone}.`,
-        };
-      } else {
-        console.log(`[SMS Provider] Sent: false`);
-        const errorDetail = data.message || `Twilio dispatch rejected (Status ${response.status}).`;
-        console.warn(`[SMS Provider] Twilio delivery rejected: ${data.code ? `Twilio Code ${data.code}: ` : ''}${errorDetail}`);
-        // Return clear, user-friendly error conforming to Section 7 & 21
-        return {
-          sent: false,
-          provider: 'Twilio',
-          status: 'FAILED',
-          message: 'OTP could not be sent. Please verify the mobile number or try again later.',
-        };
-      }
-    } catch (err: any) {
-      console.log(`[SMS Provider] Sent: false`);
-      console.warn(`[SMS Provider] Twilio network error:`, err?.message);
-      return {
-        sent: false,
-        provider: 'Twilio',
-        status: 'FAILED',
-        message: 'OTP could not be sent. Please verify the mobile number or try again later.',
-      };
-    }
-  }
-
-  // 2. FAST2SMS PROVIDER
-  if (config.activeProvider === 'fast2sms') {
-    try {
-      const apiKey = getEnvWithFallbacks('FAST2SMS_API_KEY', ['FAST2SMS_KEY', 'FAST_2_SMS_KEY', 'FAST_2_SMS_API_KEY'])!;
-      const phone10 = extract10DigitPhone(recipientPhone);
-
-      // Attempt 1: route 'q' with full custom message
-      let response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-        method: 'POST',
-        headers: {
-          authorization: apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          route: 'q',
-          message: smsBody,
-          language: 'english',
-          flash: 0,
-          numbers: phone10,
-        }),
-      });
-
-      let data = await response.json().catch(() => ({}));
-
-      // If route 'q' rejected (e.g. DND number in India), fallback to transactional 'otp' route
-      if (!response.ok || data.return !== true) {
-        const fallbackRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-          method: 'POST',
-          headers: {
-            authorization: apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            route: 'otp',
-            variables_values: otp,
-            numbers: phone10,
-          }),
-        }).catch(() => null);
-
-        if (fallbackRes && fallbackRes.ok) {
-          const fallbackData = await fallbackRes.json().catch(() => ({}));
-          if (fallbackData.return === true) {
-            response = fallbackRes;
-            data = fallbackData;
-          }
-        }
-      }
-
-      if (response.ok && data.return === true) {
-        return {
-          sent: true,
-          provider: 'Fast2SMS',
-          status: 'DELIVERED_TO_CARRIER',
-          carrierMessageId: data.request_id || `f2s-${Date.now()}`,
-          message: `OTP SMS dispatched to customer mobile (${phone10}).`,
-        };
-      } else {
-        const errorDetail = Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Fast2SMS delivery rejected.');
-        return {
-          sent: false,
-          provider: 'Fast2SMS',
-          status: 'FAILED',
-          message: `Fast2SMS rejected: ${errorDetail}`,
-        };
-      }
-    } catch (err: any) {
-      return {
-        sent: false,
-        provider: 'Fast2SMS',
-        status: 'FAILED',
-        message: err.message || 'Fast2SMS network connection error.',
-      };
-    }
-  }
-
-  // 3. UNCONFIGURED (Provider = None)
-  const missingSummary = config.missingConfig && config.missingConfig.length > 0
-    ? config.missingConfig.join(', ')
-    : 'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, (or FAST2SMS_API_KEY)';
-
-  return {
-    sent: false,
-    provider: 'None',
-    status: 'PROVIDER_NOT_CONFIGURED',
-    message: `SMS provider is not configured. Missing environment variables: ${missingSummary}.`,
-  };
+  return sendMsg91Otp(recipientPhone, { otp, purpose: options?.purpose || 'order' });
 }

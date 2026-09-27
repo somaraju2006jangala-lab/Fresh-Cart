@@ -83,7 +83,7 @@ apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: 
  * POST /api/otp/verify
  * Validates entered OTP against backend salted SHA-256 hash.
  */
-apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], (req: Request, res: Response) => {
+apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Request, res: Response) => {
   try {
     const { orderId, otp } = req.body || {};
 
@@ -98,7 +98,7 @@ apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], (req: Request, res
       return;
     }
 
-    const result = verifyOrderOtp(orderId, otp);
+    const result = await verifyOrderOtp(orderId, otp);
     console.log(`[OTP Server] Verify result for ${orderId}: Success=${result.success}, Status=${result.status}`);
     sendJson(res, 200, result);
   } catch (err: any) {
