@@ -1,17 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isPhoneRegistered } from '../services/authService';
-import {
-  validateIndianMobileNumber,
-  sendRegistrationOtp,
-  verifyRegistrationOtp,
-  resendRegistrationOtp,
-} from '../services/registrationOtpService';
+import { validateIndianMobileNumber } from '../services/registrationOtpService';
 import { BRAND_LOGO_URL } from '../data/products';
 import {
   User,
   Mail,
-  Phone,
   Lock,
   MapPin,
   Eye,
@@ -19,7 +13,6 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
-  Check,
   ArrowLeft,
   Sparkles,
 } from 'lucide-react';
@@ -39,7 +32,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(''); // 10-digit Indian mobile number
-  const [otp, setOtp] = useState(''); // 6-digit OTP
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [address, setAddress] = useState('');
@@ -48,29 +40,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // OTP State
-  const [isOtpSent, setIsOtpSent] = useState(false);
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpVerifying, setOtpVerifying] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
-  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
-  const [verificationToken, setVerificationToken] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // Messages
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [otpError, setOtpError] = useState<string | null>(null);
-  const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // 30-Second Resend Cooldown Countdown
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const interval = setInterval(() => {
-      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [resendCooldown]);
 
   // Simple password strength calculation
   const hasMinLength = password.length >= 8;
@@ -79,161 +50,21 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const strengthScore = [hasMinLength, hasLetter, hasNumber, hasSpecial].filter(Boolean).length;
 
-  const sentPhoneRef = useRef<string | null>(null);
-
   // Handle phone input changes (10 digits only)
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
     setPhone(digitsOnly);
     setPhoneError(null);
-
-    // If mobile number is modified after verification, reset verified state
-    // Prevents tampering attack where user verifies one number and registers another
-    if (isVerified) {
-      setIsVerified(false);
-      setVerifiedPhone(null);
-      setVerificationToken(null);
-      setIsOtpSent(false);
-      setOtp('');
-      setOtpSuccess(null);
-      sentPhoneRef.current = null;
-    }
   };
 
-  // Automatically sends OTP to normalized Indian mobile number
-  const triggerOtpSend = async (normalizedPhone: string) => {
-    // Duplicate mobile number check before sending OTP
-    if (isPhoneRegistered(normalizedPhone)) {
-      setPhoneError('This mobile number is already registered. Please use another number or log in.');
-      return;
-    }
-
-    setPhoneError(null);
-    setOtpError(null);
-    setOtpSuccess(null);
-    setErrorMessage(null);
-    setOtpSending(true);
-
-    try {
-      const res = await sendRegistrationOtp(normalizedPhone);
-      if (res.success) {
-        setIsOtpSent(true);
-        setResendCooldown(res.cooldownSeconds || 30);
-        setOtpSuccess(`OTP sent to ${res.maskedPhone || 'your mobile number'}.`);
-      } else {
-        setIsOtpSent(true);
-        setPhoneError(res.error || 'OTP could not be sent. Please verify the mobile number or try again later.');
-        if (res.cooldownSeconds) {
-          setResendCooldown(res.cooldownSeconds);
-        }
-      }
-    } catch {
-      setIsOtpSent(true);
-      setPhoneError('OTP could not be sent. Please verify the mobile number or try again later.');
-    } finally {
-      setOtpSending(false);
-    }
-  };
-
-  // Automatically trigger OTP send when customer completes entering a valid 10-digit Indian mobile number
-  useEffect(() => {
-    if (phone.length === 10 && !isVerified && !otpSending) {
-      const validation = validateIndianMobileNumber(phone);
-      if (validation.isValid && validation.normalized) {
-        if (sentPhoneRef.current !== validation.normalized) {
-          sentPhoneRef.current = validation.normalized;
-          triggerOtpSend(validation.normalized);
-        }
-      } else {
-        setPhoneError(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
-      }
-    } else if (phone.length < 10) {
-      if (sentPhoneRef.current) {
-        sentPhoneRef.current = null;
-      }
-    }
-  }, [phone, isVerified, otpSending]);
-
-  // Resend OTP
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0 || otpSending) return;
-    setOtpError(null);
-    setOtpSuccess(null);
-    setErrorMessage(null);
-
-    const validation = validateIndianMobileNumber(phone);
-    if (!validation.isValid || !validation.normalized) {
-      setPhoneError(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
-      return;
-    }
-
-    setOtpSending(true);
-    try {
-      const res = await resendRegistrationOtp(validation.normalized);
-      if (res.success) {
-        setResendCooldown(res.cooldownSeconds || 30);
-        setOtpSuccess(`New OTP sent to ${res.maskedPhone || 'your mobile number'}.`);
-        setOtp('');
-      } else {
-        setOtpError(res.error || 'Failed to resend OTP. Please try again.');
-        if (res.cooldownSeconds) {
-          setResendCooldown(res.cooldownSeconds);
-        }
-      }
-    } catch {
-      setOtpError('Failed to resend OTP. Please check connection.');
-    } finally {
-      setOtpSending(false);
-    }
-  };
-
-  // Verify OTP
-  const handleVerifyOtp = async () => {
-    setOtpError(null);
-    setOtpSuccess(null);
-    setErrorMessage(null);
-
-    const cleanOtp = otp.trim();
-    if (cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      setOtpError('Please enter the 6-digit OTP code.');
-      return;
-    }
-
-    const validation = validateIndianMobileNumber(phone);
-    if (!validation.isValid || !validation.normalized) {
-      setPhoneError('Please enter a valid 10-digit Indian mobile number.');
-      return;
-    }
-
-    setOtpVerifying(true);
-    try {
-      const res = await verifyRegistrationOtp(validation.normalized, cleanOtp);
-      if (res.success) {
-        setIsVerified(true);
-        setVerifiedPhone(validation.normalized);
-        setVerificationToken(res.verificationToken || null);
-        setOtpSuccess('✓ Mobile number verified');
-        setOtpError(null);
-      } else {
-        setOtpError(res.error || 'Invalid OTP. Please try again.');
-      }
-    } catch {
-      setOtpError('Invalid OTP. Please try again.');
-    } finally {
-      setOtpVerifying(false);
-    }
-  };
-
-  // Validate form completeness and mobile verification
+  // Validate form completeness and mobile validation
   const phoneValidation = validateIndianMobileNumber(phone);
   const isPhoneValid = phoneValidation.isValid;
-  const isPhoneMatchedAndVerified = isVerified && verifiedPhone === phoneValidation.normalized;
   const isFormValid =
     name.trim().length > 0 &&
     email.trim().length > 0 &&
     email.includes('@') &&
     isPhoneValid &&
-    isPhoneMatchedAndVerified &&
     address.trim().length > 0 &&
     password.length >= 6 &&
     confirmPassword === password;
@@ -243,6 +74,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setPhoneError(null);
 
     if (!name.trim()) {
       setErrorMessage('Please enter your full name.');
@@ -256,12 +88,13 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
     const validation = validateIndianMobileNumber(phone);
     if (!validation.isValid || !validation.normalized) {
       setPhoneError(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
-      setErrorMessage('Please enter a valid 10-digit Indian mobile number.');
+      setErrorMessage(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
       return;
     }
 
-    if (!isVerified || !verifiedPhone || verifiedPhone !== validation.normalized) {
-      setErrorMessage('Please verify your mobile number with OTP before completing registration.');
+    if (isPhoneRegistered(phone)) {
+      setPhoneError('This mobile number is already registered. Please use another number or log in.');
+      setErrorMessage('This mobile number is already registered. Please use another number or log in.');
       return;
     }
 
@@ -286,7 +119,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
         phone: validation.normalized, // E.164: +91XXXXXXXXXX
         password,
         address: address.trim(),
-        verificationToken: verificationToken || undefined,
       });
 
       if (res.success) {
@@ -400,178 +232,39 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             </div>
           </div>
 
-          {/* Mobile Number & OTP Verification Section */}
-          <div className="space-y-3 p-3.5 rounded-2xl bg-white/30 backdrop-blur-xs border border-white/50">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="reg-mobile"
-                  className="block text-[12px] font-semibold text-[#0b1c30]"
-                >
-                  Mobile Number <span className="text-red-500">*</span>
-                </label>
-                {isVerified && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50/80 px-2 py-0.5 rounded-full border border-emerald-200">
-                    <Check className="w-3 h-3 text-emerald-600" />
-                    <span>✓ Mobile number verified</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Mobile Number Input with fixed +91 prefix */}
-              <div className="relative flex items-center">
-                <span className="absolute left-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[#0b1c30] select-none pointer-events-none pr-2.5 border-r border-[#6e7b6c]/30">
-                  <span>🇮🇳</span>
-                  <span>+91</span>
-                </span>
-                <input
-                  id="reg-mobile"
-                  type="tel"
-                  required
-                  disabled={isVerified}
-                  value={phone}
-                  onChange={handlePhoneChange}
-                  placeholder="10-digit mobile number"
-                  maxLength={10}
-                  className={`w-full pl-20 pr-10 py-2.5 rounded-xl bg-white/40 backdrop-blur-xs border text-[13px] text-[#0b1c30] font-medium tracking-wide placeholder:text-[#565e74]/70 placeholder:font-normal placeholder:tracking-normal focus:outline-hidden focus:bg-white/70 focus:ring-2 focus:ring-[#006b2c] transition-all ${
-                    phoneError ? 'border-red-400 bg-red-50/20' : 'border-white/55'
-                  } ${isVerified ? 'bg-emerald-50/30 border-emerald-300 cursor-not-allowed text-emerald-900' : ''}`}
-                />
-                {otpSending && (
-                  <span className="absolute right-3.5 flex items-center" title="Sending OTP...">
-                    <span className="w-4 h-4 border-2 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
-                  </span>
-                )}
-              </div>
-
-              {/* Consent Message */}
-              {!isVerified && (
-                <p className="text-[11px] text-[#565e74] leading-relaxed pt-0.5">
-                  By requesting an OTP, you agree to receive a verification message on this mobile number.
-                </p>
-              )}
-
-              {/* Phone validation / send error */}
-              {phoneError && (
-                <div
-                  id="phone-error-msg"
-                  className="text-[12px] font-medium text-red-600 flex items-center gap-1 mt-1 animate-in fade-in duration-150"
-                >
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-500" />
-                  <span>{phoneError}</span>
-                </div>
-              )}
+          {/* Mobile Number - Indian +91 */}
+          <div className="space-y-1">
+            <label
+              htmlFor="reg-mobile"
+              className="block text-[12px] font-semibold text-[#0b1c30]"
+            >
+              Mobile Number <span className="text-red-500">*</span>
+            </label>
+            <div className="relative flex items-center">
+              <span className="absolute left-3.5 inline-flex items-center gap-1 text-[13px] font-semibold text-[#0b1c30] select-none pointer-events-none pr-2.5 border-r border-[#6e7b6c]/30">
+                <span>🇮🇳</span>
+                <span>+91</span>
+              </span>
+              <input
+                id="reg-mobile"
+                type="tel"
+                required
+                value={phone}
+                onChange={handlePhoneChange}
+                placeholder="10-digit mobile number"
+                maxLength={10}
+                className={`w-full pl-20 pr-3.5 py-2.5 rounded-xl bg-white/35 backdrop-blur-xs border text-[13px] text-[#0b1c30] font-medium tracking-wide placeholder:text-[#565e74]/70 placeholder:font-normal placeholder:tracking-normal focus:outline-hidden focus:bg-white/60 focus:ring-2 focus:ring-[#006b2c] transition-all ${
+                  phoneError ? 'border-red-400 bg-red-50/20' : 'border-white/55'
+                }`}
+              />
             </div>
-
-            {/* OTP Verification Controls (shown after OTP is sent and before verified) */}
-            {(isOtpSent || (phone.length === 10 && validateIndianMobileNumber(phone).isValid)) && !isVerified && (
-              <div className="pt-3 border-t border-white/40 space-y-2 animate-in fade-in duration-200">
-                <label
-                  htmlFor="reg-otp"
-                  className="block text-[12px] font-semibold text-[#0b1c30]"
-                >
-                  OTP <span className="text-red-500">*</span>
-                </label>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1 flex items-center">
-                    <input
-                      id="reg-otp"
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => {
-                        setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
-                        setOtpError(null);
-                      }}
-                      placeholder="Enter 6-digit OTP"
-                      className={`w-full px-3.5 py-2.5 rounded-xl bg-white/40 backdrop-blur-xs border text-[14px] font-mono tracking-widest text-[#0b1c30] placeholder:text-[#565e74]/70 placeholder:font-sans placeholder:tracking-normal focus:outline-hidden focus:bg-white/70 focus:ring-2 focus:ring-[#006b2c] transition-all ${
-                        otpError ? 'border-red-400 bg-red-50/20' : 'border-white/55'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Verify OTP Button (disabled after verified) */}
-                    <button
-                      type="button"
-                      id="verify-otp-btn"
-                      onClick={handleVerifyOtp}
-                      disabled={otpVerifying || otp.length !== 6 || isVerified}
-                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-semibold shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {otpVerifying ? (
-                        <>
-                          <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                          <span>Verifying...</span>
-                        </>
-                      ) : (
-                        <span>Verify OTP</span>
-                      )}
-                    </button>
-
-                    {/* Resend OTP Button with 30-Second Cooldown */}
-                    <button
-                      type="button"
-                      id="resend-otp-btn"
-                      onClick={handleResendOtp}
-                      disabled={resendCooldown > 0 || otpSending || isVerified}
-                      className="px-3 py-2.5 rounded-xl bg-white/50 hover:bg-white/80 border border-white/60 text-[#0b1c30] text-[12px] font-semibold transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* OTP Error Message */}
-                {otpError && (
-                  <div
-                    id="otp-error-msg"
-                    className="text-[12px] font-medium text-red-600 flex items-center gap-1 animate-in fade-in duration-150"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-500" />
-                    <span>{otpError}</span>
-                  </div>
-                )}
-
-                {/* OTP Sent Success Message */}
-                {otpSuccess && !otpError && (
-                  <div
-                    id="otp-success-msg"
-                    className="text-[12px] font-medium text-emerald-700 flex items-center gap-1 animate-in fade-in duration-150"
-                  >
-                    <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-                    <span>{otpSuccess}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Verified Banner */}
-            {isVerified && (
+            {phoneError && (
               <div
-                id="mobile-verified-banner"
-                className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[12px] font-semibold flex items-center justify-between animate-in fade-in duration-150"
+                id="phone-error-msg"
+                className="text-[12px] font-medium text-red-600 flex items-center gap-1 mt-1 animate-in fade-in duration-150"
               >
-                <div className="flex items-center gap-1.5">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>✓ Mobile number verified</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsVerified(false);
-                    setVerifiedPhone(null);
-                    setVerificationToken(null);
-                    setIsOtpSent(false);
-                    setOtp('');
-                    setOtpSuccess(null);
-                  }}
-                  className="text-[11px] font-medium text-[#565e74] hover:text-[#0b1c30] underline cursor-pointer"
-                >
-                  Change number
-                </button>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-500" />
+                <span>{phoneError}</span>
               </div>
             )}
           </div>
@@ -717,7 +410,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             </span>
           </div>
 
-          {/* Submit Button - Disabled until verified & all fields valid */}
+          {/* Submit Button */}
           <button
             type="submit"
             id="register-submit-btn"

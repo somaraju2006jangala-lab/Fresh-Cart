@@ -1,10 +1,6 @@
 import { Customer, CustomerAddress, CustomerOrder } from '../types';
 import { INITIAL_PRODUCTS } from '../data/products';
-import {
-  validateIndianMobileNumber,
-  verifyRegistrationPhoneWithBackend,
-  consumeRegistrationTokenWithBackend,
-} from './registrationOtpService';
+import { validateIndianMobileNumber } from './registrationOtpService';
 
 const STORAGE_CUSTOMERS_KEY = 'freshcart_registered_customers';
 const STORAGE_CURRENT_USER_KEY = 'freshcart_active_customer_session';
@@ -377,7 +373,6 @@ export interface RegisterPayload {
   phone: string;
   password: string;
   address: string;
-  verificationToken?: string;
 }
 
 /**
@@ -456,19 +451,6 @@ export async function registerCustomer(
     };
   }
 
-  // 3. Backend Verification Check (Do not trust frontend verification state)
-  const backendCheck = await verifyRegistrationPhoneWithBackend(
-    normalizedPhone,
-    payload.verificationToken
-  );
-
-  if (!backendCheck.verified) {
-    return {
-      success: false,
-      error: backendCheck.error || 'Mobile number has not been verified. Please verify using OTP.',
-    };
-  }
-
   const salt = generateSalt();
   const hash = await hashPassword(payload.password, salt);
 
@@ -499,9 +481,6 @@ export async function registerCustomer(
 
   customers.push(newCustomer);
   saveStoredCustomers(customers);
-
-  // Consume verification token with backend so it cannot be reused
-  consumeRegistrationTokenWithBackend(normalizedPhone, payload.verificationToken);
 
   // Auto-login new registered customer
   const sessionUser: Customer = {
