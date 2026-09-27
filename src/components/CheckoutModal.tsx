@@ -127,7 +127,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const generatedOrder = `#FC-${orderNum}`;
       setOrderNumber(String(orderNum));
 
-      const customerPhone = currentUser?.phone || '9876541234';
+      const customerPhone = currentUser?.phone?.trim() || '';
 
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
@@ -135,7 +135,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customerId: currentUser?.id || 'guest_user',
         customerName: currentUser?.name || 'Guest Customer',
         customerEmail: currentUser?.email,
-        customerPhone,
+        customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
         estimatedDeliveryTime: 'Picking in progress',
@@ -150,18 +150,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend OTP generation & isolated SMS provider dispatch
-      generateOrderOtp(
-        generatedOrder,
-        newCustomerOrder.customerId || 'guest_user',
-        customerPhone
-      );
+      // Trigger backend OTP generation & isolated SMS provider dispatch only for valid Indian mobile
+      if (customerPhone) {
+        generateOrderOtp(
+          generatedOrder,
+          newCustomerOrder.customerId || 'guest_user',
+          customerPhone
+        );
+      }
 
       onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');
       onClearCart();
     }, 800);
   };
+
 
   const handleDone = () => {
     setStep('details');

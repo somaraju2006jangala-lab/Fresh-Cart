@@ -45,6 +45,11 @@ export function validateIndianMobileNumber(input: string): {
 
   let digits = trimmed.replace(/\D/g, '');
 
+  // Strip repeated leading 91 prefixes (e.g. 91919876543210 -> strip repeated 91)
+  while (digits.length > 10 && digits.startsWith('9191')) {
+    digits = digits.slice(2);
+  }
+
   // Strip leading 91 or 0
   if (digits.length === 12 && digits.startsWith('91')) {
     digits = digits.slice(2);
@@ -79,4 +84,18 @@ export function validateIndianMobileNumber(input: string): {
     digits,
   };
 }
+
+/**
+ * Formats an Indian mobile number for display:
+ * "+91 9876543210"
+ */
+export function formatIndianDisplayNumber(input?: string): string {
+  if (!input || typeof input !== 'string') return '';
+  const validation = validateIndianMobileNumber(input);
+  if (validation.isValid && validation.digits) {
+    return `+91 ${validation.digits}`;
+  }
+  return input;
+}
+
 

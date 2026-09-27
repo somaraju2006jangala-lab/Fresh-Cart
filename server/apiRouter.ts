@@ -7,6 +7,7 @@ import {
   resendOrderOtp,
   getOrderOtpStatus,
   maskMobileNumber,
+  normalizeAndValidateIndianMobile,
 } from './otpService.ts';
 import { ensureEnvLoaded, getSmsProviderConfig, logSafeEnvStatus } from './smsProvider.ts';
 
@@ -44,14 +45,14 @@ apiRouter.use((req, res, next) => {
 apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: Request, res: Response) => {
   try {
     const { orderId, customerId, customerPhone } = req.body || {};
+    const norm = normalizeAndValidateIndianMobile(customerPhone);
 
-    console.log(`[OTP Server] POST /api/otp/generate - Order: ${orderId}, Customer: ${customerId}, Phone: ${customerPhone ? maskMobileNumber(customerPhone) : 'NONE'}`);
-
-    if (!orderId || !customerPhone) {
-      console.warn(`[OTP Server] Missing orderId or customerPhone in /api/otp/generate request`);
+    if (!orderId || !norm.isValid) {
+      console.warn(`[OTP Server] Missing or invalid Indian mobile number for order ${orderId}, customer ${customerId || 'unknown'}`);
       sendJson(res, 400, {
         success: false,
-        error: 'Order ID and customer registered mobile number are required.',
+        error: 'Valid Indian mobile number is not available for this customer.',
+        message: 'Valid Indian mobile number is not available for this customer.',
       });
       return;
     }
@@ -61,10 +62,9 @@ apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: 
     const result = await generateOrderOtp(
       orderId,
       customerId || 'guest',
-      customerPhone
+      norm.msg91Format
     );
 
-    console.log(`[OTP Server] Generate result for ${orderId}: Sent=${result.delivery?.sent}, Provider=${result.delivery?.provider}`);
     if (!result.delivery?.sent) {
       console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
     }
@@ -87,8 +87,6 @@ apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Reques
   try {
     const { orderId, otp } = req.body || {};
 
-    console.log(`[OTP Server] POST /api/otp/verify - Order: ${orderId}`);
-
     if (!orderId || !otp) {
       sendJson(res, 400, {
         success: false,
@@ -99,7 +97,6 @@ apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Reques
     }
 
     const result = await verifyOrderOtp(orderId, otp);
-    console.log(`[OTP Server] Verify result for ${orderId}: Success=${result.success}, Status=${result.status}`);
     sendJson(res, 200, result);
   } catch (err: any) {
     console.error(`[OTP Server] Exception in /api/otp/verify:`, err?.message);
@@ -119,18 +116,27 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
   try {
     const { orderId, customerId, customerPhone } = req.body || {};
 
-    console.log(`[OTP Server] POST /api/otp/resend - Order: ${orderId}, Customer: ${customerId}, Phone: ${customerPhone ? maskMobileNumber(customerPhone) : 'NONE'}`);
-
     if (!orderId) {
       sendJson(res, 400, { success: false, error: 'Order ID is required.' });
       return;
+    }
+
+    if (customerPhone) {
+      const norm = normalizeAndValidateIndianMobile(customerPhone);
+      if (!norm.isValid) {
+        sendJson(res, 400, {
+          success: false,
+          error: 'Valid Indian mobile number is not available for this customer.',
+          message: 'Valid Indian mobile number is not available for this customer.',
+        });
+        return;
+      }
     }
 
     logSafeEnvStatus();
 
     const result = await resendOrderOtp(orderId, customerId, customerPhone);
 
-    console.log(`[OTP Server] Resend result for ${orderId}: Sent=${result.delivery?.sent}, Provider=${result.delivery?.provider}`);
     if (!result.delivery?.sent) {
       console.error(`[OTP Server] Delivery error for ${orderId}: ${result.error || result.delivery?.message}`);
     }

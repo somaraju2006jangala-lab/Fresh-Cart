@@ -39,6 +39,8 @@ import {
   Send,
 } from 'lucide-react';
 import { generateOrderOtp, verifyOrderOtp, resendOrderOtp, maskMobileNumber } from '../services/otpClientService';
+import { getCustomerPhoneForOrder } from '../services/authService';
+import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
 
 export interface ParsedHistoryPeriod {
   type: 'all' | 'relative';
@@ -619,18 +621,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     if (order.status === 'Delivered') {
       return;
     }
-    if (!order.customerPhone || !order.customerPhone.trim()) {
+
+    const resolvedPhone = getCustomerPhoneForOrder(order);
+    const validation = validateIndianMobileNumber(resolvedPhone);
+
+    if (!validation.isValid || !validation.normalized) {
       setOrderOtpFeedback((prev) => ({
         ...prev,
         [order.id]: {
           type: 'error',
-          message: 'Failed to send OTP. Please try again.',
+          message: 'Valid Indian mobile number is not available for this customer.',
         },
       }));
-      console.error('[OTP SMS Delivery Failed]: Order has no customer registered mobile number.', {
-        orderId: order.id,
-        customerName: order.customerName,
-      });
       return;
     }
 
@@ -639,7 +641,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       const res = await resendOrderOtp(
         order.id,
         order.customerId || order.customerName,
-        order.customerPhone
+        validation.normalized
       );
       if (res.success && res.delivery?.sent) {
         setOrderOtpInputs((prev) => ({ ...prev, [order.id]: '' }));
@@ -647,11 +649,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           ...prev,
           [order.id]: {
             type: 'success',
-            message: `OTP sent successfully to ${maskMobileNumber(order.customerPhone)}`,
+            message: `OTP sent successfully to ${formatIndianDisplayNumber(validation.normalized)}`,
           },
         }));
       } else {
-        const errorMsg = res.error || res.delivery?.message || res.message || 'Failed to send OTP. Please try again.';
+        const errorMsg =
+          res.error ||
+          res.delivery?.message ||
+          res.message ||
+          'Valid Indian mobile number is not available for this customer.';
         setOrderOtpFeedback((prev) => ({
           ...prev,
           [order.id]: {
@@ -659,22 +665,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             message: errorMsg,
           },
         }));
-        console.error('[OTP SMS Delivery Failed]:', errorMsg);
       }
     } catch (err: any) {
-      const errorMsg = err?.message || 'Failed to send OTP. Please check server connection.';
       setOrderOtpFeedback((prev) => ({
         ...prev,
         [order.id]: {
           type: 'error',
-          message: errorMsg,
+          message: err?.message || 'Valid Indian mobile number is not available for this customer.',
         },
       }));
-      console.error('[OTP SMS Delivery Failed]: Network or server error.', errorMsg);
     } finally {
       setOrderSendingOtp((prev) => ({ ...prev, [order.id]: false }));
     }
   };
+
 
   const periodDisplayMessage = activeHistoryPeriod ? activeHistoryPeriod.displayMessage : null;
 
@@ -1584,19 +1588,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                 <div className="bg-black/25 backdrop-blur-md border border-white/12 rounded-xl p-5 space-y-3 font-mono text-[14px]">
                   <div>
-                    <span className="font-semibold text-[#94a3b8]">Order ID: </span>
-                    <span className="font-bold text-[#10b981]">
-                      {selectedOtpOrder.id.startsWith('#') ? selectedOtpOrder.id : `#${selectedOtpOrder.id}`}
-                    </span>
-                  </div>
-                  <div>
                     <span className="font-semibold text-[#94a3b8]">Customer: </span>
                     <span className="font-bold text-white">{selectedOtpOrder.customerName}</span>
                   </div>
-                  <div className="pt-2">
+                  <div>
+                    <span className="font-semibold text-[#94a3b8]">User ID: </span>
+                    <span className="font-semibold text-slate-200">{selectedOtpOrder.customerId || 'N/A'}</span>
+                  </div>
+                  <div>
                     <span className="font-semibold text-[#94a3b8]">Mobile: </span>
                     <span className="font-bold text-white tracking-wider">
-                      {maskMobileNumber(selectedOtpOrder.customerPhone)}
+                      {formatIndianDisplayNumber(getCustomerPhoneForOrder(selectedOtpOrder)) || 'Not available'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-[#94a3b8]">Order ID: </span>
+                    <span className="font-bold text-[#10b981]">
+                      {selectedOtpOrder.id.startsWith('#') ? selectedOtpOrder.id : `#${selectedOtpOrder.id}`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1930,16 +1938,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 {filteredOrders.map((order) => {
                   const formattedDateTime = formatOrderDateTime(order.createdAt);
                   const displayOrderId = order.id.startsWith('#') ? order.id : `#${order.id}`;
+                  const resolvedPhone = getCustomerPhoneForOrder(order);
+                  const displayMobile = formatIndianDisplayNumber(resolvedPhone) || resolvedPhone || 'Not available';
 
                   // Build plain text format matching user's requested specification:
                   const textLines: string[] = [
-                    `Order ID: ${displayOrderId}`,
                     `Customer: ${order.customerName}`,
                     `User ID: ${order.customerId || 'N/A'}`,
-                    `Registered Mobile: ${maskMobileNumber(order.customerPhone)}`,
+                    `Mobile: ${displayMobile}`,
+                    `Order ID: ${displayOrderId}`,
                   ];
                   if (order.customerEmail) {
-                    textLines.push(`Customer Email: ${order.customerEmail}`);
+                    textLines.push(`Email: ${order.customerEmail}`);
                   }
                   textLines.push(`Date & Time: ${formattedDateTime}`);
                   if (order.otpVerifiedAt) {
@@ -2005,12 +2015,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
-                          {/* Small "OTP" button to open separate OTP Verification page */}
+                          {/* Small "OTP" button to open separate OTP Verification page and send OTP */}
                           {order.status === 'Picking' && (
                             <button
                               type="button"
                               id={`order-otp-btn-${order.id}`}
-                              onClick={() => setSelectedOtpOrderId(order.id)}
+                              onClick={() => {
+                                setSelectedOtpOrderId(order.id);
+                                handleSendOtp(order);
+                              }}
                               title={`Open OTP Verification page for ${displayOrderId}`}
                               className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
                             >
@@ -2038,10 +2051,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       {/* Structured Order Record Box matching user's exact specification */}
                       <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-xl p-4 sm:p-5 font-mono text-[13px] text-[#f8fafc] space-y-2 shadow-2xs">
                         <div>
-                          <span className="font-semibold text-[#94a3b8]">Order ID: </span>
-                          <span className="font-bold text-[#10b981]">{displayOrderId}</span>
-                        </div>
-                        <div>
                           <span className="font-semibold text-[#94a3b8]">Customer: </span>
                           <span className="font-bold text-white">{order.customerName}</span>
                         </div>
@@ -2050,8 +2059,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <span className="font-semibold text-slate-200">{order.customerId || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-[#94a3b8]">Registered Mobile: </span>
-                          <span className="font-semibold text-slate-200">{maskMobileNumber(order.customerPhone)}</span>
+                          <span className="font-semibold text-[#94a3b8]">Mobile: </span>
+                          <span className="font-semibold text-slate-200">{displayMobile}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#94a3b8]">Order ID: </span>
+                          <span className="font-bold text-[#10b981]">{displayOrderId}</span>
                         </div>
                         {order.customerEmail && (
                           <div>
@@ -2063,6 +2076,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <span className="font-semibold text-[#94a3b8]">Date & Time: </span>
                           <span className="font-medium text-slate-200">{formattedDateTime}</span>
                         </div>
+
                         {order.otpVerifiedAt && (
                           <div>
                             <span className="font-semibold text-[#94a3b8]">OTP Verified At: </span>

@@ -36,7 +36,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     customerId: 'rahul123',
     customerName: 'Rahul',
     customerEmail: 'rahul@example.com',
-    customerPhone: '9876541234',
+    customerPhone: '+91 9876543210',
     deliveryAddress: 'Flat 402, Green Meadows, Bengaluru 560001',
     deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
     estimatedDeliveryTime: 'Picking in progress',
@@ -68,11 +68,47 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     paymentMethod: 'Cash on Delivery',
   },
   {
+    id: '#FC-1006',
+    customerId: 'priya123',
+    customerName: 'Priya Sharma',
+    customerEmail: 'priya@example.com',
+    customerPhone: '+91 9123456789',
+    deliveryAddress: 'Apt 304, Palm Grove, Koramangala, Bengaluru 560034',
+    deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
+    estimatedDeliveryTime: 'Picking in progress',
+    items: [
+      {
+        product: {
+          ...INITIAL_PRODUCTS[0], // prod-1: Bananas
+          title: 'Organic Bananas',
+          price: 60,
+          unit: '1 dozen',
+        },
+        quantity: 1,
+      },
+      {
+        product: {
+          ...INITIAL_PRODUCTS[2], // prod-3: Honeycrisp Apples
+          title: 'Honeycrisp Apples',
+          price: 150,
+          unit: '1 kg',
+        },
+        quantity: 1,
+      },
+    ],
+    subtotal: 210,
+    discount: 0,
+    total: 210,
+    status: 'Picking',
+    createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    paymentMethod: 'Cash on Delivery',
+  },
+  {
     id: '#1001',
     customerId: 'rahul123',
     customerName: 'Rahul',
     customerEmail: 'rahul@example.com',
-    customerPhone: '9876541234',
+    customerPhone: '+91 9876543210',
     deliveryAddress: 'Flat 402, Green Meadows, Bengaluru 560001',
     deliveryTimeSlot: '24-30 Minutes (Direct Express Pod)',
     estimatedDeliveryTime: 'Arriving in ~20 minutes',
@@ -212,7 +248,7 @@ export async function initializeAuthStore(): Promise<void> {
         id: 'rahul123',
         name: 'Rahul',
         email: 'rahul@example.com',
-        phone: '9876541234',
+        phone: '+91 9876543210',
         address: 'Flat 402, Green Meadows, Bengaluru 560001',
         passwordSalt: demoSalt,
         passwordHash: demoHash,
@@ -232,18 +268,47 @@ export async function initializeAuthStore(): Promise<void> {
         ],
       };
 
-      localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify([demoCustomer, rahulCustomer]));
+      const priyaCustomer: Customer = {
+        id: 'priya123',
+        name: 'Priya Sharma',
+        email: 'priya@example.com',
+        phone: '+91 9123456789',
+        address: 'Apt 304, Palm Grove, Koramangala, Bengaluru 560034',
+        passwordSalt: demoSalt,
+        passwordHash: demoHash,
+        createdAt: '2026-02-01T10:00:00.000Z',
+        avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Priya&backgroundColor=006b2c',
+        loyaltyTier: 'Fresh Gold Member (5% Cashback)',
+        savedAddresses: [
+          {
+            id: 'addr-priya-1',
+            label: 'Home',
+            street: 'Apt 304, Palm Grove, Koramangala',
+            city: 'Bengaluru',
+            state: 'KA',
+            zip: '560034',
+            isDefault: true,
+          },
+        ],
+      };
+
+      localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify([demoCustomer, rahulCustomer, priyaCustomer]));
     } else {
       try {
         const parsedCust: Customer[] = JSON.parse(existing);
-        if (!parsedCust.some((c) => c.id === 'rahul123')) {
-          const demoSalt = 'freshcart_salt_demo_9921';
-          const demoHash = await hashPassword(DEMO_CUSTOMER_PASSWORD, demoSalt);
+        const demoSalt = 'freshcart_salt_demo_9921';
+        const demoHash = await hashPassword(DEMO_CUSTOMER_PASSWORD, demoSalt);
+
+        // Ensure Rahul has the exact registered mobile number: +91 9876543210
+        const rahulIndex = parsedCust.findIndex((c) => c.id === 'rahul123');
+        if (rahulIndex >= 0) {
+          parsedCust[rahulIndex].phone = '+91 9876543210';
+        } else {
           parsedCust.push({
             id: 'rahul123',
             name: 'Rahul',
             email: 'rahul@example.com',
-            phone: '9876541234',
+            phone: '+91 9876543210',
             address: 'Flat 402, Green Meadows, Bengaluru 560001',
             passwordSalt: demoSalt,
             passwordHash: demoHash,
@@ -262,8 +327,39 @@ export async function initializeAuthStore(): Promise<void> {
               },
             ],
           });
-          localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify(parsedCust));
         }
+
+        // Ensure Priya Sharma (Customer B) is registered with mobile: +91 9123456789
+        const priyaIndex = parsedCust.findIndex((c) => c.id === 'priya123');
+        if (priyaIndex >= 0) {
+          parsedCust[priyaIndex].phone = '+91 9123456789';
+        } else {
+          parsedCust.push({
+            id: 'priya123',
+            name: 'Priya Sharma',
+            email: 'priya@example.com',
+            phone: '+91 9123456789',
+            address: 'Apt 304, Palm Grove, Koramangala, Bengaluru 560034',
+            passwordSalt: demoSalt,
+            passwordHash: demoHash,
+            createdAt: '2026-02-01T10:00:00.000Z',
+            avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Priya&backgroundColor=006b2c',
+            loyaltyTier: 'Fresh Gold Member (5% Cashback)',
+            savedAddresses: [
+              {
+                id: 'addr-priya-1',
+                label: 'Home',
+                street: 'Apt 304, Palm Grove, Koramangala',
+                city: 'Bengaluru',
+                state: 'KA',
+                zip: '560034',
+                isDefault: true,
+              },
+            ],
+          });
+        }
+
+        localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify(parsedCust));
       } catch {
         // Ignore
       }
@@ -278,14 +374,33 @@ export async function initializeAuthStore(): Promise<void> {
         if (!parsed.some((o) => o.id === '#FC-1005' || o.id === 'FC-1005')) {
           parsed.unshift(INITIAL_DEMO_ORDERS[0]);
         }
+        if (!parsed.some((o) => o.id === '#FC-1006' || o.id === 'FC-1006')) {
+          parsed.splice(1, 0, INITIAL_DEMO_ORDERS[1]);
+        }
         parsed.forEach((o) => {
-          if (o.id === '#FC-1005' || o.id === 'FC-1005' || o.id === '#1001') {
-            if (!o.customerPhone) o.customerPhone = '9876541234';
+          if (o.id === '#FC-1005' || o.id === 'FC-1005') {
+            o.customerId = 'rahul123';
+            o.customerName = 'Rahul';
+            o.customerEmail = 'rahul@example.com';
+            o.customerPhone = '+91 9876543210';
             if (o.status === 'Ordered') o.status = 'Picking';
           }
-          if (o.id === '#FC-94821') {
-            if (!o.customerPhone) o.customerPhone = '(555) 234-1234';
+          if (o.id === '#FC-1006' || o.id === 'FC-1006') {
+            o.customerId = 'priya123';
+            o.customerName = 'Priya Sharma';
+            o.customerEmail = 'priya@example.com';
+            o.customerPhone = '+91 9123456789';
             if (o.status === 'Ordered') o.status = 'Picking';
+          }
+          if (o.id === '#1001') {
+            o.customerId = 'rahul123';
+            o.customerPhone = '+91 9876543210';
+            if (o.status === 'Ordered') o.status = 'Picking';
+          }
+          if (o.customerId === 'rahul123') {
+            o.customerPhone = '+91 9876543210';
+          } else if (o.customerId === 'priya123') {
+            o.customerPhone = '+91 9123456789';
           }
         });
         localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(parsed));
@@ -301,7 +416,7 @@ export async function initializeAuthStore(): Promise<void> {
 /**
  * Helper to fetch all stored customers.
  */
-function getStoredCustomers(): Customer[] {
+export function getStoredCustomers(): Customer[] {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMERS_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -311,11 +426,51 @@ function getStoredCustomers(): Customer[] {
 }
 
 /**
+ * Resolves the registered customer account associated with an order
+ * using customerId, customerEmail, or customerName.
+ */
+export function getRegisteredCustomerForOrder(order: Partial<CustomerOrder>): Customer | undefined {
+  const customers = getStoredCustomers();
+  if (order.customerId) {
+    const cid = order.customerId.trim().toLowerCase();
+    const byId = customers.find((c) => c.id.toLowerCase() === cid);
+    if (byId) return byId;
+  }
+  if (order.customerEmail) {
+    const cemail = order.customerEmail.trim().toLowerCase();
+    const byEmail = customers.find((c) => c.email.toLowerCase() === cemail);
+    if (byEmail) return byEmail;
+  }
+  if (order.customerName) {
+    const cname = order.customerName.trim().toLowerCase();
+    const byName = customers.find((c) => c.name.toLowerCase() === cname);
+    if (byName) return byName;
+  }
+  return undefined;
+}
+
+/**
+ * Returns the registered Indian mobile number for an order.
+ * Strictly obtains the actual number from customer account/order data.
+ */
+export function getCustomerPhoneForOrder(order: Partial<CustomerOrder>): string {
+  const customer = getRegisteredCustomerForOrder(order);
+  if (customer?.phone && customer.phone.trim()) {
+    return customer.phone.trim();
+  }
+  if (order.customerPhone && order.customerPhone.trim()) {
+    return order.customerPhone.trim();
+  }
+  return '';
+}
+
+/**
  * Save customer list to storage.
  */
 function saveStoredCustomers(customers: Customer[]): void {
   localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify(customers));
 }
+
 
 /**
  * Authenticates a customer by email/userId and password.
@@ -599,14 +754,33 @@ export function removeSavedAddress(userId: string, addressId: string): Customer 
 }
 
 /**
- * Retrieves orders for a specific customer.
+ * Retrieves orders for a specific customer or all customer orders.
+ * Automatically links every order to the customer's registered Indian mobile number.
  */
 export function getCustomerOrders(customerId?: string): CustomerOrder[] {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
-    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
-    if (!customerId) return orders;
-    return orders.filter((o) => !o.customerId || o.customerId === customerId);
+    let orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+
+    // Ensure test orders #FC-1005 (Rahul) and #FC-1006 (Priya) are always present
+    if (!orders.some((o) => o.id === '#FC-1005' || o.id === 'FC-1005')) {
+      orders.unshift(INITIAL_DEMO_ORDERS[0]);
+    }
+    if (!orders.some((o) => o.id === '#FC-1006' || o.id === 'FC-1006')) {
+      orders.splice(1, 0, INITIAL_DEMO_ORDERS[1]);
+    }
+
+    // Connect every order to the actual customer's registered Indian mobile number
+    const resolvedOrders = orders.map((o) => {
+      const resolvedPhone = getCustomerPhoneForOrder(o);
+      return {
+        ...o,
+        customerPhone: resolvedPhone || o.customerPhone,
+      };
+    });
+
+    if (!customerId) return resolvedOrders;
+    return resolvedOrders.filter((o) => !o.customerId || o.customerId === customerId);
   } catch {
     return [];
   }

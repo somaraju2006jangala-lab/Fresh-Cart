@@ -7,6 +7,7 @@ import {
   getSmsProviderConfig,
   maskMobileNumber,
   formatMsg91Phone,
+  normalizeAndValidateIndianMobile,
   type SmsDeliveryResult,
 } from './smsProvider.ts';
 
@@ -64,7 +65,7 @@ function persistStore(): void {
 
 loadStore();
 
-export { maskMobileNumber };
+export { maskMobileNumber, normalizeAndValidateIndianMobile };
 
 /**
  * Generates an OTP request for an order via official MSG91 Send OTP API,
@@ -82,6 +83,23 @@ export async function generateOrderOtp(
   delivery: SmsDeliveryResult;
   error?: string;
 }> {
+  const norm = normalizeAndValidateIndianMobile(customerPhone);
+  if (!norm.isValid) {
+    return {
+      success: false,
+      orderId,
+      maskedPhone: '******0000',
+      expiresAt: 0,
+      delivery: {
+        sent: false,
+        provider: 'MSG91',
+        status: 'FAILED',
+        message: 'Valid Indian mobile number is not available for this customer.',
+      },
+      error: 'Valid Indian mobile number is not available for this customer.',
+    };
+  }
+
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
 
   // Invalidate any previous OTP for this order before generating a new one
@@ -92,12 +110,12 @@ export async function generateOrderOtp(
 
   const now = Date.now();
   const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
-  const maskedPhone = maskMobileNumber(customerPhone);
+  const maskedPhone = norm.maskedPhone;
 
   const record: StoredOtpRecord = {
     orderId,
     customerId,
-    customerPhone,
+    customerPhone: norm.msg91Format,
     maskedPhone,
     hashedOtp: '',
     salt: '',
@@ -113,7 +131,7 @@ export async function generateOrderOtp(
   persistStore();
 
   // Attempt real SMS delivery via official MSG91 Send OTP API
-  const delivery = await sendMsg91Otp(customerPhone);
+  const delivery = await sendMsg91Otp(norm.msg91Format, { customerId });
 
   return {
     success: delivery.sent,
@@ -211,7 +229,9 @@ export async function verifyOrderOtp(
   }
 
   // 6. Call official MSG91 OTP Verify API
-  const verifyResult = await verifyMsg91Otp(record.customerPhone, cleanInput);
+  const verifyResult = await verifyMsg91Otp(record.customerPhone, cleanInput, {
+    customerId: record.customerId,
+  });
 
   if (verifyResult.success) {
     // CORRECT OTP
@@ -277,7 +297,18 @@ export async function resendOrderOtp(
   if (!customerPhone) {
     return {
       success: false,
-      error: 'Customer registered mobile number is required to resend OTP.',
+      error: 'Valid Indian mobile number is not available for this customer.',
+      message: 'Valid Indian mobile number is not available for this customer.',
+    };
+  }
+
+  const norm = normalizeAndValidateIndianMobile(customerPhone);
+  if (!norm.isValid) {
+    return {
+      success: false,
+      error: 'Valid Indian mobile number is not available for this customer.',
+      message: 'Valid Indian mobile number is not available for this customer.',
+      maskedPhone: '******0000',
     };
   }
 
@@ -296,15 +327,15 @@ export async function resendOrderOtp(
   }
 
   // Resend via MSG91 official retry API
-  const delivery = await resendMsg91Otp(customerPhone);
+  const delivery = await resendMsg91Otp(norm.msg91Format, { customerId });
   const now = Date.now();
   const expiresAt = now + 10 * 60 * 1000;
-  const maskedPhone = maskMobileNumber(customerPhone);
+  const maskedPhone = norm.maskedPhone;
 
   const newRecord: StoredOtpRecord = {
     orderId,
     customerId,
-    customerPhone,
+    customerPhone: norm.msg91Format,
     maskedPhone,
     hashedOtp: '',
     salt: '',
@@ -323,8 +354,8 @@ export async function resendOrderOtp(
     success: delivery.sent,
     message: delivery.sent
       ? `New 6-digit OTP sent to ${maskedPhone}. 10-minute expiry reset.`
-      : (delivery.message || 'Failed to resend OTP.'),
-    error: delivery.sent ? undefined : delivery.message,
+      : (delivery.message || 'Valid Indian mobile number is not available for this customer.'),
+    error: delivery.sent ? undefined : (delivery.message || 'Valid Indian mobile number is not available for this customer.'),
     maskedPhone,
     expiresAt,
     delivery,
@@ -374,12 +405,7 @@ export function getOrderOtpStatus(orderId: string): {
 }
 
 /**
- * Validates an Indian mobile number.
- * Requirements:
- * - Exactly 10 digits after optional country code / prefix.
- * - Starts with 6, 7, 8, or 9.
- * - Rejects letters and special characters.
- * - Returns normalized E.164 strictly formatted: +919876543210 (no spaces, dashes, or parentheses).
+ * Legacy wrapper forwarding to normalizeAndValidateIndianMobile
  */
 export function validateIndianMobile(input: string): {
   isValid: boolean;
@@ -387,68 +413,12 @@ export function validateIndianMobile(input: string): {
   digits?: string;
   error?: string;
 } {
-  if (!input || typeof input !== 'string') {
-    return {
-      isValid: false,
-      error: 'Mobile number is required.',
-    };
-  }
-
-  const trimmed = input.trim();
-
-  // Reject letters
-  if (/[a-zA-Z]/.test(trimmed)) {
-    return {
-      isValid: false,
-      error: 'Mobile number must contain digits only. Letters are not allowed.',
-    };
-  }
-
-  // Reject special characters (only digits, spaces, hyphens, and leading plus allowed)
-  if (/[^\d+\-\s]/.test(trimmed)) {
-    return {
-      isValid: false,
-      error: 'Mobile number cannot contain special characters.',
-    };
-  }
-
-  // Extract clean digits
-  let digits = trimmed.replace(/\D/g, '');
-
-  // Strip leading country code if present (+91 or 91) or leading trunk zero (0)
-  if (digits.length === 12 && digits.startsWith('91')) {
-    digits = digits.slice(2);
-  } else if (digits.length === 11 && digits.startsWith('0')) {
-    digits = digits.slice(1);
-  }
-
-  // Check length: exactly 10 digits
-  if (digits.length < 10) {
-    return {
-      isValid: false,
-      error: 'Please enter a complete 10-digit Indian mobile number.',
-    };
-  }
-  if (digits.length > 10) {
-    return {
-      isValid: false,
-      error: 'Mobile number cannot exceed 10 digits.',
-    };
-  }
-
-  // Check Indian mobile numbering pattern: first digit must be 6, 7, 8, or 9
-  if (!/^[6-9]\d{9}$/.test(digits)) {
-    return {
-      isValid: false,
-      error: 'Please enter a valid Indian mobile number starting with 6, 7, 8, or 9.',
-    };
-  }
-
-  const normalized = `+91${digits}`;
-
+  const norm = normalizeAndValidateIndianMobile(input);
   return {
-    isValid: true,
-    normalized,
-    digits,
+    isValid: norm.isValid,
+    normalized: norm.e164Format,
+    digits: norm.national10Digit,
+    error: norm.error,
   };
 }
+

@@ -91,25 +91,103 @@ function getCleanEnv(key: string): string | undefined {
   return unquoted;
 }
 
+export interface NormalizedIndianMobile {
+  isValid: boolean;
+  msg91Format: string;       // e.g. "919876543210"
+  e164Format: string;        // e.g. "+919876543210"
+  displayFormat: string;     // e.g. "+91 9876543210"
+  national10Digit: string;   // e.g. "9876543210"
+  maskedPhone: string;       // e.g. "******3210"
+  error?: string;
+}
+
+/**
+ * Safe backend Indian mobile number normalization and validation function.
+ *
+ * Requirements:
+ * - Exactly 10 digits national Indian mobile number starting with 6, 7, 8, or 9.
+ * - Handles: 9876543210, +919876543210, +91 9876543210, 91 9876543210, 09876543210, 91919876543210
+ * - Normalizes internally to format required by MSG91: 919876543210 (never 91919876543210 or +91919876543210)
+ * - Display format: +91 9876543210
+ * - Strictly rejects missing, non-Indian, letter-containing, or invalid phone numbers.
+ */
+export function normalizeAndValidateIndianMobile(input?: string): NormalizedIndianMobile {
+  const invalidResult = (error: string = 'Valid Indian mobile number is not available for this customer.'): NormalizedIndianMobile => ({
+    isValid: false,
+    msg91Format: '',
+    e164Format: '',
+    displayFormat: '',
+    national10Digit: '',
+    maskedPhone: '******0000',
+    error,
+  });
+
+  if (!input || typeof input !== 'string') {
+    return invalidResult();
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return invalidResult();
+  }
+
+  // Reject letters
+  if (/[a-zA-Z]/.test(trimmed)) {
+    return invalidResult();
+  }
+
+  // Reject invalid special characters (allow digits, +, -, spaces, parentheses)
+  if (/[^\d+\-\s()]/.test(trimmed)) {
+    return invalidResult();
+  }
+
+  let allDigits = trimmed.replace(/\D/g, '');
+
+  // Strip repeated country code prefixes (e.g. 91919876543210 -> strip 9191)
+  while (allDigits.length > 10 && allDigits.startsWith('9191')) {
+    allDigits = allDigits.slice(2);
+  }
+
+  // Strip single 91 prefix if length is 12 (e.g. 919876543210 -> 9876543210)
+  if (allDigits.length === 12 && allDigits.startsWith('91')) {
+    allDigits = allDigits.slice(2);
+  } else if (allDigits.length === 11 && allDigits.startsWith('0')) {
+    // Strip leading trunk zero (e.g. 09876543210 -> 9876543210)
+    allDigits = allDigits.slice(1);
+  }
+
+  // National Indian mobile number must be exactly 10 digits
+  if (allDigits.length !== 10) {
+    return invalidResult();
+  }
+
+  // Must start with valid Indian mobile prefix: 6, 7, 8, or 9
+  if (!/^[6-9]\d{9}$/.test(allDigits)) {
+    return invalidResult();
+  }
+
+  const national10Digit = allDigits;
+  const msg91Format = `91${national10Digit}`;
+  const e164Format = `+91${national10Digit}`;
+  const displayFormat = `+91 ${national10Digit}`;
+  const maskedPhone = `******${national10Digit.slice(-4)}`;
+
+  return {
+    isValid: true,
+    msg91Format,
+    e164Format,
+    displayFormat,
+    national10Digit,
+    maskedPhone,
+  };
+}
+
 /**
  * Normalizes phone numbers to standard E.164 format (+91XXXXXXXXXX)
  */
 export function formatE164Phone(phone: string): string {
-  if (!phone) return '';
-  let cleaned = phone.trim().replace(/[^\d+]/g, '');
-  if (cleaned.startsWith('+')) {
-    return '+' + cleaned.replace(/\D/g, '');
-  }
-  if (cleaned.length === 11 && cleaned.startsWith('0')) {
-    cleaned = cleaned.slice(1);
-  }
-  if (cleaned.length === 10) {
-    return `+91${cleaned}`;
-  }
-  if (cleaned.length === 12 && cleaned.startsWith('91')) {
-    return `+${cleaned}`;
-  }
-  return `+${cleaned}`;
+  const norm = normalizeAndValidateIndianMobile(phone);
+  return norm.isValid ? norm.e164Format : '';
 }
 
 /**
@@ -117,33 +195,8 @@ export function formatE164Phone(phone: string): string {
  * Strictly strips accidental +91 +91, 0, or extra characters.
  */
 export function formatMsg91Phone(phone: string): string {
-  if (!phone || typeof phone !== 'string') return '';
-  const digits = phone.trim().replace(/\D/g, '');
-
-  // Extract clean 10-digit national number if valid Indian mobile
-  if (digits.length >= 10) {
-    const last10 = digits.slice(-10);
-    if (/^[6-9]\d{9}$/.test(last10)) {
-      return `91${last10}`;
-    }
-  }
-
-  // Handle leading 0 prefix: e.g. 09876543210 -> 9876543210
-  if (digits.length === 11 && digits.startsWith('0')) {
-    return `91${digits.slice(1)}`;
-  }
-
-  // If 10 digits
-  if (digits.length === 10) {
-    return `91${digits}`;
-  }
-
-  // If 12 digits starting with 91
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return digits;
-  }
-
-  return digits;
+  const norm = normalizeAndValidateIndianMobile(phone);
+  return norm.isValid ? norm.msg91Format : '';
 }
 
 /**
@@ -151,12 +204,17 @@ export function formatMsg91Phone(phone: string): string {
  */
 export function maskMobileNumber(phone?: string): string {
   if (!phone || typeof phone !== 'string') return '******0000';
+  const norm = normalizeAndValidateIndianMobile(phone);
+  if (norm.isValid) {
+    return norm.maskedPhone;
+  }
   const digits = phone.replace(/\D/g, '');
   if (digits.length >= 4) {
     return `******${digits.slice(-4)}`;
   }
-  return `******${phone.slice(-4)}`;
+  return `******0000`;
 }
+
 
 /**
  * Helper to fetch a clean environment variable by primary name or fallback aliases.
@@ -253,14 +311,31 @@ export function logSafeEnvStatus(): void {
  */
 export async function sendMsg91Otp(
   recipientPhone: string,
-  options?: { otp?: string; purpose?: string }
+  options?: { otp?: string; purpose?: string; customerId?: string }
 ): Promise<SmsDeliveryResult> {
+  const customerId = options?.customerId || 'N/A';
+  const norm = normalizeAndValidateIndianMobile(recipientPhone);
+
+  if (!norm.isValid) {
+    console.log(`[OTP Server] Customer: ${customerId}`);
+    console.log(`[OTP Server] Phone: ******0000`);
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Sent: false`);
+    return {
+      sent: false,
+      provider: 'None',
+      status: 'FAILED',
+      message: 'Valid Indian mobile number is not available for this customer.',
+    };
+  }
+
+  const masked = norm.maskedPhone;
   const config = getSmsProviderConfig();
-  const masked = maskMobileNumber(recipientPhone);
 
   if (!config.isConfigured) {
-    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Customer: ${customerId}`);
     console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Provider: MSG91`);
     console.log(`[OTP Server] Sent: false`);
     const missingSummary = config.missingConfig?.join(', ') || 'MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID';
     return {
@@ -273,7 +348,7 @@ export async function sendMsg91Otp(
 
   const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
   const templateId = getEnvWithFallbacks('MSG91_OTP_TEMPLATE_ID', ['MSG91_TEMPLATE_ID', 'OTP_TEMPLATE_ID', 'TEMPLATE_ID'])!;
-  const msg91Mobile = formatMsg91Phone(recipientPhone);
+  const msg91Mobile = norm.msg91Format;
 
   try {
     const url = new URL('https://control.msg91.com/api/v5/otp');
@@ -302,8 +377,9 @@ export async function sendMsg91Otp(
       (data?.type !== 'error' && data?.message?.toLowerCase().includes('success'))
     );
 
-    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Customer: ${customerId}`);
     console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Provider: MSG91`);
     console.log(`[OTP Server] Sent: ${isSuccess}`);
 
     if (isSuccess) {
@@ -325,8 +401,9 @@ export async function sendMsg91Otp(
       };
     }
   } catch (err: any) {
-    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Customer: ${customerId}`);
     console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Provider: MSG91`);
     console.log(`[OTP Server] Sent: false`);
     console.warn(`[OTP Server] MSG91 network error:`, err?.message);
     return {
@@ -344,14 +421,31 @@ export async function sendMsg91Otp(
  */
 export async function resendMsg91Otp(
   recipientPhone: string,
-  options?: { otp?: string }
+  options?: { otp?: string; customerId?: string }
 ): Promise<SmsDeliveryResult> {
+  const customerId = options?.customerId || 'N/A';
+  const norm = normalizeAndValidateIndianMobile(recipientPhone);
+
+  if (!norm.isValid) {
+    console.log(`[OTP Server] Customer: ${customerId}`);
+    console.log(`[OTP Server] Phone: ******0000`);
+    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Sent: false`);
+    return {
+      sent: false,
+      provider: 'None',
+      status: 'FAILED',
+      message: 'Valid Indian mobile number is not available for this customer.',
+    };
+  }
+
+  const masked = norm.maskedPhone;
   const config = getSmsProviderConfig();
-  const masked = maskMobileNumber(recipientPhone);
 
   if (!config.isConfigured) {
-    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Customer: ${customerId}`);
     console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Provider: MSG91`);
     console.log(`[OTP Server] Sent: false`);
     const missingSummary = config.missingConfig?.join(', ') || 'MSG91_AUTH_KEY, MSG91_OTP_TEMPLATE_ID';
     return {
@@ -363,7 +457,7 @@ export async function resendMsg91Otp(
   }
 
   const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
-  const msg91Mobile = formatMsg91Phone(recipientPhone);
+  const msg91Mobile = norm.msg91Format;
 
   try {
     const url = new URL('https://control.msg91.com/api/v5/otp/retry');
@@ -383,8 +477,9 @@ export async function resendMsg91Otp(
     const isSuccess = Boolean(response.ok && data?.type === 'success');
 
     if (isSuccess) {
-      console.log(`[OTP Server] Provider: MSG91`);
+      console.log(`[OTP Server] Customer: ${customerId}`);
       console.log(`[OTP Server] Phone: ${masked}`);
+      console.log(`[OTP Server] Provider: MSG91`);
       console.log(`[OTP Server] Sent: true`);
       return {
         sent: true,
@@ -399,8 +494,9 @@ export async function resendMsg91Otp(
       return await sendMsg91Otp(recipientPhone, options);
     }
   } catch (err: any) {
-    console.log(`[OTP Server] Provider: MSG91`);
+    console.log(`[OTP Server] Customer: ${customerId}`);
     console.log(`[OTP Server] Phone: ${masked}`);
+    console.log(`[OTP Server] Provider: MSG91`);
     console.log(`[OTP Server] Sent: false`);
     console.warn(`[OTP Server] MSG91 retry network error:`, err?.message);
     // Fallback to fresh send
@@ -418,14 +514,25 @@ export async function resendMsg91Otp(
  */
 export async function verifyMsg91Otp(
   recipientPhone: string,
-  otp: string
+  otp: string,
+  options?: { customerId?: string }
 ): Promise<{ success: boolean; message: string; isExpired?: boolean }> {
-  const config = getSmsProviderConfig();
-  const masked = maskMobileNumber(recipientPhone);
+  const customerId = options?.customerId || 'N/A';
+  const norm = normalizeAndValidateIndianMobile(recipientPhone);
+  const masked = norm.isValid ? norm.maskedPhone : maskMobileNumber(recipientPhone);
 
-  console.log(`[OTP Server] Provider: MSG91`);
+  console.log(`[OTP Server] Customer: ${customerId}`);
   console.log(`[OTP Server] Phone: ${masked}`);
+  console.log(`[OTP Server] Provider: MSG91`);
 
+  if (!norm.isValid) {
+    return {
+      success: false,
+      message: 'Valid Indian mobile number is not available for this customer.',
+    };
+  }
+
+  const config = getSmsProviderConfig();
   if (!config.isConfigured) {
     return {
       success: false,
@@ -434,7 +541,7 @@ export async function verifyMsg91Otp(
   }
 
   const authKey = getEnvWithFallbacks('MSG91_AUTH_KEY', ['MSG91_KEY', 'AUTH_KEY'])!;
-  const msg91Mobile = formatMsg91Phone(recipientPhone);
+  const msg91Mobile = norm.msg91Format;
 
   try {
     const url = new URL('https://control.msg91.com/api/v5/otp/verify');
@@ -480,6 +587,7 @@ export async function verifyMsg91Otp(
     };
   }
 }
+
 
 /**
  * Dispatches an OTP SMS via MSG91 (Order Handover).
