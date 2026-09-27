@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isPhoneRegistered } from '../services/authService';
 import {
@@ -79,6 +79,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const strengthScore = [hasMinLength, hasLetter, hasNumber, hasSpecial].filter(Boolean).length;
 
+  const sentPhoneRef = useRef<string | null>(null);
+
   // Handle phone input changes (10 digits only)
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -94,47 +96,63 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
       setIsOtpSent(false);
       setOtp('');
       setOtpSuccess(null);
+      sentPhoneRef.current = null;
     }
   };
 
-  // Send OTP
-  const handleSendOtp = async () => {
-    setPhoneError(null);
-    setOtpError(null);
-    setOtpSuccess(null);
-    setErrorMessage(null);
-
-    const validation = validateIndianMobileNumber(phone);
-    if (!validation.isValid || !validation.normalized) {
-      setPhoneError(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
-      return;
-    }
-
+  // Automatically sends OTP to normalized Indian mobile number
+  const triggerOtpSend = async (normalizedPhone: string) => {
     // Duplicate mobile number check before sending OTP
-    if (isPhoneRegistered(phone)) {
+    if (isPhoneRegistered(normalizedPhone)) {
       setPhoneError('This mobile number is already registered. Please use another number or log in.');
       return;
     }
 
+    setPhoneError(null);
+    setOtpError(null);
+    setOtpSuccess(null);
+    setErrorMessage(null);
     setOtpSending(true);
+
     try {
-      const res = await sendRegistrationOtp(validation.normalized);
+      const res = await sendRegistrationOtp(normalizedPhone);
       if (res.success) {
         setIsOtpSent(true);
         setResendCooldown(res.cooldownSeconds || 30);
         setOtpSuccess(`OTP sent to ${res.maskedPhone || 'your mobile number'}.`);
       } else {
+        setIsOtpSent(true);
         setPhoneError(res.error || 'OTP could not be sent. Please verify the mobile number or try again later.');
         if (res.cooldownSeconds) {
           setResendCooldown(res.cooldownSeconds);
         }
       }
     } catch {
+      setIsOtpSent(true);
       setPhoneError('OTP could not be sent. Please verify the mobile number or try again later.');
     } finally {
       setOtpSending(false);
     }
   };
+
+  // Automatically trigger OTP send when customer completes entering a valid 10-digit Indian mobile number
+  useEffect(() => {
+    if (phone.length === 10 && !isVerified && !otpSending) {
+      const validation = validateIndianMobileNumber(phone);
+      if (validation.isValid && validation.normalized) {
+        if (sentPhoneRef.current !== validation.normalized) {
+          sentPhoneRef.current = validation.normalized;
+          triggerOtpSend(validation.normalized);
+        }
+      } else {
+        setPhoneError(validation.error || 'Please enter a valid 10-digit Indian mobile number.');
+      }
+    } else if (phone.length < 10) {
+      if (sentPhoneRef.current) {
+        sentPhoneRef.current = null;
+      }
+    }
+  }, [phone, isVerified, otpSending]);
 
   // Resend OTP
   const handleResendOtp = async () => {
@@ -400,45 +418,29 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 )}
               </div>
 
-              {/* Mobile Number Input with fixed +91 prefix and Send OTP button */}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="relative flex-1 flex items-center">
-                  <span className="absolute left-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[#0b1c30] select-none pointer-events-none pr-2.5 border-r border-[#6e7b6c]/30">
-                    <span>🇮🇳</span>
-                    <span>+91</span>
+              {/* Mobile Number Input with fixed +91 prefix */}
+              <div className="relative flex items-center">
+                <span className="absolute left-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[#0b1c30] select-none pointer-events-none pr-2.5 border-r border-[#6e7b6c]/30">
+                  <span>🇮🇳</span>
+                  <span>+91</span>
+                </span>
+                <input
+                  id="reg-mobile"
+                  type="tel"
+                  required
+                  disabled={isVerified}
+                  value={phone}
+                  onChange={handlePhoneChange}
+                  placeholder="10-digit mobile number"
+                  maxLength={10}
+                  className={`w-full pl-20 pr-10 py-2.5 rounded-xl bg-white/40 backdrop-blur-xs border text-[13px] text-[#0b1c30] font-medium tracking-wide placeholder:text-[#565e74]/70 placeholder:font-normal placeholder:tracking-normal focus:outline-hidden focus:bg-white/70 focus:ring-2 focus:ring-[#006b2c] transition-all ${
+                    phoneError ? 'border-red-400 bg-red-50/20' : 'border-white/55'
+                  } ${isVerified ? 'bg-emerald-50/30 border-emerald-300 cursor-not-allowed text-emerald-900' : ''}`}
+                />
+                {otpSending && (
+                  <span className="absolute right-3.5 flex items-center" title="Sending OTP...">
+                    <span className="w-4 h-4 border-2 border-[#006b2c]/30 border-t-[#006b2c] rounded-full animate-spin" />
                   </span>
-                  <input
-                    id="reg-mobile"
-                    type="tel"
-                    required
-                    disabled={isVerified}
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    placeholder="10-digit mobile number"
-                    maxLength={10}
-                    className={`w-full pl-20 pr-3.5 py-2.5 rounded-xl bg-white/40 backdrop-blur-xs border text-[13px] text-[#0b1c30] font-medium tracking-wide placeholder:text-[#565e74]/70 placeholder:font-normal placeholder:tracking-normal focus:outline-hidden focus:bg-white/70 focus:ring-2 focus:ring-[#006b2c] transition-all ${
-                      phoneError ? 'border-red-400 bg-red-50/20' : 'border-white/55'
-                    } ${isVerified ? 'bg-emerald-50/30 border-emerald-300 cursor-not-allowed text-emerald-900' : ''}`}
-                  />
-                </div>
-
-                {!isVerified && (
-                  <button
-                    type="button"
-                    id="send-otp-btn"
-                    onClick={handleSendOtp}
-                    disabled={otpSending || phone.length !== 10}
-                    className="shrink-0 px-4 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] active:scale-[0.99] text-white text-[13px] font-semibold shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {otpSending ? (
-                      <>
-                        <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        <span>Sending OTP...</span>
-                      </>
-                    ) : (
-                      <span>Send OTP</span>
-                    )}
-                  </button>
                 )}
               </div>
 
@@ -462,7 +464,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             </div>
 
             {/* OTP Verification Controls (shown after OTP is sent and before verified) */}
-            {isOtpSent && !isVerified && (
+            {(isOtpSent || (phone.length === 10 && validateIndianMobileNumber(phone).isValid)) && !isVerified && (
               <div className="pt-3 border-t border-white/40 space-y-2 animate-in fade-in duration-200">
                 <label
                   htmlFor="reg-otp"
