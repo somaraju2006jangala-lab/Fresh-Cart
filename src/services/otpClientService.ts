@@ -162,21 +162,42 @@ export async function getOrderOtpStatus(
 /**
  * Retrieves the Order Handover OTP strictly for the authenticated customer who placed the order.
  * Backend verifies customer ownership and prevents cross-customer OTP exposure.
+ * Sends authorization bearer token if provided, along with customer identity.
  */
 export async function getCustomerOrderOtp(
   orderId: string,
-  customerId: string
+  customerId: string,
+  authToken?: string
 ): Promise<CustomerOtpResult> {
   try {
+    const headers: Record<string, string> = {
+      'x-customer-id': customerId,
+    };
+    if (authToken && typeof authToken === 'string' && authToken.trim()) {
+      headers['Authorization'] = `Bearer ${authToken.trim()}`;
+    }
+
     const res = await fetch(
       `/api/otp/customer-order-otp/${encodeURIComponent(orderId)}?customerId=${encodeURIComponent(customerId)}`,
       {
-        headers: {
-          'x-customer-id': customerId,
-        },
+        headers,
       }
     );
-    return await res.json();
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data?.error || data?.message || `Server returned status ${res.status}`,
+        status: data?.status,
+      };
+    }
+
+    return data || {
+      success: false,
+      error: 'Empty response received from server.',
+    };
   } catch (err: any) {
     return {
       success: false,

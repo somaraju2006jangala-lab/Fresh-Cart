@@ -6,6 +6,18 @@ import {
   normalizeAndValidateIndianMobile,
   getSmsProviderConfig,
 } from './smsProvider.ts';
+import {
+  connectMongo,
+  isMongoConnected,
+  findOrderInDb,
+  updateOrderOtpInDb,
+  upsertOrderInDb,
+  checkDatabaseAvailability,
+  isProductionEnv,
+} from './db.ts';
+
+// Connect to MongoDB Atlas if MONGODB_URI is provided
+connectMongo().catch(() => {});
 
 export interface StoredOtpRecord {
   orderId: string;
@@ -40,11 +52,22 @@ if (!fs.existsSync(DATA_DIR)) {
 const otpStore = new Map<string, StoredOtpRecord>();
 
 function loadStore(): void {
+  // In production/Vercel, local filesystem is ephemeral and not authoritative
+  if (isProductionEnv()) {
+    return;
+  }
   try {
     if (fs.existsSync(STORE_FILE)) {
       const data = fs.readFileSync(STORE_FILE, 'utf-8');
       const records: StoredOtpRecord[] = JSON.parse(data);
       records.forEach((r) => otpStore.set(r.orderId, r));
+    }
+    // Ensure active demo orders (e.g. #FC-1005) have an active OTP window if unused
+    const fc1005 = otpStore.get('#FC-1005') || otpStore.get('FC-1005');
+    if (fc1005 && fc1005.status === 'UNUSED' && Date.now() > fc1005.expiresAt) {
+      fc1005.expiresAt = Date.now() + 10 * 60 * 1000;
+      fc1005.createdAt = new Date().toISOString();
+      persistStore();
     }
   } catch {
     // Ignore error and initialize fresh map
@@ -52,6 +75,10 @@ function loadStore(): void {
 }
 
 function persistStore(): void {
+  // In production/Vercel, do not silently use local filesystem storage as substitute for MongoDB
+  if (isProductionEnv()) {
+    return;
+  }
   try {
     const records = Array.from(otpStore.values());
     fs.writeFileSync(STORE_FILE, JSON.stringify(records, null, 2), 'utf-8');
@@ -63,6 +90,40 @@ function persistStore(): void {
 loadStore();
 
 export { maskMobileNumber, normalizeAndValidateIndianMobile };
+
+// Pre-registered known customer orders (e.g. demo and seed orders)
+export const KNOWN_CUSTOMER_ORDERS: Record<
+  string,
+  { customerId: string; customerPhone?: string; status: string }
+> = {
+  '#FC-1005': { customerId: 'rahul123', customerPhone: '+91 9876543210', status: 'Picking' },
+  'FC-1005': { customerId: 'rahul123', customerPhone: '+91 9876543210', status: 'Picking' },
+  '#FC-1006': { customerId: 'priya123', customerPhone: '+91 9123456789', status: 'Picking' },
+  'FC-1006': { customerId: 'priya123', customerPhone: '+91 9123456789', status: 'Picking' },
+  '#1001': { customerId: 'rahul123', customerPhone: '+91 9876543210', status: 'Picking' },
+  '1001': { customerId: 'rahul123', customerPhone: '+91 9876543210', status: 'Picking' },
+  '#FC-94821': { customerId: 'cust-demo-1', customerPhone: '(555) 234-1234', status: 'Picking' },
+  'FC-94821': { customerId: 'cust-demo-1', customerPhone: '(555) 234-1234', status: 'Picking' },
+};
+
+export function registerKnownOrder(order: {
+  id: string;
+  customerId: string;
+  customerPhone?: string;
+  status?: string;
+}) {
+  const altId = order.id.startsWith('#') ? order.id.slice(1) : `#${order.id}`;
+  KNOWN_CUSTOMER_ORDERS[order.id] = {
+    customerId: order.customerId,
+    customerPhone: order.customerPhone,
+    status: order.status || 'Picking',
+  };
+  KNOWN_CUSTOMER_ORDERS[altId] = KNOWN_CUSTOMER_ORDERS[order.id];
+
+  if (isMongoConnected()) {
+    upsertOrderInDb(order).catch(() => {});
+  }
+}
 
 /**
  * Generates a random 6-digit numeric OTP (100000 - 999999).
@@ -104,6 +165,20 @@ export async function generateOrderOtp(
       otp: '',
       message: 'Order ID is required.',
       error: 'Order ID is required.',
+    };
+  }
+
+  // Validate production database availability
+  const dbCheck = checkDatabaseAvailability();
+  if (!dbCheck.available) {
+    return {
+      success: false,
+      orderId,
+      maskedPhone: 'Not available',
+      expiresAt: 0,
+      otp: '',
+      message: dbCheck.error || 'Database unavailable in production.',
+      error: dbCheck.error || 'Database unavailable in production.',
     };
   }
 
@@ -169,6 +244,25 @@ export async function generateOrderOtp(
   otpStore.set(altId, record);
   persistStore();
 
+  // Register in known orders
+  registerKnownOrder({
+    id: orderId,
+    customerId: customerId || 'guest',
+    customerPhone: formattedPhone,
+    status: 'Picking',
+  });
+
+  if (isMongoConnected()) {
+    updateOrderOtpInDb(orderId, {
+      otp,
+      hashedOtp,
+      salt,
+      otpExpiresAt: expiresAt,
+      otpStatus: 'UNUSED',
+      status: 'Picking',
+    }).catch(() => {});
+  }
+
   console.log(`[Order Handover OTP] Order: ${orderId} | Customer: ${customerId || 'guest'} | Mobile: ${maskedPhone} (Expires in 10 minutes)`);
 
   return {
@@ -198,6 +292,16 @@ export async function resendOrderOtp(
   expiresAt?: number;
   otp?: string;
 }> {
+  const dbCheck = checkDatabaseAvailability();
+  if (!dbCheck.available) {
+    return {
+      success: false,
+      orderId,
+      message: dbCheck.error || 'Database unavailable in production.',
+      error: dbCheck.error || 'Database unavailable in production.',
+    };
+  }
+
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
   const existing = otpStore.get(orderId) || otpStore.get(altId);
   const customerId = fallbackCustomerId || existing?.customerId || 'guest';
@@ -258,6 +362,16 @@ export async function resendOrderOtp(
   otpStore.set(altId, newRecord);
   persistStore();
 
+  if (isMongoConnected()) {
+    updateOrderOtpInDb(orderId, {
+      otp,
+      hashedOtp,
+      salt,
+      otpExpiresAt: expiresAt,
+      otpStatus: 'UNUSED',
+    }).catch(() => {});
+  }
+
   console.log(`[Order Handover OTP Resend] Order: ${orderId} | Customer: ${customerId} | Mobile: ${maskedPhone} (Previous OTP invalidated)`);
 
   return {
@@ -292,8 +406,35 @@ export async function verifyOrderOtp(
   isExpired?: boolean;
   remainingAttempts?: number;
 }> {
+  const dbCheck = checkDatabaseAvailability();
+  if (!dbCheck.available) {
+    return {
+      success: false,
+      error: dbCheck.error || 'Database unavailable in production.',
+      status: 'Picking',
+    };
+  }
+
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const record = otpStore.get(orderId) || otpStore.get(altId);
+  const dbOrder = await findOrderInDb(orderId);
+  const localRecord = otpStore.get(orderId) || otpStore.get(altId);
+  const record = isMongoConnected() && dbOrder?.otp
+    ? {
+        orderId: dbOrder.id,
+        customerId: dbOrder.customerId,
+        customerPhone: dbOrder.customerPhone || '',
+        maskedPhone: dbOrder.customerPhone ? maskMobileNumber(dbOrder.customerPhone) : 'Not available',
+        hashedOtp: dbOrder.hashedOtp || '',
+        salt: dbOrder.salt || '',
+        otp: dbOrder.otp,
+        expiresAt: dbOrder.otpExpiresAt || 0,
+        attempts: 0,
+        maxAttempts: 5,
+        status: (dbOrder.otpStatus || 'UNUSED') as 'UNUSED' | 'USED' | 'EXPIRED' | 'LOCKED',
+        createdAt: dbOrder.createdAt || new Date().toISOString(),
+        verifiedAt: dbOrder.otpVerifiedAt,
+      }
+    : localRecord;
 
   if (!record) {
     return {
@@ -360,6 +501,14 @@ export async function verifyOrderOtp(
     record.status = 'USED';
     record.verifiedAt = verifiedAt;
     persistStore();
+
+    if (isMongoConnected()) {
+      updateOrderOtpInDb(orderId, {
+        otpStatus: 'USED',
+        otpVerifiedAt: verifiedAt,
+        status: 'Delivered',
+      }).catch(() => {});
+    }
 
     console.log(`[Order Handover OTP] Order: ${orderId} | Status: Delivered (OTP Verified successfully)`);
 
@@ -444,11 +593,13 @@ export function getOrderOtpStatus(orderId: string): {
  * - If the order status is Delivered (USED), no active OTP is returned.
  * - If the OTP has expired, returns isExpired: true and instructs to request a new OTP.
  * - If another customer requests this order's OTP, returns 403 Forbidden.
+ * - If newly created or active order has no active OTP yet, automatically generates an active backend OTP.
+ * - If order exists and has active OTP, returns the identical OTP (refresh-safe).
  */
-export function getCustomerOrderOtp(
+export async function getCustomerOrderOtp(
   orderId: string,
   requestingCustomerId: string
-): {
+): Promise<{
   success: boolean;
   orderId: string;
   otp?: string;
@@ -457,7 +608,7 @@ export function getCustomerOrderOtp(
   status: 'UNUSED' | 'USED' | 'EXPIRED' | 'LOCKED' | 'NOT_FOUND';
   error?: string;
   message?: string;
-} {
+}> {
   if (!requestingCustomerId || !requestingCustomerId.trim()) {
     return {
       success: false,
@@ -469,10 +620,53 @@ export function getCustomerOrderOtp(
     };
   }
 
-  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const record = otpStore.get(orderId) || otpStore.get(altId);
+  // Validate production database availability
+  const dbCheck = checkDatabaseAvailability();
+  if (!dbCheck.available) {
+    return {
+      success: false,
+      orderId,
+      expiresAt: 0,
+      isExpired: false,
+      status: 'NOT_FOUND',
+      error: dbCheck.error || 'Database unavailable in production.',
+    };
+  }
 
-  if (!record) {
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  // 1. Authoritative check in MongoDB Atlas if connected
+  const dbOrder = await findOrderInDb(orderId);
+
+  // 2. Local OTP store (used only in development fallback or local in-memory session)
+  const localRecord = otpStore.get(orderId) || otpStore.get(altId);
+  const existingRecord = isMongoConnected() && dbOrder?.otp
+    ? {
+        orderId: dbOrder.id,
+        customerId: dbOrder.customerId,
+        customerPhone: dbOrder.customerPhone || '',
+        maskedPhone: dbOrder.customerPhone ? maskMobileNumber(dbOrder.customerPhone) : 'Not available',
+        hashedOtp: dbOrder.hashedOtp || '',
+        salt: dbOrder.salt || '',
+        otp: dbOrder.otp,
+        expiresAt: dbOrder.otpExpiresAt || 0,
+        attempts: 0,
+        maxAttempts: 5,
+        status: (dbOrder.otpStatus || 'UNUSED') as 'UNUSED' | 'USED' | 'EXPIRED' | 'LOCKED',
+        createdAt: dbOrder.createdAt || new Date().toISOString(),
+        verifiedAt: dbOrder.otpVerifiedAt,
+      }
+    : localRecord;
+
+  // 3. Check known customer orders
+  const knownOrder = KNOWN_CUSTOMER_ORDERS[orderId] || KNOWN_CUSTOMER_ORDERS[altId];
+
+  // Determine owner and order existence
+  const orderOwner = dbOrder?.customerId || existingRecord?.customerId || knownOrder?.customerId;
+  const orderStatus = dbOrder?.status || knownOrder?.status || (existingRecord?.status === 'USED' ? 'Delivered' : 'Picking');
+  const orderPhone = dbOrder?.customerPhone || existingRecord?.customerPhone || knownOrder?.customerPhone || '';
+
+  if (!orderOwner && !existingRecord) {
     return {
       success: false,
       orderId,
@@ -483,57 +677,75 @@ export function getCustomerOrderOtp(
     };
   }
 
+  // Check customer authorization (must be owner or guest)
   const isOwner =
-    record.customerId === requestingCustomerId ||
-    record.customerId === 'guest' ||
-    record.customerId === 'guest_user' ||
-    record.customerId === 'cust-guest';
+    orderOwner === requestingCustomerId ||
+    orderOwner === 'guest' ||
+    orderOwner === 'guest_user' ||
+    orderOwner === 'cust-guest';
 
   if (!isOwner) {
-    console.warn(`[OTP Server] Unauthorized attempt: customer "${requestingCustomerId}" requested OTP for order "${orderId}" owned by "${record.customerId}".`);
+    console.warn(`[OTP Server] Unauthorized attempt: customer "${requestingCustomerId}" requested OTP for order "${orderId}" owned by "${orderOwner}".`);
     return {
       success: false,
       orderId,
       expiresAt: 0,
       isExpired: false,
-      status: record.status,
+      status: existingRecord?.status || 'NOT_FOUND',
       error: 'Access denied: You can only view the OTP for your own order.',
     };
   }
 
-  const isExpired = Date.now() > record.expiresAt || record.status === 'EXPIRED';
-  const effectiveStatus = record.status === 'UNUSED' && isExpired ? 'EXPIRED' : record.status;
-
-  if (effectiveStatus === 'USED') {
+  // If order is Delivered / USED: return USED status without exposing active OTP
+  if (orderStatus === 'Delivered' || existingRecord?.status === 'USED') {
     return {
       success: true,
       orderId,
       status: 'USED',
-      expiresAt: record.expiresAt,
+      expiresAt: existingRecord?.expiresAt || 0,
       isExpired: false,
       message: 'Order Delivered',
     };
   }
 
-  if (effectiveStatus === 'EXPIRED') {
+  // If active unused unexpired OTP exists, return it! (Same OTP returned on refresh)
+  if (existingRecord && existingRecord.status === 'UNUSED' && Date.now() < existingRecord.expiresAt) {
+    return {
+      success: true,
+      orderId,
+      otp: existingRecord.otp,
+      expiresAt: existingRecord.expiresAt,
+      isExpired: false,
+      status: 'UNUSED',
+      message: `Order Handover OTP: ${existingRecord.otp}`,
+    };
+  }
+
+  // If existing OTP is expired:
+  if (existingRecord && (Date.now() >= existingRecord.expiresAt || existingRecord.status === 'EXPIRED')) {
+    existingRecord.status = 'EXPIRED';
+    persistStore();
     return {
       success: true,
       orderId,
       status: 'EXPIRED',
-      expiresAt: record.expiresAt,
+      expiresAt: existingRecord.expiresAt,
       isExpired: true,
       message: 'OTP expired. Please request a new OTP.',
     };
   }
 
+  // If order is Picking and no active OTP exists yet (newly created order or demo order in Picking):
+  // Automatically generate an active backend OTP!
+  const gen = await generateOrderOtp(orderId, requestingCustomerId, orderPhone);
   return {
     success: true,
     orderId,
-    otp: record.otp,
-    expiresAt: record.expiresAt,
+    otp: gen.otp,
+    expiresAt: gen.expiresAt,
     isExpired: false,
     status: 'UNUSED',
-    message: `Order Handover OTP: ${record.otp}`,
+    message: `Order Handover OTP: ${gen.otp}`,
   };
 }
 

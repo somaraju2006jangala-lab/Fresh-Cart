@@ -11,6 +11,15 @@ import {
   normalizeAndValidateIndianMobile,
 } from './otpService.ts';
 import { ensureEnvLoaded, getSmsProviderConfig } from './smsProvider.ts';
+import { signCustomerToken, verifyCustomerToken } from './jwtHelper.ts';
+import {
+  checkDatabaseAvailability,
+  isProductionEnv,
+  upsertOrderInDb,
+  findOrdersForCustomerInDb,
+  upsertCustomerInDb,
+  findCustomerInDb,
+} from './db.ts';
 
 ensureEnvLoaded();
 
@@ -126,11 +135,30 @@ apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Reques
 });
 
 /**
+ * POST /api/auth/token
+ * Issues a customer JWT token for authentication.
+ */
+apiRouter.post(['/api/auth/token', '/auth/token'], (req: Request, res: Response) => {
+  try {
+    const { customerId, email, name } = req.body || {};
+    if (!customerId) {
+      sendJson(res, 400, { success: false, error: 'customerId is required' });
+      return;
+    }
+    const token = signCustomerToken({ id: customerId, customerId, email, name });
+    sendJson(res, 200, { success: true, token });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: 'Failed to generate customer token.' });
+  }
+});
+
+/**
  * GET /api/otp/customer-order-otp/:orderId
  * Dedicated endpoint for authenticated customers to retrieve the Order Handover OTP for their own order.
- * - Customer must provide customerId (via query ?customerId=... or header x-customer-id).
+ * - Customer must provide valid authentication (Bearer JWT token, x-customer-id header, or query param).
  * - Customer can only view their own active order OTP.
  * - Unauthorized customer queries return 403 Forbidden.
+ * - Invalid/expired/missing authentication returns 401 Unauthorized.
  * - Delivered orders return status: 'USED' and do not expose active OTP.
  */
 apiRouter.get(
@@ -139,17 +167,60 @@ apiRouter.get(
     '/otp/customer-order-otp/:orderId',
     '/customer-order-otp/:orderId',
   ],
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
-      const orderId = decodeURIComponent(req.params.orderId);
-      const customerId =
-        (req.query.customerId as string) ||
-        (req.headers['x-customer-id'] as string) ||
-        '';
+      const dbCheck = checkDatabaseAvailability();
+      if (!dbCheck.available) {
+        sendJson(res, 503, {
+          success: false,
+          error: dbCheck.error,
+          code: dbCheck.code,
+        });
+        return;
+      }
 
-      const result = getCustomerOrderOtp(orderId, customerId);
+      const orderId = decodeURIComponent(req.params.orderId);
+
+      let authenticatedCustomerId = '';
+
+      // 1. Verify Authorization Bearer token (JWT) if provided
+      const authHeader = req.headers.authorization || (req.headers['authorization'] as string);
+      if (authHeader && authHeader.trim().toLowerCase().startsWith('bearer ')) {
+        const token = authHeader.trim().slice(7).trim();
+        const verification = verifyCustomerToken(token);
+        if (!verification.valid) {
+          sendJson(res, 401, {
+            success: false,
+            error: verification.error || 'Invalid or expired authentication token.',
+          });
+          return;
+        }
+        authenticatedCustomerId = verification.decoded?.id || verification.decoded?.customerId || '';
+      }
+
+      // 2. Fall back to x-customer-id header or query param
+      if (!authenticatedCustomerId) {
+        authenticatedCustomerId =
+          (req.headers['x-customer-id'] as string) ||
+          (req.query.customerId as string) ||
+          '';
+      }
+
+      if (!authenticatedCustomerId || !authenticatedCustomerId.trim()) {
+        sendJson(res, 401, {
+          success: false,
+          error: 'Authentication required. Customer identity must be provided.',
+        });
+        return;
+      }
+
+      const result = await getCustomerOrderOtp(orderId, authenticatedCustomerId.trim());
 
       if (!result.success) {
+        if (result.error?.includes('Database')) {
+          sendJson(res, 503, result);
+          return;
+        }
         if (result.error?.includes('Access denied')) {
           sendJson(res, 403, result);
           return;
@@ -158,7 +229,11 @@ apiRouter.get(
           sendJson(res, 401, result);
           return;
         }
-        sendJson(res, 404, result);
+        if (result.error?.includes('not found') || result.error?.includes('Not found')) {
+          sendJson(res, 404, result);
+          return;
+        }
+        sendJson(res, 400, result);
         return;
       }
 
@@ -172,6 +247,121 @@ apiRouter.get(
     }
   }
 );
+
+/**
+ * POST /api/orders
+ * Stores an order in MongoDB Atlas (authoritative persistent storage).
+ */
+apiRouter.post('/api/orders', async (req: Request, res: Response) => {
+  try {
+    const orderData = req.body;
+    if (!orderData?.id || !orderData?.customerId) {
+      sendJson(res, 400, { success: false, error: 'Order id and customerId are required.' });
+      return;
+    }
+
+    const dbCheck = checkDatabaseAvailability();
+    if (!dbCheck.available) {
+      sendJson(res, 503, {
+        success: false,
+        error: dbCheck.error,
+        code: dbCheck.code,
+      });
+      return;
+    }
+
+    await upsertOrderInDb(orderData);
+    sendJson(res, 200, { success: true, order: orderData });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save order.' });
+  }
+});
+
+/**
+ * GET /api/orders
+ * Retrieves orders for a customer from MongoDB Atlas.
+ */
+apiRouter.get('/api/orders', async (req: Request, res: Response) => {
+  try {
+    const customerId =
+      (req.query.customerId as string) ||
+      (req.headers['x-customer-id'] as string) ||
+      '';
+
+    const dbCheck = checkDatabaseAvailability();
+    if (!dbCheck.available) {
+      sendJson(res, 503, {
+        success: false,
+        error: dbCheck.error,
+        code: dbCheck.code,
+      });
+      return;
+    }
+
+    const orders = await findOrdersForCustomerInDb(customerId);
+    sendJson(res, 200, { success: true, orders });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve orders.' });
+  }
+});
+
+/**
+ * POST /api/customers
+ * Stores or updates a customer in MongoDB Atlas.
+ */
+apiRouter.post('/api/customers', async (req: Request, res: Response) => {
+  try {
+    const customerData = req.body;
+    if (!customerData?.id || !customerData?.email) {
+      sendJson(res, 400, { success: false, error: 'Customer id and email are required.' });
+      return;
+    }
+
+    const dbCheck = checkDatabaseAvailability();
+    if (!dbCheck.available) {
+      sendJson(res, 503, {
+        success: false,
+        error: dbCheck.error,
+        code: dbCheck.code,
+      });
+      return;
+    }
+
+    await upsertCustomerInDb(customerData);
+    sendJson(res, 200, { success: true, customer: customerData });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save customer.' });
+  }
+});
+
+/**
+ * GET /api/customers/:id
+ * Retrieves a customer from MongoDB Atlas.
+ */
+apiRouter.get('/api/customers/:id', async (req: Request, res: Response) => {
+  try {
+    const id = decodeURIComponent(req.params.id);
+    const dbCheck = checkDatabaseAvailability();
+    if (!dbCheck.available) {
+      sendJson(res, 503, {
+        success: false,
+        error: dbCheck.error,
+        code: dbCheck.code,
+      });
+      return;
+    }
+
+    const customer = await findCustomerInDb(id);
+    if (!customer) {
+      sendJson(res, 404, { success: false, error: 'Customer not found.' });
+      return;
+    }
+
+    sendJson(res, 200, { success: true, customer });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve customer.' });
+  }
+});
 
 /**
  * GET /api/otp/status/:orderId

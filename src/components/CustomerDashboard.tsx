@@ -94,7 +94,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   // Order Handover OTP State for Customer Orders
   const [customerOrderOtps, setCustomerOrderOtps] = useState<
-    Record<string, { otp?: string; expiresAt?: number; isExpired?: boolean; loading?: boolean }>
+    Record<string, { otp?: string; expiresAt?: number; isExpired?: boolean; loading?: boolean; error?: string }>
   >({});
   const [resendingOtp, setResendingOtp] = useState<Record<string, boolean>>({});
 
@@ -104,22 +104,54 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
     activeOrders.forEach((order) => {
       if (order.status === 'Picking' && !customerOrderOtps[order.id]) {
-        getCustomerOrderOtp(order.id, currentUser.id).then((res) => {
-          if (res.success && res.otp) {
+        // Mark loading state
+        setCustomerOrderOtps((prev) => ({
+          ...prev,
+          [order.id]: { loading: true },
+        }));
+
+        getCustomerOrderOtp(order.id, currentUser.id, currentUser.token)
+          .then((res) => {
+            if (res.success && res.otp) {
+              setCustomerOrderOtps((prev) => ({
+                ...prev,
+                [order.id]: {
+                  otp: res.otp,
+                  expiresAt: res.expiresAt,
+                  isExpired: res.isExpired || (res.expiresAt ? Date.now() > res.expiresAt : false),
+                  loading: false,
+                },
+              }));
+            } else if (res.isExpired || res.status === 'EXPIRED') {
+              setCustomerOrderOtps((prev) => ({
+                ...prev,
+                [order.id]: {
+                  isExpired: true,
+                  loading: false,
+                },
+              }));
+            } else {
+              setCustomerOrderOtps((prev) => ({
+                ...prev,
+                [order.id]: {
+                  loading: false,
+                  error: res.error || 'Failed to load Order Handover OTP. Please try again.',
+                },
+              }));
+            }
+          })
+          .catch(() => {
             setCustomerOrderOtps((prev) => ({
               ...prev,
               [order.id]: {
-                otp: res.otp,
-                expiresAt: res.expiresAt,
-                isExpired: res.isExpired || (res.expiresAt ? Date.now() > res.expiresAt : false),
                 loading: false,
+                error: 'Failed to contact server for Order Handover OTP.',
               },
             }));
-          }
-        });
+          });
       }
     });
-  }, [activeOrders, currentUser?.id, customerOrderOtps]);
+  }, [activeOrders, currentUser?.id, currentUser?.token, customerOrderOtps]);
 
   // Periodic 1-second check for OTP expiration
   useEffect(() => {
@@ -176,11 +208,26 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
             expiresAt: res.expiresAt || Date.now() + 10 * 60 * 1000,
             isExpired: false,
             loading: false,
+            error: undefined,
+          },
+        }));
+      } else {
+        setCustomerOrderOtps((prev) => ({
+          ...prev,
+          [orderId]: {
+            loading: false,
+            error: res.error || 'Failed to regenerate OTP. Please try again.',
           },
         }));
       }
     } catch {
-      // ignore
+      setCustomerOrderOtps((prev) => ({
+        ...prev,
+        [orderId]: {
+          loading: false,
+          error: 'Failed to contact server to resend OTP.',
+        },
+      }));
     } finally {
       setResendingOtp((prev) => ({ ...prev, [orderId]: false }));
     }
@@ -576,6 +623,22 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                                 {resendingOtp[order.id] ? 'Generating New OTP...' : 'Resend OTP'}
                               </button>
                             </div>
+                          </div>
+                        ) : customerOrderOtps[order.id]?.error ? (
+                          <div className="space-y-2 py-1">
+                            <div className="text-[12px] font-semibold text-[#dc2626] flex items-center justify-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 shrink-0 text-[#dc2626]" />
+                              <span>{customerOrderOtps[order.id]?.error}</span>
+                            </div>
+                            <button
+                              type="button"
+                              id={`customer-retry-otp-btn-${order.id.replace('#', '')}`}
+                              onClick={() => handleCustomerResendOtp(order.id, order.customerPhone)}
+                              disabled={resendingOtp[order.id]}
+                              className="px-3 py-1 rounded-lg bg-[#006b2c] hover:bg-[#005221] text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                            >
+                              {resendingOtp[order.id] ? 'Generating New OTP...' : 'Retry OTP'}
+                            </button>
                           </div>
                         ) : (
                           <div className="text-[12px] text-[#565e74] py-2 animate-pulse">

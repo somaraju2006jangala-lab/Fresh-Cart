@@ -473,6 +473,28 @@ function saveStoredCustomers(customers: Customer[]): void {
 
 
 /**
+ * Generates an authentication token for the customer session.
+ */
+export function generateClientAuthToken(customer: Partial<Customer>): string {
+  try {
+    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=+$/, '');
+    const payload = btoa(
+      JSON.stringify({
+        id: customer.id || 'guest',
+        customerId: customer.id || 'guest',
+        email: customer.email || '',
+        name: customer.name || '',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600,
+      })
+    ).replace(/=+$/, '');
+    return `${header}.${payload}.freshcart_auth_${customer.id || 'guest'}`;
+  } catch {
+    return `fc_token_${customer.id || 'guest'}_${Date.now()}`;
+  }
+}
+
+/**
  * Authenticates a customer by email/userId and password.
  * Securely hashes input password with the stored salt and compares hashes.
  *
@@ -508,10 +530,12 @@ export async function loginCustomer(
   }
 
   // Create sanitized session (do not store hash/salt in session)
+  const token = generateClientAuthToken(customer);
   const sessionUser: Customer = {
     ...customer,
     passwordHash: '',
     passwordSalt: '',
+    token,
   };
 
   localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(sessionUser));
@@ -637,11 +661,20 @@ export async function registerCustomer(
   customers.push(newCustomer);
   saveStoredCustomers(customers);
 
+  // Synchronize to backend MongoDB Atlas
+  fetch('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newCustomer),
+  }).catch(() => {});
+
   // Auto-login new registered customer
+  const token = generateClientAuthToken(newCustomer);
   const sessionUser: Customer = {
     ...newCustomer,
     passwordHash: '',
     passwordSalt: '',
+    token,
   };
   localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(sessionUser));
 
@@ -657,7 +690,13 @@ export async function registerCustomer(
 export function getCurrentCustomer(): Customer | null {
   try {
     const raw = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const user: Customer = JSON.parse(raw);
+    if (user && !user.token) {
+      user.token = generateClientAuthToken(user);
+      localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(user));
+    }
+    return user;
   } catch {
     return null;
   }
@@ -795,6 +834,13 @@ export function saveOrderForCustomer(order: CustomerOrder): void {
     const orders: CustomerOrder[] = raw ? JSON.parse(raw) : [...INITIAL_DEMO_ORDERS];
     orders.unshift(order);
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(orders));
+
+    // Synchronize to backend MongoDB Atlas
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order),
+    }).catch(() => {});
   } catch (err) {
     console.error('Failed to record customer order:', err);
   }

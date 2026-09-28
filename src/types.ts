@@ -89,6 +89,7 @@ export interface Customer {
   createdAt: string;
   avatarUrl?: string;
   loyaltyTier?: string;
+  token?: string;
 }
 
 export interface CustomerOrder extends Order {
