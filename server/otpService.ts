@@ -168,6 +168,10 @@ export async function generateOrderOtp(
     };
   }
 
+  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+    await connectMongo();
+  }
+
   // Validate production database availability
   const dbCheck = checkDatabaseAvailability();
   if (!dbCheck.available) {
@@ -292,6 +296,10 @@ export async function resendOrderOtp(
   expiresAt?: number;
   otp?: string;
 }> {
+  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+    await connectMongo();
+  }
+
   const dbCheck = checkDatabaseAvailability();
   if (!dbCheck.available) {
     return {
@@ -406,6 +414,10 @@ export async function verifyOrderOtp(
   isExpired?: boolean;
   remainingAttempts?: number;
 }> {
+  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+    await connectMongo();
+  }
+
   const dbCheck = checkDatabaseAvailability();
   if (!dbCheck.available) {
     return {
@@ -618,6 +630,10 @@ export async function getCustomerOrderOtp(
       status: 'NOT_FOUND',
       error: 'Authentication required. Customer identity must be provided.',
     };
+  }
+
+  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+    await connectMongo();
   }
 
   // Validate production database availability

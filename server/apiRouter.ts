@@ -19,6 +19,9 @@ import {
   findOrdersForCustomerInDb,
   upsertCustomerInDb,
   findCustomerInDb,
+  connectMongo,
+  isMongoConnected,
+  getSafeMongoDiagnosticInfo,
 } from './db.ts';
 
 ensureEnvLoaded();
@@ -46,6 +49,18 @@ apiRouter.use((req, res, next) => {
     return next();
   }
   express.json()(req, res, next);
+});
+
+// Serverless DB connection middleware: ensure MongoDB connection attempt has completed before route processing
+apiRouter.use(async (_req, _res, next) => {
+  try {
+    if (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI) {
+      await connectMongo();
+    }
+  } catch {
+    // Diagnostic logging is handled within connectMongo
+  }
+  next();
 });
 
 /**
@@ -175,6 +190,7 @@ apiRouter.get(
           success: false,
           error: dbCheck.error,
           code: dbCheck.code,
+          diagnostic: (dbCheck as any).diagnostic,
         });
         return;
       }
@@ -266,6 +282,7 @@ apiRouter.post('/api/orders', async (req: Request, res: Response) => {
         success: false,
         error: dbCheck.error,
         code: dbCheck.code,
+        diagnostic: (dbCheck as any).diagnostic,
       });
       return;
     }
@@ -294,6 +311,7 @@ apiRouter.get('/api/orders', async (req: Request, res: Response) => {
         success: false,
         error: dbCheck.error,
         code: dbCheck.code,
+        diagnostic: (dbCheck as any).diagnostic,
       });
       return;
     }
@@ -323,6 +341,7 @@ apiRouter.post('/api/customers', async (req: Request, res: Response) => {
         success: false,
         error: dbCheck.error,
         code: dbCheck.code,
+        diagnostic: (dbCheck as any).diagnostic,
       });
       return;
     }
@@ -347,6 +366,7 @@ apiRouter.get('/api/customers/:id', async (req: Request, res: Response) => {
         success: false,
         error: dbCheck.error,
         code: dbCheck.code,
+        diagnostic: (dbCheck as any).diagnostic,
       });
       return;
     }
@@ -384,6 +404,25 @@ apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:ord
 apiRouter.get(['/api/otp/provider-config', '/otp/provider-config', '/provider-config'], (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
 });
+
+/**
+ * GET /api/db-diagnostics
+ * Safe database connectivity diagnostic endpoint.
+ * Reports connection state, cluster host, and error category without exposing credentials.
+ */
+apiRouter.get(
+  ['/api/db-diagnostics', '/api/db/diagnostics', '/db-diagnostics'],
+  async (_req: Request, res: Response) => {
+    if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+      await connectMongo();
+    }
+    const diag = getSafeMongoDiagnosticInfo();
+    sendJson(res, 200, {
+      success: true,
+      diagnostics: diag,
+    });
+  }
+);
 
 const SETTINGS_FILE = process.env.VERCEL
   ? path.join('/tmp', 'freshcart_data', 'app_settings.json')
