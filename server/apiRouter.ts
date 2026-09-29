@@ -22,6 +22,7 @@ import {
   connectMongo,
   isMongoConnected,
   getSafeMongoDiagnosticInfo,
+  hasConfiguredMongoUri,
 } from './db.ts';
 
 ensureEnvLoaded();
@@ -54,7 +55,7 @@ apiRouter.use((req, res, next) => {
 // Serverless DB connection middleware: ensure MongoDB connection attempt has completed before route processing
 apiRouter.use(async (_req, _res, next) => {
   try {
-    if (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI) {
+    if (isProductionEnv() || hasConfiguredMongoUri()) {
       await connectMongo();
     }
   } catch {
@@ -413,7 +414,7 @@ apiRouter.get(['/api/otp/provider-config', '/otp/provider-config', '/provider-co
 apiRouter.get(
   ['/api/db-diagnostics', '/api/db/diagnostics', '/db-diagnostics'],
   async (_req: Request, res: Response) => {
-    if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+    if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
       await connectMongo();
     }
     const diag = getSafeMongoDiagnosticInfo();

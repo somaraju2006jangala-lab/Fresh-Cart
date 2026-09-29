@@ -14,19 +14,42 @@ let lastMongoError: {
 } | null = null;
 
 /**
- * Strips surrounding whitespace and any enclosing double/single quotes,
- * and safely encodes unescaped special characters in credentials (e.g. #, @ in passwords).
+ * Returns true if any supported MongoDB environment variable is defined and non-empty.
+ */
+export function hasConfiguredMongoUri(): boolean {
+  const rawUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    process.env.ATLAS_URI;
+  return Boolean(rawUri && rawUri.trim().length > 0);
+}
+
+/**
+ * Strips surrounding whitespace, newlines, and any enclosing quotes (including smart quotes),
+ * removes accidental variable name prefixes (e.g. MONGODB_URI=...),
+ * safely encodes unescaped special characters in credentials (e.g. #, @ in passwords),
+ * and supports common environment variable aliases.
  */
 export function getCleanMongoUri(): string {
-  const rawUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  const rawUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    process.env.ATLAS_URI;
+
   if (!rawUri || typeof rawUri !== 'string') return '';
-  let uri = rawUri.trim();
-  while (
-    (uri.startsWith('"') && uri.endsWith('"')) ||
-    (uri.startsWith("'") && uri.endsWith("'"))
-  ) {
-    uri = uri.slice(1, -1).trim();
-  }
+  let uri = rawUri.replace(/[\r\n\t]+/g, '').trim();
+
+  // Strip accidental variable name prefix if copied from a .env file directly into Vercel UI
+  uri = uri.replace(/^(?:MONGODB_URI|MONGO_URI|DATABASE_URL|MONGODB_URL|MONGO_URL|ATLAS_URI)\s*=\s*/i, '').trim();
+
+  // Strip straight and typographic/smart quotes as well as backticks
+  uri = uri.replace(/^["'\u201c\u201d\u2018\u2019`\s]+|["'\u201c\u201d\u2018\u2019`\s]+$/g, '').trim();
 
   const match = uri.match(/^(mongodb(?:\+srv)?:\/\/)(.*)$/i);
   if (!match) return uri;
@@ -68,7 +91,18 @@ export function getCleanMongoUri(): string {
   }
 
   const user = userInfo.slice(0, firstColon);
-  const pass = userInfo.slice(firstColon + 1);
+  let pass = userInfo.slice(firstColon + 1);
+
+  // If password is wrapped in <...>, strip accidental brackets unless it is the literal template placeholder
+  if (
+    pass.startsWith('<') &&
+    pass.endsWith('>') &&
+    pass !== '<password>' &&
+    pass !== '<db_password>' &&
+    pass !== '<your_password>'
+  ) {
+    pass = pass.slice(1, -1);
+  }
 
   let cleanUser = user;
   let cleanPass = pass;
@@ -192,7 +226,13 @@ export function getSafeMongoDiagnosticInfo(): {
     timestamp: string;
   } | null;
 } {
-  const rawUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  const rawUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    process.env.ATLAS_URI;
   const isConfigured = Boolean(rawUri && rawUri.trim().length > 0);
 
   const trimmed = (rawUri || '').trim();
@@ -272,11 +312,33 @@ export function isProductionEnv(): boolean {
  *   Production will NEVER silently fall back to local disk storage.
  * - In Local Development: Falls back to development store only if MONGODB_URI is omitted.
  * - Caches and awaits the in-flight connection promise to support serverless execution cleanly.
+ * - Reports safe diagnostic metrics without exposing secrets or credentials.
  */
 export async function connectMongo(): Promise<boolean> {
+  const rawUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    process.env.ATLAS_URI;
+
+  const isConfigured = Boolean(rawUri && rawUri.trim().length > 0);
   const uri = getCleanMongoUri();
+  const isValidScheme = Boolean(uri && (uri.startsWith('mongodb://') || uri.startsWith('mongodb+srv://')));
+
+  console.log(`[MongoDB Diagnostics] MONGODB_URI present: ${isConfigured}`);
+  console.log(`[MongoDB Diagnostics] URI scheme valid: ${isValidScheme}`);
 
   if (!uri) {
+    console.log(`[MongoDB Diagnostics] MongoDB connection attempted: false`);
+    console.log(`[MongoDB Diagnostics] MongoDB connection result: failure (MONGODB_URI not present)`);
+    lastMongoError = {
+      name: 'ConfigurationError',
+      message: 'MONGODB_URI is not configured in production environment.',
+      failureCategory: 'MALFORMED_URI',
+      timestamp: new Date().toISOString(),
+    };
     if (isProductionEnv()) {
       console.error(
         '[MongoDB Atlas CRITICAL] MONGODB_URI is not configured in production/Vercel environment. ' +
@@ -294,6 +356,8 @@ export async function connectMongo(): Promise<boolean> {
   // If already connected
   if (mongoose.connection.readyState === 1) {
     isConnected = true;
+    console.log(`[MongoDB Diagnostics] MongoDB connection attempted: true (reusing active connection)`);
+    console.log(`[MongoDB Diagnostics] MongoDB connection result: success`);
     return true;
   }
 
@@ -306,10 +370,14 @@ export async function connectMongo(): Promise<boolean> {
     return new Promise((resolve) => {
       mongoose.connection.once('connected', () => {
         isConnected = true;
+        console.log(`[MongoDB Diagnostics] MongoDB connection result: success`);
         resolve(true);
       });
-      mongoose.connection.once('error', () => {
+      mongoose.connection.once('error', (err) => {
         isConnected = false;
+        const safe = sanitizeMongoError(err);
+        const category = classifyMongoFailure(safe.name, safe.message, safe.code || safe.codeName);
+        console.log(`[MongoDB Diagnostics] MongoDB connection result: failure (${category})`);
         resolve(false);
       });
     });
@@ -318,14 +386,44 @@ export async function connectMongo(): Promise<boolean> {
   // Check scheme
   if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
     const errorMsg = 'Malformed MONGODB_URI: Connection string scheme must start with "mongodb://" or "mongodb+srv://".';
+    console.log(`[MongoDB Diagnostics] MongoDB connection attempted: false`);
+    console.log(`[MongoDB Diagnostics] MongoDB connection result: failure (MALFORMED_URI)`);
     if (isProductionEnv()) {
       console.error(`[MongoDB Atlas CRITICAL] ${errorMsg}`);
     } else {
       console.warn(`[MongoDB Atlas] ${errorMsg}`);
     }
+    lastMongoError = {
+      name: 'MongoParseError',
+      message: errorMsg,
+      failureCategory: 'MALFORMED_URI',
+      timestamp: new Date().toISOString(),
+    };
     isConnected = false;
     return false;
   }
+
+  // Check for unreplaced password template placeholder
+  if (/<password>|<db_password>|<your_password>|%3Cpassword%3E|%3Cdb_password%3E/i.test(uri)) {
+    const errorMsg = 'Malformed MONGODB_URI: Unreplaced placeholder <password> detected in connection string. Please replace with your actual Atlas database user password.';
+    console.log(`[MongoDB Diagnostics] MongoDB connection attempted: false`);
+    console.log(`[MongoDB Diagnostics] MongoDB connection result: failure (MALFORMED_URI - placeholder <password> not replaced)`);
+    if (isProductionEnv()) {
+      console.error(`[MongoDB Atlas CRITICAL] ${errorMsg}`);
+    } else {
+      console.warn(`[MongoDB Atlas] ${errorMsg}`);
+    }
+    lastMongoError = {
+      name: 'MongoParseError',
+      message: errorMsg,
+      failureCategory: 'MALFORMED_URI',
+      timestamp: new Date().toISOString(),
+    };
+    isConnected = false;
+    return false;
+  }
+
+  console.log(`[MongoDB Diagnostics] MongoDB connection attempted: true`);
 
   connectionPromise = (async () => {
     try {
@@ -333,9 +431,11 @@ export async function connectMongo(): Promise<boolean> {
         serverSelectionTimeoutMS: 5000,
         connectTimeoutMS: 10000,
         family: 4, // Force IPv4 to prevent IPv6 timeout blackholes in serverless environments
+        dbName: 'freshcart',
       });
       isConnected = mongoose.connection.readyState === 1;
       lastMongoError = null;
+      console.log(`[MongoDB Diagnostics] MongoDB connection result: success`);
       console.log('[MongoDB Atlas] Connected successfully as the authoritative persistent database.');
 
       // Seed initial demo data in MongoDB Atlas if collections are empty
@@ -355,6 +455,8 @@ export async function connectMongo(): Promise<boolean> {
       };
 
       const codeSuffix = safe.code || safe.codeName ? ` (code: ${safe.code || safe.codeName})` : '';
+
+      console.log(`[MongoDB Diagnostics] MongoDB connection result: failure (${category}: ${safe.name}${codeSuffix})`);
 
       if (isProductionEnv()) {
         console.error(
@@ -434,7 +536,7 @@ export function checkDatabaseAvailability(): {
  * Finds a customer by id, email, or phone in MongoDB Atlas.
  */
 export async function findCustomerInDb(identifier: string): Promise<any | null> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected() || !identifier) return null;
@@ -459,7 +561,7 @@ export async function findCustomerInDb(identifier: string): Promise<any | null> 
  * Upserts a customer document in MongoDB Atlas.
  */
 export async function upsertCustomerInDb(customerData: any): Promise<boolean> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected() || !customerData?.id) return false;
@@ -481,7 +583,7 @@ export async function upsertCustomerInDb(customerData: any): Promise<boolean> {
  * Retrieves all customers from MongoDB Atlas.
  */
 export async function getCustomersFromDb(): Promise<any[]> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected()) return [];
@@ -498,7 +600,7 @@ export async function getCustomersFromDb(): Promise<any[]> {
  * Finds an order by its ID in MongoDB Atlas.
  */
 export async function findOrderInDb(orderId: string): Promise<any | null> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected() || !orderId) return null;
@@ -519,7 +621,7 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
  * Finds orders for a customer in MongoDB Atlas.
  */
 export async function findOrdersForCustomerInDb(customerId?: string): Promise<any[]> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected()) return [];
@@ -537,7 +639,7 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
  * Upserts an order document in MongoDB Atlas.
  */
 export async function upsertOrderInDb(orderData: any): Promise<boolean> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected() || !orderData?.id) return false;
@@ -571,7 +673,7 @@ export async function updateOrderOtpInDb(
     status?: string;
   }
 ): Promise<boolean> {
-  if (!isMongoConnected() && (isProductionEnv() || process.env.MONGODB_URI || process.env.MONGO_URI)) {
+  if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
     await connectMongo();
   }
   if (!isMongoConnected() || !orderId) return false;

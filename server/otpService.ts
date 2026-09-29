@@ -14,10 +14,17 @@ import {
   upsertOrderInDb,
   checkDatabaseAvailability,
   isProductionEnv,
+  hasConfiguredMongoUri,
 } from './db.ts';
 
-// Connect to MongoDB Atlas if MONGODB_URI is provided
-connectMongo().catch(() => {});
+// Connect to MongoDB Atlas eagerly if URI is configured or in running server
+const isBuildStep =
+  process.env.npm_lifecycle_event === 'build' ||
+  process.argv.some((arg) => typeof arg === 'string' && arg.includes('build'));
+
+if (!isBuildStep && (hasConfiguredMongoUri() || isProductionEnv())) {
+  connectMongo().catch(() => {});
+}
 
 export interface StoredOtpRecord {
   orderId: string;
