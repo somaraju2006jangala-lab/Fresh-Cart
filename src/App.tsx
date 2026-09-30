@@ -954,8 +954,8 @@ function FreshCartStore() {
         )}
       </main>
 
-      {/* Floating Cart Drawer Toggle & Panel (Only available for customers; completely removed from Admin Portal) */}
-      {currentUser && currentView !== 'admin' && (
+      {/* Floating Cart Drawer Toggle & Panel (Only available in Customer Portal; completely removed from Admin Portal) */}
+      {currentView !== 'admin' && (
         <CartDrawer
           items={cart}
           isOpen={isCartOpen}
@@ -976,7 +976,7 @@ function FreshCartStore() {
       )}
 
       {/* Product Quick View Modal */}
-      {currentUser && currentView !== 'admin' && (
+      {currentView !== 'admin' && (
         <ProductModal
           product={activeModalProduct}
           onClose={() => setActiveModalProduct(null)}
@@ -985,7 +985,7 @@ function FreshCartStore() {
       )}
 
       {/* Express Checkout Modal (Completely removed from Admin Portal) */}
-      {currentUser && currentView !== 'admin' && (
+      {currentView !== 'admin' && (
         <CheckoutModal
           isOpen={isCheckoutOpen}
           onClose={() => setIsCheckoutOpen(false)}

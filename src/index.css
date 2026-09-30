@@ -219,11 +219,12 @@
 
 /* Floating cart toggle button */
 .cart-floating-glow {
-  background: rgba(10, 15, 24, 0.65) !important;
+  background: #006b2c !important;
+  color: #ffffff !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
-  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.75), 0 0 20px 2px rgba(16, 185, 129, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 12px 30px -4px rgba(0, 107, 44, 0.6), 0 0 22px 3px rgba(16, 185, 129, 0.35) !important;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.3s ease,
@@ -231,11 +232,11 @@
 }
 
 .cart-floating-glow:hover {
-  transform: translateY(-2.5px) scale(1.04);
-  background: rgba(15, 22, 34, 0.75) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 20px 42px -4px rgba(0, 0, 0, 0.85),
-              0 0 28px 4px rgba(16, 185, 129, 0.4) !important;
+  transform: translateY(-2.5px) scale(1.06);
+  background: #00873a !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 16px 36px -4px rgba(0, 107, 44, 0.75),
+              0 0 30px 5px rgba(16, 185, 129, 0.5) !important;
   filter: brightness(1.08);
 }
 

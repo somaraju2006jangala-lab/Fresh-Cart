@@ -277,14 +277,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Toast Notification */}
       {reorderToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#006b2c] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-[13px] font-semibold animate-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-24 right-6 z-50 bg-[#006b2c] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-[13px] font-semibold animate-in slide-in-from-bottom-4 duration-200">
           <CheckCircle2 className="w-4 h-4 text-[#7ffc97]" />
           <span>{reorderToast}</span>
         </div>
       )}
 
       {profileSavedToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-[13px] font-semibold animate-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-24 right-6 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-[13px] font-semibold animate-in slide-in-from-bottom-4 duration-200">
           <CheckCircle2 className="w-4 h-4 text-[#7ffc97]" />
           <span>{t('profileSavedMsg')}</span>
         </div>
