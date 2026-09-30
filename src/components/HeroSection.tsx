@@ -3,8 +3,6 @@ import { HERO_IMAGE_URL } from '../data/products';
 import {
   ShoppingBag,
   Zap,
-  Clock,
-  Thermometer,
   ArrowRight,
   Sprout,
   X,
@@ -107,31 +105,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </button>
         </div>
       )}
-
-      {/* Real-time Inventory Sync Status Ticker */}
-      <div className="w-full bg-white/35 backdrop-blur-md border-b border-white/50 py-1.5 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-[12px]">
-          <div className="flex items-center gap-2 text-[#3e4a3d]">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#006b2c] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#006b2c]" />
-            </span>
-            <span className="font-medium">
-              {t('tickerSync')}
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-[#565e74]">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-[#006b2c]" />
-              {t('tickerAvgDelivery')}
-            </span>
-            <span className="flex items-center gap-1">
-              <Thermometer className="w-3.5 h-3.5 text-[#825100]" />
-              {t('tickerColdChain')}
-            </span>
-          </div>
-        </div>
-      </div>
 
       {/* Main Hero Showcase */}
       <section className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 max-w-7xl mx-auto">

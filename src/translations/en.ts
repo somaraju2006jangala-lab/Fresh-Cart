@@ -118,7 +118,7 @@ export const en = {
 
   // Checkout Modal
   expressCheckout: 'Express Grocery Checkout',
-  thirtyMinDelivery: 'Direct 30-Min Delivery from Store #104 Pod',
+  thirtyMinDelivery: 'Direct 30-Min Express Delivery',
   deliveryAddress: 'Delivery Address',
   deliveryAddressPlaceholder: 'Street address, apartment, building...',
   fulfillmentNotes: 'Fulfillment & Driver Notes',
@@ -131,12 +131,12 @@ export const en = {
   placeOrder: 'Place Order & Pay {total}',
   processingOrder: 'Confirming & Dispatching...',
   orderConfirmed: 'Order Confirmed!',
-  orderPlacedSuccess: 'Your order has been routed to Pod #104 and is currently being packed into thermal totes.',
+  orderPlacedSuccess: 'Your order has been confirmed and is currently being packed into thermal totes.',
   orderNumber: 'Order Number',
   estimatedArrival: 'Estimated Arrival',
   minsArrival: '24–30 Minutes',
   liveStatus: 'Live Status',
-  pickingPod: 'Picking at Pod #104',
+  pickingPod: 'Order Picking in Progress',
   trackInDashboard: 'View in Customer Dashboard',
   continueShopping: 'Back to Storefront',
 
@@ -216,7 +216,7 @@ export const en = {
   itemsInOrder: 'Items ({count}):',
   totalPaid: 'Total Paid:',
   statusPending: 'Pending',
-  statusPicking: 'Picking at Pod #104',
+  statusPicking: 'Order Picking in Progress',
   statusColdChain: 'Cold-Chain En Route',
   statusDelivered: 'Delivered',
   editProfile: 'Edit Profile',

@@ -266,9 +266,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Clock className="w-4 h-4 text-[#006b2c]" />
                 <span>{t('estimatedArrival')}: {t('minsArrival')}</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-[#7ffc97] text-[#002109] text-[10px] font-bold">
-                Store #104
-              </span>
             </div>
 
             {/* Delivery Destination */}

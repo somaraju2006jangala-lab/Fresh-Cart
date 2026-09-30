@@ -505,7 +505,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     Active Delivery Tracking
                   </h2>
                   <p className="text-[13px] text-[#565e74]">
-                    Live cold-chain fulfillment status for your neighborhood orders
+                    Live fulfillment status for your neighborhood orders
                   </p>
                 </div>
               </div>
@@ -638,7 +638,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <div className="bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0] space-y-4">
                       <div className="flex items-center justify-between text-[12px] font-semibold text-[#0b1c30]">
                         <span>Fulfillment Timeline</span>
-                        <span className="text-[#006b2c] text-[11px]">Cold Pod Hub #104</span>
+                        <span className="text-[#006b2c] text-[11px]">Order Processing</span>
                       </div>
 
                       {/* Step Progress Line */}
