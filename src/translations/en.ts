@@ -350,7 +350,6 @@ export const en = {
   deleteOrderConfirm: 'Are you sure you want to delete order {id} for customer {name}? This will only remove the order record.',
 
   // Footer
-  footerAbout: 'Sustainably harvested local produce, farm-fresh dairy, and artisanal staples delivered to your kitchen within 30 minutes.',
   footerShopCategories: 'Shop Categories',
   footerVegFruits: 'Farm Vegetables & Fresh Fruits',
   footerDairyEggs: 'Organic Dairy & Pasture-Raised Eggs',

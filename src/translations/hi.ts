@@ -352,7 +352,6 @@ export const hi: typeof en = {
   deleteOrderConfirm: 'क्या आप वाकई ग्राहक {name} के ऑर्डर {id} को हटाना चाहते हैं? यह केवल ऑर्डर रिकॉर्ड को हटाएगा।',
 
   // Footer
-  footerAbout: 'टिकाऊ स्थानीय उपज, ताज़ा डेयरी और कारीगरी बेकरी उत्पाद 30 मिनट के भीतर आपकी रसोई तक पहुंचाए जाते हैं।',
   footerShopCategories: 'श्रेणियां',
   footerVegFruits: 'खेत की सब्जियां और ताज़े फल',
   footerDairyEggs: 'जैविक डेयरी और अंडे',
