@@ -37,27 +37,30 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   ];
 
   return (
-    <div className="w-full flex flex-col">
+    <div className="w-full flex flex-col justify-center">
       {/* Main Hero Showcase */}
-      <section className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl mx-auto">
-        <div className="w-full max-w-4xl space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/35 backdrop-blur-xs text-[#131b2e] text-[12px] font-semibold border border-white/50 shadow-2xs">
+      <section className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-14 max-w-7xl mx-auto flex flex-col items-center justify-center">
+        <div className="w-full max-w-3xl flex flex-col items-center text-center space-y-4 sm:space-y-5">
+          {/* Harvester Badge */}
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/35 backdrop-blur-xs text-[#131b2e] text-[12px] font-semibold border border-white/50 shadow-2xs">
             <Sprout className="w-4 h-4 text-[#006b2c]" />
             <span>{t('heroBadge')}</span>
           </div>
 
-          <h1 className="text-[34px] sm:text-[44px] md:text-[48px] text-[#0b1c30] tracking-tight leading-tight font-extrabold font-display max-w-3xl">
+          {/* Centered Main Heading */}
+          <h1 className="text-[32px] sm:text-[42px] md:text-[48px] text-[#0b1c30] tracking-tight leading-tight font-extrabold font-display max-w-2xl text-center">
             {t('heroHeadingLine1')} {t('heroHeadingLine2')}{' '}
             <span className="text-[#006b2c] italic">{t('heroHeadingMinutes')}</span>
           </h1>
 
-          <p className="text-[15px] sm:text-[16px] text-[#3e4a3d] leading-relaxed max-w-2xl font-body">
+          {/* Centered Description */}
+          <p className="text-[14px] sm:text-[15px] md:text-[16px] text-[#3e4a3d] leading-relaxed max-w-2xl text-center font-body">
             {t('heroSubheading')}
           </p>
 
-          {/* Quick Hero Search Input - Crystal Glass */}
-          <div className="relative w-full max-w-2xl pt-1">
-            <form onSubmit={handleHeroSubmit} className="relative flex items-center bg-white/35 backdrop-blur-md rounded-2xl shadow-xs border border-white/50 hover:border-white/80 focus-within:bg-white/55 transition-all">
+          {/* Centered Quick Hero Search Input - Crystal Glass */}
+          <div className="relative w-full max-w-xl pt-2 flex flex-col items-center">
+            <form onSubmit={handleHeroSubmit} className="relative w-full flex items-center bg-white/35 backdrop-blur-md rounded-2xl shadow-xs border border-white/50 hover:border-white/80 focus-within:bg-white/55 transition-all text-left">
               <span className="pl-3.5 text-[#6e7b6c]">
                 <Zap className="w-5 h-5 text-[#006b2c]" />
               </span>
@@ -79,8 +82,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </button>
             </form>
 
-            {/* Trending suggestions */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 px-1 text-[#565e74] text-[11px] sm:text-[12px]">
+            {/* Centered Trending suggestions */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2 px-1 text-[#565e74] text-[11px] sm:text-[12px]">
               <span className="text-[#6e7b6c] font-medium">{t('trending')}</span>
               {trendingTerms.map((term) => (
                 <button
@@ -98,8 +101,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </div>
           </div>
 
-          {/* Aisle Filter Buttons - Crystal Glass */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-2">
+          {/* Centered Aisle Filter Buttons - Crystal Glass */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2 sm:pt-3 max-w-2xl">
             <button
               type="button"
               id="hero-category-all"
