@@ -217,31 +217,54 @@
   transform: translateY(0px) scale(0.97);
 }
 
-/* Floating cart toggle button */
+/* Floating cart toggle button with flowing animation */
+@keyframes cartFloatFlow {
+  0%, 100% {
+    transform: translateY(0px);
+    box-shadow: 0 12px 28px -4px rgba(0, 107, 44, 0.6), 0 0 20px 3px rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    transform: translateY(-6px);
+    box-shadow: 0 18px 36px -4px rgba(0, 107, 44, 0.75), 0 0 28px 5px rgba(16, 185, 129, 0.5);
+  }
+}
+
 .cart-floating-glow {
   background: #006b2c !important;
   color: #ffffff !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.35) !important;
-  box-shadow: 0 12px 30px -4px rgba(0, 107, 44, 0.6), 0 0 22px 3px rgba(16, 185, 129, 0.35) !important;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 107, 44, 0.6), 0 0 20px 3px rgba(16, 185, 129, 0.35) !important;
+  animation: cartFloatFlow 5s ease-in-out infinite;
+  transition: box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.3s ease,
+              background-color 0.2s ease,
               filter 0.3s ease !important;
 }
 
 .cart-floating-glow:hover {
-  transform: translateY(-2.5px) scale(1.06);
+  animation-play-state: paused;
+  transform: translateY(-4px) scale(1.03);
   background: #00873a !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
-  box-shadow: 0 16px 36px -4px rgba(0, 107, 44, 0.75),
-              0 0 30px 5px rgba(16, 185, 129, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 20px 42px -4px rgba(0, 107, 44, 0.8),
+              0 0 32px 6px rgba(16, 185, 129, 0.6) !important;
   filter: brightness(1.08);
 }
 
 .cart-floating-glow:active {
-  transform: translateY(0px) scale(0.98);
+  animation-play-state: paused;
+  transform: translateY(0px) scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-floating-glow,
+  .cart-floating-glow:hover,
+  .cart-floating-glow:active {
+    animation: none !important;
+    transform: none !important;
+  }
 }
 
 /* ==========================================================================

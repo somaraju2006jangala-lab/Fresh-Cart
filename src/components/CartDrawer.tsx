@@ -241,15 +241,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   return (
     <>
-      {/* Floating Cart Drawer Toggle Button (Bottom-Right) - Crystal Glass */}
+      {/* Floating Cart Drawer Toggle Button (Bottom-Right) - Crystal Floating Glow */}
       {!isOpen && totalItemCount > 0 && (
-        <div id="cart-drawer-toggle" className="fixed bottom-6 right-6 z-50">
+        <div id="cart-drawer-toggle" className="fixed bottom-6 right-6 z-50 pointer-events-auto">
           <button
             type="button"
             onClick={onToggle}
-            aria-label={t('cart')}
+            aria-label={`${t('cart')} (${totalItemCount})`}
             title={t('cart')}
-            className="relative flex items-center justify-center bg-[#006b2c] text-white p-3.5 rounded-2xl shadow-2xl active:scale-95 cursor-pointer border border-white/40 cart-floating-glow group"
+            className="relative flex items-center justify-center bg-[#006b2c] text-white p-3.5 rounded-2xl shadow-2xl active:scale-95 cursor-pointer border border-white/40 cart-floating-glow group select-none"
           >
             <ShoppingCart className="w-6 h-6 text-white transition-transform group-hover:scale-105" />
             <span
