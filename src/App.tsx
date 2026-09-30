@@ -1013,8 +1013,8 @@ export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <div className="min-h-screen bg-[#030305] text-[#f1f5f9] relative">
-          {/* Universal Global Full-Website Black Liquid Crystal Background */}
+        <div className="min-h-screen bg-[#010302] text-[#f1f5f9] relative">
+          {/* Universal Global Full-Website Black Liquid Glass Background */}
           <CursorReactiveBackground />
           <FreshCartStore />
         </div>
