@@ -178,8 +178,9 @@ CREATE TABLE IF NOT EXISTS coupons (
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS otp_records (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  order_id VARCHAR(64) NOT NULL,
+  order_id VARCHAR(64) NOT NULL UNIQUE,
   customer_id VARCHAR(64) NOT NULL,
+  otp_code VARCHAR(16) NULL,
   otp_hash VARCHAR(255) NOT NULL,
   otp_salt VARCHAR(255) NOT NULL,
   expires_at BIGINT NOT NULL,
@@ -189,6 +190,7 @@ CREATE TABLE IF NOT EXISTS otp_records (
   verified_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_otp_order_id (order_id),
   INDEX idx_otp_order_id (order_id),
   INDEX idx_otp_customer_id (customer_id),
   INDEX idx_otp_used (used)

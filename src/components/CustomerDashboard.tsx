@@ -492,20 +492,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               </span>
             </button>
           </div>
-
-          {/* Quick Support Card */}
-          <div className="bg-[#eff4ff]/70 rounded-2xl border border-[#d3e4fe] p-4 text-[12px] space-y-2">
-            <div className="flex items-center gap-2 font-bold text-[#006b2c]">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Cold-Chain Guarantee</span>
-            </div>
-            <p className="text-[#565e74] leading-relaxed">
-              All harvest orders are monitored at under 4°C with insulated eco-coolers. Need help with an order?
-            </p>
-            <span className="inline-block text-[#006b2c] font-semibold hover:underline cursor-pointer">
-              Contact 24/7 Store Support →
-            </span>
-          </div>
         </aside>
 
         {/* Main Content Pane */}

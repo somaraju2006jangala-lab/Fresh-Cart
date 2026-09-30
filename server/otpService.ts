@@ -24,7 +24,7 @@ const isBuildStep =
   process.argv.some((arg) => typeof arg === 'string' && arg.includes('build'));
 
 if (!isBuildStep) {
-  connectMySql().catch(() => {});
+  connectMySql().catch(() => { });
 }
 
 export interface StoredOtpRecord {
@@ -126,7 +126,7 @@ export function registerKnownOrder(order: {
   KNOWN_CUSTOMER_ORDERS[altId] = KNOWN_CUSTOMER_ORDERS[order.id];
 
   if (isMySqlConnected()) {
-    upsertOrderInDb(order).catch(() => {});
+    upsertOrderInDb(order).catch(() => { });
   }
 }
 
@@ -261,11 +261,12 @@ export async function generateOrderOtp(
     saveOtpRecordInDb({
       orderId,
       customerId: customerId || 'guest',
+      otp,
       otpHash: hashedOtp,
       otpSalt: salt,
       expiresAt,
       used: false,
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return {
@@ -373,11 +374,12 @@ export async function resendOrderOtp(
     saveOtpRecordInDb({
       orderId,
       customerId,
+      otp,
       otpHash: hashedOtp,
       otpSalt: salt,
       expiresAt,
       used: false,
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return {
@@ -510,7 +512,7 @@ export async function verifyOrderOtp(
         otpVerifiedAt: verifiedAt,
         status: 'Delivered',
         used: true,
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     return {
@@ -529,7 +531,7 @@ export async function verifyOrderOtp(
     persistStore();
 
     if (isMySqlConnected()) {
-      updateOrderOtpInDb(orderId, { attempts: record.attempts }).catch(() => {});
+      updateOrderOtpInDb(orderId, { attempts: record.attempts }).catch(() => { });
     }
 
     return {

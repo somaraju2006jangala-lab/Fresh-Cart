@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 let pool: Pool | null = null;
 let isConnected = false;
 let connectionPromise: Promise<boolean> | null = null;
+let schemaInitialized = false;
 let lastMySqlError: {
   name: string;
   message: string;
@@ -29,28 +30,121 @@ export function isProductionEnv(): boolean {
   );
 }
 
+export interface ParsedMySqlConfig {
+  host: string;
+  port: number;
+  user: string;
+  password?: string;
+  database: string;
+  ssl?: any;
+  waitForConnections: boolean;
+  connectionLimit: number;
+  maxIdle: number;
+  idleTimeout: number;
+  queueLimit: number;
+  enableKeepAlive: boolean;
+  keepAliveInitialDelay: number;
+  connectTimeout: number;
+}
+
 /**
- * Returns configured MySQL connection parameters from environment variables.
+ * Returns configured MySQL connection parameters from environment variables,
+ * supporting both single connection URLs (MYSQL_URL / DATABASE_URL) and discrete variables.
  */
-export function getMySqlConfig() {
-  const host = (process.env.MYSQL_HOST || '').trim();
-  const port = Number(process.env.MYSQL_PORT) || 3306;
-  const user = (process.env.MYSQL_USER || '').trim();
-  const password = process.env.MYSQL_PASSWORD || '';
-  const database = (process.env.MYSQL_DATABASE || 'freshcart').trim();
+export function getMySqlConfig(): ParsedMySqlConfig {
+  const connectionUrl = (process.env.MYSQL_URL || process.env.DATABASE_URL || '').trim();
+
+  let host = (process.env.MYSQL_HOST || '').trim();
+  let port = Number(process.env.MYSQL_PORT) || 3306;
+  let user = (process.env.MYSQL_USER || '').trim();
+  let password = process.env.MYSQL_PASSWORD || '';
+  let database = (process.env.MYSQL_DATABASE || '').trim();
+  let sslFromUrl: boolean | undefined = undefined;
+
+  // Support single connection string URLs like mysql://user:password@host:port/database
+  if (connectionUrl) {
+    try {
+      const parsed = new URL(connectionUrl);
+      if (parsed.hostname) host = parsed.hostname;
+      if (parsed.port) port = Number(parsed.port);
+      if (parsed.username) user = decodeURIComponent(parsed.username);
+      if (parsed.password) password = decodeURIComponent(parsed.password);
+      const dbPath = parsed.pathname.replace(/^\//, '');
+      if (dbPath) database = decodeURIComponent(dbPath);
+
+      const sslQuery = parsed.searchParams.get('ssl');
+      const sslMode = parsed.searchParams.get('sslmode') || parsed.searchParams.get('ssl-mode');
+      if (sslQuery === 'false' || sslMode === 'disabled') {
+        sslFromUrl = false;
+      } else if (sslQuery === 'true' || sslMode === 'require' || sslMode === 'required') {
+        sslFromUrl = true;
+      }
+    } catch {
+      console.warn('[MySQL Config] Notice: Could not parse connection URL as URL object, using discrete env vars.');
+    }
+  }
+
+  const isProd = isProductionEnv();
+
+  // Local fallback defaults when not in production
+  if (!host) {
+    host = isProd ? '' : '127.0.0.1';
+  }
+  if (!user) {
+    user = isProd ? '' : 'root';
+  }
+  if (!database) {
+    database = 'freshcart';
+  }
+
+  const isLocalHost =
+    host === '127.0.0.1' ||
+    host === 'localhost' ||
+    host === '::1' ||
+    host === '0.0.0.0';
+
+  // SSL Configuration
+  // 1. Explicitly disabled via MYSQL_SSL=false or url param: disable SSL
+  // 2. Local development on 127.0.0.1/localhost: disable SSL (unless explicitly forced)
+  // 3. Remote cloud MySQL (Aiven, TiDB Cloud, PlanetScale, AWS RDS, DigitalOcean, Railway, Supabase):
+  //    Default to enabled SSL with rejectUnauthorized: false so serverless TLS works out of the box
+  let ssl: any = undefined;
+  const envSsl = (process.env.MYSQL_SSL || '').trim().toLowerCase();
+  const envRejectUnauth = (process.env.MYSQL_SSL_REJECT_UNAUTHORIZED || '').trim().toLowerCase();
+
+  if (envSsl === 'false' || sslFromUrl === false) {
+    ssl = undefined;
+  } else if (envSsl === 'true' || sslFromUrl === true || (!isLocalHost && Boolean(host))) {
+    const rejectUnauthorized = envRejectUnauth === 'true';
+    ssl = {
+      rejectUnauthorized,
+    };
+    if (process.env.MYSQL_SSL_CA) {
+      ssl.ca = process.env.MYSQL_SSL_CA;
+    }
+  }
+
+  // Serverless pool tuning: 5 connections for serverless execution to prevent pool exhaustion
+  const connectionLimit = Number(process.env.MYSQL_CONNECTION_LIMIT) || (isProd ? 5 : 10);
+  const maxIdle = Number(process.env.MYSQL_MAX_IDLE) || (isProd ? 5 : 10);
+  const idleTimeout = Number(process.env.MYSQL_IDLE_TIMEOUT) || 60000;
+  const connectTimeout = Number(process.env.MYSQL_CONNECT_TIMEOUT) || 10000;
 
   return {
-    host: host || '127.0.0.1',
+    host,
     port,
-    user: user || 'root',
+    user,
     password,
-    database: database || 'freshcart',
+    database,
+    ssl,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit,
+    maxIdle,
+    idleTimeout,
     queueLimit: 0,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
-    connectTimeout: 10000,
+    keepAliveInitialDelay: 10000,
+    connectTimeout,
   };
 }
 
@@ -139,17 +233,24 @@ export function getSafeMySqlDiagnosticInfo(): {
   host: string;
   port: number;
   database: string;
+  ssl: boolean;
   connectionState: 'connected' | 'connecting' | 'disconnected';
   lastError: typeof lastMySqlError;
 } {
   const config = getMySqlConfig();
-  const configured = Boolean(process.env.MYSQL_HOST || process.env.MYSQL_USER);
+  const configured = Boolean(
+    process.env.MYSQL_URL ||
+    process.env.DATABASE_URL ||
+    process.env.MYSQL_HOST ||
+    process.env.MYSQL_USER
+  );
 
   return {
     configured,
     host: config.host,
     port: config.port,
     database: config.database,
+    ssl: Boolean(config.ssl),
     connectionState: isConnected ? 'connected' : connectionPromise ? 'connecting' : 'disconnected',
     lastError: lastMySqlError,
   };
@@ -162,8 +263,32 @@ export function getPool(): Pool {
   if (!pool) {
     const config = getMySqlConfig();
     pool = mysql.createPool(config);
+
+    // Register pool error handler to gracefully handle connection loss
+    (pool as any).on('error', (err: any) => {
+      console.error('[MySQL Pool Error]', err?.code || err?.message);
+      if (err?.code === 'PROTOCOL_CONNECTION_LOST' || err?.code === 'ECONNRESET') {
+        isConnected = false;
+      }
+    });
   }
   return pool;
+}
+
+/**
+ * Resets the connection pool (useful for reconnection or configuration updates).
+ */
+export async function resetPool(): Promise<void> {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch {
+      // Ignore pool close error
+    }
+    pool = null;
+    isConnected = false;
+    schemaInitialized = false;
+  }
 }
 
 /**
@@ -173,13 +298,13 @@ export async function connectMySql(): Promise<boolean> {
   const isProd = isProductionEnv();
   const config = getMySqlConfig();
 
-  // In production (Vercel), enforce that database host is not pointing to personal Mac localhost
+  // In production (Vercel), enforce that database host is configured and not pointing to localhost
   if (isProd) {
-    const rawHost = (process.env.MYSQL_HOST || '').trim().toLowerCase();
-    if (!rawHost || rawHost === 'localhost' || rawHost === '127.0.0.1') {
+    const rawHost = config.host.trim().toLowerCase();
+    if (!rawHost || rawHost === 'localhost' || rawHost === '127.0.0.1' || rawHost === '::1') {
       const errorMsg =
-        'Production configuration error: MYSQL_HOST must be a remote cloud-hosted MySQL database. ' +
-        'Do not point production deployments to localhost or 127.0.0.1.';
+        'Production configuration error: MYSQL_HOST (or MYSQL_URL / DATABASE_URL) must be set to a remote cloud-hosted MySQL database in Vercel Environment Variables. ' +
+        'Localhost and 127.0.0.1 are not accessible from Vercel serverless execution.';
       console.error(`[MySQL CRITICAL] ${errorMsg}`);
       lastMySqlError = {
         name: 'ConfigurationError',
@@ -192,8 +317,20 @@ export async function connectMySql(): Promise<boolean> {
     }
   }
 
+  // If already connected in a warm container, perform a quick ping to ensure socket wasn't closed during idle pause
   if (isConnected && pool) {
-    return true;
+    try {
+      const testConn = await pool.getConnection();
+      try {
+        await testConn.ping();
+      } finally {
+        testConn.release();
+      }
+      return true;
+    } catch {
+      // Idle socket timed out or connection lost - re-establish
+      isConnected = false;
+    }
   }
 
   if (connectionPromise) {
@@ -212,12 +349,15 @@ export async function connectMySql(): Promise<boolean> {
 
       isConnected = true;
       lastMySqlError = null;
-      console.log(`[MySQL] Connected successfully to database: ${config.database} on ${config.host}:${config.port}`);
+      console.log(`[MySQL] Connected successfully to database: ${config.database} on ${config.host}:${config.port} (SSL: ${Boolean(config.ssl)})`);
 
-      // Automatically initialize schema and seed initial data if needed
-      await initializeDatabase().catch((err) => {
-        console.warn('[MySQL Init] Notice during schema verification:', err?.message);
-      });
+      // Automatically initialize schema and seed initial data once per container lifetime
+      if (!schemaInitialized) {
+        await initializeDatabase().catch((err) => {
+          console.warn('[MySQL Init] Notice during schema verification:', err?.message);
+        });
+        schemaInitialized = true;
+      }
 
       return true;
     } catch (err: any) {
@@ -270,10 +410,11 @@ export function checkDatabaseAvailability(): {
         failureCategory: diag.lastError?.failureCategory || 'UNKNOWN',
         errorType: diag.lastError?.name || 'MySqlError',
         errorCode: diag.lastError?.code,
-        errorMessage: diag.lastError?.message,
+        errorMessage: diag.lastError?.message || 'Production MySQL database is not connected. Please verify Vercel Environment Variables.',
         host: diag.host,
         port: diag.port,
         database: diag.database,
+        ssl: diag.ssl,
         connectionState: diag.connectionState,
       },
     };
@@ -439,8 +580,9 @@ export async function initializeDatabase(): Promise<void> {
 
     `CREATE TABLE IF NOT EXISTS otp_records (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      order_id VARCHAR(64) NOT NULL,
+      order_id VARCHAR(64) NOT NULL UNIQUE,
       customer_id VARCHAR(64) NOT NULL,
+      otp_code VARCHAR(16) NULL,
       otp_hash VARCHAR(255) NOT NULL,
       otp_salt VARCHAR(255) NOT NULL,
       expires_at BIGINT NOT NULL,
@@ -450,6 +592,7 @@ export async function initializeDatabase(): Promise<void> {
       verified_at TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_otp_order_id (order_id),
       INDEX idx_otp_order_id (order_id),
       INDEX idx_otp_customer_id (customer_id),
       INDEX idx_otp_used (used)
@@ -508,6 +651,13 @@ export async function initializeDatabase(): Promise<void> {
 
   for (const sql of tableStatements) {
     await currentPool.query(sql);
+  }
+
+  // Ensure otp_records has otp_code column if the table already existed from an earlier schema
+  try {
+    await currentPool.query('ALTER TABLE otp_records ADD COLUMN otp_code VARCHAR(16) NULL AFTER customer_id');
+  } catch {
+    // Ignore if column already exists
   }
 
   // Seed default data if tables are empty
@@ -1724,6 +1874,7 @@ export async function deleteOrderInDb(orderId: string): Promise<boolean> {
 export async function saveOtpRecordInDb(record: {
   orderId: string;
   customerId: string;
+  otp?: string;
   otpHash: string;
   otpSalt: string;
   expiresAt: number;
@@ -1732,9 +1883,10 @@ export async function saveOtpRecordInDb(record: {
   const pool = getPool();
   try {
     await pool.query(
-      `INSERT INTO otp_records (order_id, customer_id, otp_hash, otp_salt, expires_at, used)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO otp_records (order_id, customer_id, otp_code, otp_hash, otp_salt, expires_at, used)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
+         otp_code = VALUES(otp_code),
          otp_hash = VALUES(otp_hash),
          otp_salt = VALUES(otp_salt),
          expires_at = VALUES(expires_at),
@@ -1742,6 +1894,7 @@ export async function saveOtpRecordInDb(record: {
       [
         record.orderId,
         record.customerId,
+        record.otp || null,
         record.otpHash,
         record.otpSalt,
         record.expiresAt,
@@ -1765,7 +1918,7 @@ export async function findOtpRecordInDb(orderId: string): Promise<any | null> {
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT order_id as orderId, customer_id as customerId,
-              otp_hash as otpHash, otp_salt as otpSalt,
+              otp_code as otp, otp_hash as otpHash, otp_salt as otpSalt,
               expires_at as expiresAt, used, attempts, max_attempts as maxAttempts,
               verified_at as verifiedAt
        FROM otp_records
@@ -1778,6 +1931,7 @@ export async function findOtpRecordInDb(orderId: string): Promise<any | null> {
     const r = rows[0];
     return {
       ...r,
+      otp: r.otp || '',
       expiresAt: Number(r.expiresAt),
       used: Boolean(r.used),
       attempts: Number(r.attempts),
