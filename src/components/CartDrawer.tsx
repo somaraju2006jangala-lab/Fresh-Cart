@@ -242,7 +242,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   return (
     <>
       {/* Floating Cart Drawer Toggle Button (Bottom-Right) - Crystal Glass */}
-      {!isOpen && (
+      {!isOpen && totalItemCount > 0 && (
         <div id="cart-drawer-toggle" className="fixed bottom-6 right-6 z-40">
           <button
             type="button"
@@ -252,14 +252,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             className="relative flex items-center justify-center bg-white/40 backdrop-blur-md text-[#006b2c] p-3.5 rounded-2xl shadow-xl active:scale-95 cursor-pointer border border-white/60 cart-floating-glow"
           >
             <ShoppingCart className="w-6 h-6 transition-transform group-hover:scale-105" />
-            {totalItemCount > 0 && (
-              <span
-                id="floating-cart-badge"
-                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-white/60 shadow-xs"
-              >
-                {totalItemCount}
-              </span>
-            )}
+            <span
+              id="floating-cart-badge"
+              className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[#006b2c] text-white rounded-full text-[11px] font-bold ring-2 ring-white/60 shadow-xs"
+            >
+              {totalItemCount}
+            </span>
           </button>
         </div>
       )}
