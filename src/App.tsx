@@ -625,7 +625,7 @@ function FreshCartStore() {
     setInventoryLogs([]);
   };
 
-  // Simulate real-time MongoDB CDC pulse
+  // Simulate real-time CDC pulse
   const handleSimulateCdcPulse = () => {
     const candidate = products.find((p) => p.stock > 1);
     if (!candidate) return;

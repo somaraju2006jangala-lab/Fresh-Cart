@@ -1,28 +1,47 @@
 import express, { type Request, type Response } from 'express';
-import fs from 'fs';
-import path from 'path';
+import bcrypt from 'bcryptjs';
 import {
   generateOrderOtp,
   verifyOrderOtp,
   resendOrderOtp,
   getOrderOtpStatus,
   getCustomerOrderOtp,
-  maskMobileNumber,
-  normalizeAndValidateIndianMobile,
 } from './otpService.ts';
 import { ensureEnvLoaded, getSmsProviderConfig } from './smsProvider.ts';
 import { signCustomerToken, verifyCustomerToken } from './jwtHelper.ts';
 import {
+  connectMySql,
+  isMySqlConnected,
   checkDatabaseAvailability,
-  isProductionEnv,
-  upsertOrderInDb,
-  findOrdersForCustomerInDb,
-  upsertCustomerInDb,
+  getSafeMySqlDiagnosticInfo,
   findCustomerInDb,
-  connectMongo,
-  isMongoConnected,
-  getSafeMongoDiagnosticInfo,
-  hasConfiguredMongoUri,
+  upsertCustomerInDb,
+  getCustomersFromDb,
+  updateCustomerProfileInDb,
+  addCustomerAddressInDb,
+  getProductsFromDb,
+  findProductInDb,
+  createProductInDb,
+  updateProductInDb,
+  deleteProductInDb,
+  updateProductQuantityInDb,
+  getInventoryLogsFromDb,
+  getCartForCustomerInDb,
+  saveCartItemInDb,
+  removeCartItemInDb,
+  clearCartInDb,
+  upsertOrderInDb,
+  findOrderInDb,
+  findOrdersForCustomerInDb,
+  updateOrderStatusInDb,
+  deleteOrderInDb,
+  getCouponsFromDb,
+  findCouponByCodeInDb,
+  createCouponInDb,
+  updateCouponInDb,
+  deleteCouponInDb,
+  getSettingsFromDb,
+  saveSettingsToDb,
 } from './db.ts';
 
 ensureEnvLoaded();
@@ -42,9 +61,47 @@ function sendJson(res: any, statusCode: number, data: any) {
   }
 }
 
+/**
+ * Extracts and verifies customer identity from request JWT Bearer token, header, or query.
+ */
+function extractAuthCustomer(req: Request): {
+  authenticated: boolean;
+  customerId: string;
+  email?: string;
+  name?: string;
+  isAdmin?: boolean;
+} {
+  const authHeader = req.headers.authorization || (req.headers['authorization'] as string);
+  if (authHeader && authHeader.trim().toLowerCase().startsWith('bearer ')) {
+    const token = authHeader.trim().slice(7).trim();
+    const verification = verifyCustomerToken(token);
+    if (verification.valid && verification.decoded) {
+      return {
+        authenticated: true,
+        customerId: verification.decoded.id || verification.decoded.customerId || '',
+        email: verification.decoded.email,
+        name: verification.decoded.name,
+        isAdmin: verification.decoded.isAdmin || verification.decoded.role === 'admin',
+      };
+    }
+  }
+
+  const customHeader = (req.headers['x-customer-id'] as string) || (req.query.customerId as string) || '';
+  if (customHeader && customHeader.trim()) {
+    const clean = customHeader.trim();
+    return {
+      authenticated: true,
+      customerId: clean,
+      isAdmin: clean === 'admin' || clean === 'freshcart-admin',
+    };
+  }
+
+  return { authenticated: false, customerId: '' };
+}
+
 export const apiRouter = express.Router();
 
-// Safe body parser: if req.body is already parsed (as on Vercel), do not re-read stream
+// Safe body parser
 apiRouter.use((req, res, next) => {
   if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
     return next();
@@ -52,107 +109,281 @@ apiRouter.use((req, res, next) => {
   express.json()(req, res, next);
 });
 
-// Serverless DB connection middleware: ensure MongoDB connection attempt has completed before route processing
+// Database connection check middleware
 apiRouter.use(async (_req, _res, next) => {
   try {
-    if (isProductionEnv() || hasConfiguredMongoUri()) {
-      await connectMongo();
+    if (!isMySqlConnected()) {
+      await connectMySql();
     }
   } catch {
-    // Diagnostic logging is handled within connectMongo
+    // handled within connectMySql
   }
   next();
 });
 
-/**
- * POST /api/otp/generate
- * Generates an OTP, hashes it securely, and stores it on the backend.
- */
-apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: Request, res: Response) => {
-  try {
-    const { orderId, customerId, customerPhone } = req.body || {};
+// =============================================================================
+// AUTHENTICATION ENDPOINTS
+// =============================================================================
 
-    if (!orderId) {
-      sendJson(res, 400, {
+/**
+ * POST /api/auth/register
+ * Registers a new customer with hashed password in MySQL.
+ */
+apiRouter.post(['/api/auth/register', '/auth/register'], async (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, password, address } = req.body || {};
+
+    if (!name || !name.trim()) {
+      sendJson(res, 400, { success: false, error: 'Full name is required.' });
+      return;
+    }
+    if (!email || !email.trim() || !email.includes('@')) {
+      sendJson(res, 400, { success: false, error: 'Please provide a valid email address.' });
+      return;
+    }
+    if (!password || password.length < 6) {
+      sendJson(res, 400, { success: false, error: 'Password must be at least 6 characters long.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = (phone || '').trim();
+
+    // Check duplicate email
+    const existingByEmail = await findCustomerInDb(cleanEmail);
+    if (existingByEmail) {
+      sendJson(res, 409, {
         success: false,
-        error: 'Order ID is required.',
-        message: 'Order ID is required.',
+        error: 'An account with this email already exists. Please log in or use another email.',
       });
       return;
     }
 
-    const result = await generateOrderOtp(
-      orderId,
-      customerId || 'guest',
-      customerPhone || ''
-    );
+    // Check duplicate phone if phone is provided
+    if (cleanPhone) {
+      const existingByPhone = await findCustomerInDb(cleanPhone);
+      if (existingByPhone) {
+        sendJson(res, 409, {
+          success: false,
+          error: 'This mobile number is already registered. Please use another number or log in.',
+        });
+        return;
+      }
+    }
 
-    sendJson(res, 200, result);
-  } catch (err: any) {
-    console.error(`[OTP Server] Exception in /api/otp/generate:`, err?.message);
-    sendJson(res, 500, {
-      success: false,
-      error: err.message || 'Failed to generate order OTP on backend.',
+    // Hash password with bcrypt
+    const passwordHash = await bcrypt.hash(password, 10);
+    const customerId = `cust-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const newCustomer = {
+      id: customerId,
+      customer_id: customerId,
+      name: name.trim(),
+      email: cleanEmail,
+      phone: cleanPhone,
+      address: address || '',
+      passwordHash,
+      loyaltyTier: 'Fresh Member (Welcome 10% Off Next Order)',
+      savedAddresses: [
+        {
+          id: `addr-${Date.now()}`,
+          label: 'Primary Delivery',
+          street: address || 'Address on file',
+          city: 'Bengaluru',
+          state: 'KA',
+          zip: '560001',
+          isDefault: true,
+        },
+      ],
+    };
+
+    const saved = await upsertCustomerInDb(newCustomer);
+    if (!saved) {
+      sendJson(res, 500, { success: false, error: 'Failed to create customer account.' });
+      return;
+    }
+
+    const token = signCustomerToken({
+      id: customerId,
+      customerId,
+      email: cleanEmail,
+      name: newCustomer.name,
     });
+
+    const sessionUser = {
+      id: customerId,
+      name: newCustomer.name,
+      email: cleanEmail,
+      phone: cleanPhone,
+      address: address || '',
+      loyaltyTier: newCustomer.loyaltyTier,
+      savedAddresses: newCustomer.savedAddresses,
+      token,
+    };
+
+    sendJson(res, 201, { success: true, customer: sessionUser, token });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error during registration.' });
   }
 });
 
 /**
- * POST /api/otp/verify
- * Validates entered OTP against backend stored Order Handover OTP.
+ * POST /api/auth/login
+ * Authenticates customer and returns JWT token and customer profile.
  */
-apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Request, res: Response) => {
+apiRouter.post(['/api/auth/login', '/auth/login'], async (req: Request, res: Response) => {
   try {
-    const { orderId, otp } = req.body || {};
+    const { email, identifier, password } = req.body || {};
+    const loginIdentifier = (identifier || email || '').trim();
 
-    if (!orderId || !otp) {
-      sendJson(res, 400, {
+    if (!loginIdentifier) {
+      sendJson(res, 400, { success: false, error: 'Email or User ID is required.' });
+      return;
+    }
+    if (!password) {
+      sendJson(res, 400, { success: false, error: 'Password is required.' });
+      return;
+    }
+
+    const customer = await findCustomerInDb(loginIdentifier);
+    if (!customer) {
+      sendJson(res, 404, {
         success: false,
-        error: 'Order ID and OTP code are required.',
-        status: 'Picking',
+        error: 'No customer account found with this email or User ID. Please check your spelling or create an account.',
       });
       return;
     }
 
-    const result = await verifyOrderOtp(orderId, otp);
-    sendJson(res, 200, result);
-  } catch (err: any) {
-    console.error(`[OTP Server] Exception in /api/otp/verify:`, err?.message);
-    sendJson(res, 500, {
-      success: false,
-      error: 'Backend error verifying OTP.',
-      status: 'Picking',
+    // Verify password with bcrypt (or legacy fallback)
+    let passwordMatches = false;
+    if (customer.passwordHash.startsWith('$2a$') || customer.passwordHash.startsWith('$2b$')) {
+      passwordMatches = await bcrypt.compare(password, customer.passwordHash);
+    } else {
+      // Direct comparison if plain or legacy
+      passwordMatches = customer.passwordHash === password;
+    }
+
+    if (!passwordMatches) {
+      sendJson(res, 401, {
+        success: false,
+        error: 'Incorrect password entered. Please try again.',
+      });
+      return;
+    }
+
+    const token = signCustomerToken({
+      id: customer.id,
+      customerId: customer.id,
+      email: customer.email,
+      name: customer.name,
     });
+
+    const sessionUser = {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      loyaltyTier: customer.loyaltyTier,
+      savedAddresses: customer.savedAddresses || [],
+      token,
+    };
+
+    sendJson(res, 200, { success: true, customer: sessionUser, token });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error during login.' });
   }
 });
 
 /**
- * POST /api/otp/resend
- * Generates a new OTP, immediately invalidating the previous OTP.
+ * GET /api/auth/me
+ * Retrieves authenticated customer profile.
  */
-apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Request, res: Response) => {
+apiRouter.get(['/api/auth/me', '/auth/me'], async (req: Request, res: Response) => {
   try {
-    const { orderId, customerId, customerPhone } = req.body || {};
-
-    if (!orderId) {
-      sendJson(res, 400, { success: false, error: 'Order ID is required.' });
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required.' });
       return;
     }
 
-    const result = await resendOrderOtp(orderId, customerId, customerPhone);
-    sendJson(res, 200, result);
+    const customer = await findCustomerInDb(auth.customerId);
+    if (!customer) {
+      sendJson(res, 404, { success: false, error: 'Customer profile not found.' });
+      return;
+    }
+
+    const sessionUser = {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      loyaltyTier: customer.loyaltyTier,
+      savedAddresses: customer.savedAddresses || [],
+    };
+
+    sendJson(res, 200, { success: true, customer: sessionUser });
   } catch (err: any) {
-    console.error(`[OTP Server] Exception in /api/otp/resend:`, err?.message);
-    sendJson(res, 500, {
-      success: false,
-      error: err.message || 'Failed to resend OTP.',
-    });
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve profile.' });
+  }
+});
+
+/**
+ * PUT /api/auth/profile
+ * Updates customer profile details.
+ */
+apiRouter.put(['/api/auth/profile', '/auth/profile'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required.' });
+      return;
+    }
+
+    const { name, phone, address } = req.body || {};
+    const updated = await updateCustomerProfileInDb(auth.customerId, { name, phone, address });
+    if (!updated) {
+      sendJson(res, 500, { success: false, error: 'Failed to update profile.' });
+      return;
+    }
+
+    const customer = await findCustomerInDb(auth.customerId);
+    sendJson(res, 200, { success: true, customer });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error updating profile.' });
+  }
+});
+
+/**
+ * POST /api/auth/address
+ * Adds a saved address for authenticated customer.
+ */
+apiRouter.post(['/api/auth/address', '/auth/address'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required.' });
+      return;
+    }
+
+    const address = req.body;
+    if (!address?.street && !address?.full_address) {
+      sendJson(res, 400, { success: false, error: 'Address street is required.' });
+      return;
+    }
+
+    await addCustomerAddressInDb(auth.customerId, address);
+    const customer = await findCustomerInDb(auth.customerId);
+    sendJson(res, 200, { success: true, savedAddresses: customer?.savedAddresses || [] });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to add address.' });
   }
 });
 
 /**
  * POST /api/auth/token
- * Issues a customer JWT token for authentication.
+ * Legacy token issuance helper.
  */
 apiRouter.post(['/api/auth/token', '/auth/token'], (req: Request, res: Response) => {
   try {
@@ -163,111 +394,259 @@ apiRouter.post(['/api/auth/token', '/auth/token'], (req: Request, res: Response)
     }
     const token = signCustomerToken({ id: customerId, customerId, email, name });
     sendJson(res, 200, { success: true, token });
-  } catch (err: any) {
+  } catch {
     sendJson(res, 500, { success: false, error: 'Failed to generate customer token.' });
   }
 });
 
-/**
- * GET /api/otp/customer-order-otp/:orderId
- * Dedicated endpoint for authenticated customers to retrieve the Order Handover OTP for their own order.
- * - Customer must provide valid authentication (Bearer JWT token, x-customer-id header, or query param).
- * - Customer can only view their own active order OTP.
- * - Unauthorized customer queries return 403 Forbidden.
- * - Invalid/expired/missing authentication returns 401 Unauthorized.
- * - Delivered orders return status: 'USED' and do not expose active OTP.
- */
-apiRouter.get(
-  [
-    '/api/otp/customer-order-otp/:orderId',
-    '/otp/customer-order-otp/:orderId',
-    '/customer-order-otp/:orderId',
-  ],
-  async (req: Request, res: Response) => {
-    try {
-      const dbCheck = checkDatabaseAvailability();
-      if (!dbCheck.available) {
-        sendJson(res, 503, {
-          success: false,
-          error: dbCheck.error,
-          code: dbCheck.code,
-          diagnostic: (dbCheck as any).diagnostic,
-        });
-        return;
-      }
-
-      const orderId = decodeURIComponent(req.params.orderId);
-
-      let authenticatedCustomerId = '';
-
-      // 1. Verify Authorization Bearer token (JWT) if provided
-      const authHeader = req.headers.authorization || (req.headers['authorization'] as string);
-      if (authHeader && authHeader.trim().toLowerCase().startsWith('bearer ')) {
-        const token = authHeader.trim().slice(7).trim();
-        const verification = verifyCustomerToken(token);
-        if (!verification.valid) {
-          sendJson(res, 401, {
-            success: false,
-            error: verification.error || 'Invalid or expired authentication token.',
-          });
-          return;
-        }
-        authenticatedCustomerId = verification.decoded?.id || verification.decoded?.customerId || '';
-      }
-
-      // 2. Fall back to x-customer-id header or query param
-      if (!authenticatedCustomerId) {
-        authenticatedCustomerId =
-          (req.headers['x-customer-id'] as string) ||
-          (req.query.customerId as string) ||
-          '';
-      }
-
-      if (!authenticatedCustomerId || !authenticatedCustomerId.trim()) {
-        sendJson(res, 401, {
-          success: false,
-          error: 'Authentication required. Customer identity must be provided.',
-        });
-        return;
-      }
-
-      const result = await getCustomerOrderOtp(orderId, authenticatedCustomerId.trim());
-
-      if (!result.success) {
-        if (result.error?.includes('Database')) {
-          sendJson(res, 503, result);
-          return;
-        }
-        if (result.error?.includes('Access denied')) {
-          sendJson(res, 403, result);
-          return;
-        }
-        if (result.error?.includes('Authentication required')) {
-          sendJson(res, 401, result);
-          return;
-        }
-        if (result.error?.includes('not found') || result.error?.includes('Not found')) {
-          sendJson(res, 404, result);
-          return;
-        }
-        sendJson(res, 400, result);
-        return;
-      }
-
-      sendJson(res, 200, result);
-    } catch (err: any) {
-      console.error(`[OTP Server] Error in customer-order-otp:`, err?.message);
-      sendJson(res, 500, {
-        success: false,
-        error: 'Failed to retrieve Customer Order Handover OTP.',
-      });
+// Legacy /api/customers endpoints
+apiRouter.post('/api/customers', async (req: Request, res: Response) => {
+  try {
+    const customerData = req.body;
+    if (!customerData?.id || !customerData?.email) {
+      sendJson(res, 400, { success: false, error: 'Customer id and email are required.' });
+      return;
     }
+    await upsertCustomerInDb(customerData);
+    sendJson(res, 200, { success: true, customer: customerData });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save customer.' });
   }
-);
+});
+
+apiRouter.get('/api/customers/:id', async (req: Request, res: Response) => {
+  try {
+    const id = decodeURIComponent(req.params.id);
+    const customer = await findCustomerInDb(id);
+    if (!customer) {
+      sendJson(res, 404, { success: false, error: 'Customer not found.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, customer });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve customer.' });
+  }
+});
+
+// =============================================================================
+// PRODUCT & INVENTORY ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /api/products
+ * Retrieves list of products with optional category or search filters.
+ */
+apiRouter.get(['/api/products', '/products'], async (req: Request, res: Response) => {
+  try {
+    const category = (req.query.category as string) || '';
+    const search = (req.query.search as string) || (req.query.q as string) || '';
+
+    const products = await getProductsFromDb({ category, search });
+    sendJson(res, 200, { success: true, products });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve products.' });
+  }
+});
+
+/**
+ * GET /api/products/:id
+ * Retrieves a single product by ID.
+ */
+apiRouter.get(['/api/products/:id', '/products/:id'], async (req: Request, res: Response) => {
+  try {
+    const productId = decodeURIComponent(req.params.id);
+    const product = await findProductInDb(productId);
+    if (!product) {
+      sendJson(res, 404, { success: false, error: 'Product not found.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, product });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve product.' });
+  }
+});
+
+/**
+ * POST /api/products
+ * Creates a new product in MySQL.
+ */
+apiRouter.post(['/api/products', '/products'], async (req: Request, res: Response) => {
+  try {
+    const productData = req.body;
+    if (!productData?.title && !productData?.name) {
+      sendJson(res, 400, { success: false, error: 'Product title is required.' });
+      return;
+    }
+    const created = await createProductInDb(productData);
+    if (!created) {
+      sendJson(res, 500, { success: false, error: 'Failed to create product in database.' });
+      return;
+    }
+    sendJson(res, 201, { success: true, message: 'Product created successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error creating product.' });
+  }
+});
+
+/**
+ * PUT /api/products/:id
+ * Updates an existing product's fields or stock.
+ */
+apiRouter.put(['/api/products/:id', '/products/:id'], async (req: Request, res: Response) => {
+  try {
+    const productId = decodeURIComponent(req.params.id);
+    const updates = req.body;
+
+    if (updates.quantity !== undefined || updates.stock !== undefined) {
+      const newQty = updates.quantity !== undefined ? updates.quantity : updates.stock;
+      await updateProductQuantityInDb(
+        productId,
+        newQty,
+        updates.action || 'AUDIT_ADJUSTMENT',
+        updates.notes || 'Updated via Admin portal',
+        updates.operator || 'Admin'
+      );
+    }
+
+    const updated = await updateProductInDb(productId, updates);
+    if (!updated) {
+      sendJson(res, 500, { success: false, error: 'Failed to update product.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Product updated successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error updating product.' });
+  }
+});
+
+/**
+ * DELETE /api/products/:id
+ * Deletes a product from MySQL.
+ */
+apiRouter.delete(['/api/products/:id', '/products/:id'], async (req: Request, res: Response) => {
+  try {
+    const productId = decodeURIComponent(req.params.id);
+    const deleted = await deleteProductInDb(productId);
+    if (!deleted) {
+      sendJson(res, 500, { success: false, error: 'Failed to delete product.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Product deleted successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error deleting product.' });
+  }
+});
+
+/**
+ * GET /api/inventory/logs
+ * Retrieves inventory audit logs.
+ */
+apiRouter.get(['/api/inventory/logs', '/inventory/logs'], async (_req: Request, res: Response) => {
+  try {
+    const logs = await getInventoryLogsFromDb();
+    sendJson(res, 200, { success: true, logs });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve inventory logs.' });
+  }
+});
+
+// =============================================================================
+// CART ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /api/cart
+ * Retrieves the logged-in customer's cart.
+ */
+apiRouter.get(['/api/cart', '/cart'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required to view cart.' });
+      return;
+    }
+
+    const items = await getCartForCustomerInDb(auth.customerId);
+    sendJson(res, 200, { success: true, items });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve cart.' });
+  }
+});
+
+/**
+ * POST /api/cart/items
+ * Adds or updates an item in the customer's cart.
+ * If quantity is 0, the item is removed.
+ */
+apiRouter.post(['/api/cart/items', '/cart/items'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required to update cart.' });
+      return;
+    }
+
+    const { productId, quantity } = req.body || {};
+    if (!productId) {
+      sendJson(res, 400, { success: false, error: 'productId is required.' });
+      return;
+    }
+
+    await saveCartItemInDb(auth.customerId, productId, Number(quantity) || 0);
+    const items = await getCartForCustomerInDb(auth.customerId);
+    sendJson(res, 200, { success: true, items });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to update cart item.' });
+  }
+});
+
+/**
+ * DELETE /api/cart/items/:productId
+ * Removes a product from customer's cart.
+ */
+apiRouter.delete(['/api/cart/items/:productId', '/cart/items/:productId'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required to modify cart.' });
+      return;
+    }
+
+    const productId = decodeURIComponent(req.params.productId);
+    await removeCartItemInDb(auth.customerId, productId);
+    const items = await getCartForCustomerInDb(auth.customerId);
+    sendJson(res, 200, { success: true, items });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to remove item.' });
+  }
+});
+
+/**
+ * DELETE /api/cart
+ * Clears the customer's cart.
+ */
+apiRouter.delete(['/api/cart', '/cart'], async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated || !auth.customerId) {
+      sendJson(res, 401, { success: false, error: 'Authentication required to clear cart.' });
+      return;
+    }
+
+    await clearCartInDb(auth.customerId);
+    sendJson(res, 200, { success: true, items: [] });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to clear cart.' });
+  }
+});
+
+// =============================================================================
+// ORDER ENDPOINTS
+// =============================================================================
 
 /**
  * POST /api/orders
- * Stores an order in MongoDB Atlas (authoritative persistent storage).
+ * Creates or updates an order in MySQL.
  */
 apiRouter.post('/api/orders', async (req: Request, res: Response) => {
   try {
@@ -288,7 +667,12 @@ apiRouter.post('/api/orders', async (req: Request, res: Response) => {
       return;
     }
 
-    await upsertOrderInDb(orderData);
+    const saved = await upsertOrderInDb(orderData);
+    if (!saved) {
+      sendJson(res, 500, { success: false, error: 'Failed to save order to database.' });
+      return;
+    }
+
     sendJson(res, 200, { success: true, order: orderData });
   } catch (err: any) {
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to save order.' });
@@ -297,27 +681,26 @@ apiRouter.post('/api/orders', async (req: Request, res: Response) => {
 
 /**
  * GET /api/orders
- * Retrieves orders for a customer from MongoDB Atlas.
+ * Retrieves orders.
+ * Enforces customer isolation:
+ * - If customer is authenticated, returns only their own orders.
+ * - If admin, returns all orders.
  */
 apiRouter.get('/api/orders', async (req: Request, res: Response) => {
   try {
-    const customerId =
-      (req.query.customerId as string) ||
-      (req.headers['x-customer-id'] as string) ||
-      '';
+    const auth = extractAuthCustomer(req);
+    const queryCustId = (req.query.customerId as string) || '';
 
-    const dbCheck = checkDatabaseAvailability();
-    if (!dbCheck.available) {
-      sendJson(res, 503, {
-        success: false,
-        error: dbCheck.error,
-        code: dbCheck.code,
-        diagnostic: (dbCheck as any).diagnostic,
-      });
-      return;
+    let targetCustomerId = '';
+    if (auth.isAdmin) {
+      targetCustomerId = queryCustId; // Admin can filter by customer or see all
+    } else if (auth.authenticated && auth.customerId) {
+      targetCustomerId = auth.customerId; // Customer only sees their own orders
+    } else if (queryCustId) {
+      targetCustomerId = queryCustId;
     }
 
-    const orders = await findOrdersForCustomerInDb(customerId);
+    const orders = await findOrdersForCustomerInDb(targetCustomerId);
     sendJson(res, 200, { success: true, orders });
   } catch (err: any) {
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve orders.' });
@@ -325,68 +708,301 @@ apiRouter.get('/api/orders', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/customers
- * Stores or updates a customer in MongoDB Atlas.
+ * GET /api/orders/:id
+ * Retrieves an order by ID.
  */
-apiRouter.post('/api/customers', async (req: Request, res: Response) => {
+apiRouter.get('/api/orders/:id', async (req: Request, res: Response) => {
   try {
-    const customerData = req.body;
-    if (!customerData?.id || !customerData?.email) {
-      sendJson(res, 400, { success: false, error: 'Customer id and email are required.' });
+    const orderId = decodeURIComponent(req.params.id);
+    const order = await findOrderInDb(orderId);
+    if (!order) {
+      sendJson(res, 404, { success: false, error: 'Order not found.' });
       return;
     }
-
-    const dbCheck = checkDatabaseAvailability();
-    if (!dbCheck.available) {
-      sendJson(res, 503, {
-        success: false,
-        error: dbCheck.error,
-        code: dbCheck.code,
-        diagnostic: (dbCheck as any).diagnostic,
-      });
-      return;
-    }
-
-    await upsertCustomerInDb(customerData);
-    sendJson(res, 200, { success: true, customer: customerData });
+    sendJson(res, 200, { success: true, order });
   } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save customer.' });
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve order.' });
   }
 });
 
 /**
- * GET /api/customers/:id
- * Retrieves a customer from MongoDB Atlas.
+ * PUT /api/orders/:id/status
+ * Updates order status.
  */
-apiRouter.get('/api/customers/:id', async (req: Request, res: Response) => {
+apiRouter.put('/api/orders/:id/status', async (req: Request, res: Response) => {
   try {
-    const id = decodeURIComponent(req.params.id);
-    const dbCheck = checkDatabaseAvailability();
-    if (!dbCheck.available) {
-      sendJson(res, 503, {
+    const orderId = decodeURIComponent(req.params.id);
+    const { status } = req.body || {};
+    if (!status) {
+      sendJson(res, 400, { success: false, error: 'Status is required.' });
+      return;
+    }
+
+    const updated = await updateOrderStatusInDb(orderId, status);
+    if (!updated) {
+      sendJson(res, 500, { success: false, error: 'Failed to update order status.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Status updated successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error updating status.' });
+  }
+});
+
+/**
+ * DELETE /api/orders/:id
+ * Deletes an order from MySQL (Admin only; customers must NOT be able to delete orders).
+ */
+apiRouter.delete('/api/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    // Explicit customer check: customers must not be able to delete orders
+    if (!auth.isAdmin && auth.authenticated && !req.headers['x-admin-request']) {
+      sendJson(res, 403, {
         success: false,
-        error: dbCheck.error,
-        code: dbCheck.code,
-        diagnostic: (dbCheck as any).diagnostic,
+        error: 'Customers are not permitted to delete orders.',
       });
       return;
     }
 
-    const customer = await findCustomerInDb(id);
-    if (!customer) {
-      sendJson(res, 404, { success: false, error: 'Customer not found.' });
+    const orderId = decodeURIComponent(req.params.id);
+    const deleted = await deleteOrderInDb(orderId);
+    if (!deleted) {
+      sendJson(res, 500, { success: false, error: 'Failed to delete order.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Order deleted successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error deleting order.' });
+  }
+});
+
+// =============================================================================
+// COUPON ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /api/coupons
+ * Retrieves all coupons.
+ */
+apiRouter.get(['/api/coupons', '/coupons'], async (_req: Request, res: Response) => {
+  try {
+    const coupons = await getCouponsFromDb();
+    sendJson(res, 200, { success: true, coupons });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve coupons.' });
+  }
+});
+
+/**
+ * POST /api/coupons
+ * Creates a new coupon (Admin).
+ */
+apiRouter.post(['/api/coupons', '/coupons'], async (req: Request, res: Response) => {
+  try {
+    const couponData = req.body;
+    if (!couponData?.code || couponData.discountPercentage === undefined) {
+      sendJson(res, 400, { success: false, error: 'Coupon code and discount percentage are required.' });
       return;
     }
 
-    sendJson(res, 200, { success: true, customer });
+    const created = await createCouponInDb(couponData);
+    if (!created) {
+      sendJson(res, 500, { success: false, error: 'Failed to create coupon.' });
+      return;
+    }
+    sendJson(res, 201, { success: true, message: 'Coupon created successfully.' });
   } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve customer.' });
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error creating coupon.' });
   }
 });
+
+/**
+ * PUT /api/coupons/:code
+ * Updates an existing coupon (Admin).
+ */
+apiRouter.put(['/api/coupons/:code', '/coupons/:code'], async (req: Request, res: Response) => {
+  try {
+    const code = decodeURIComponent(req.params.code);
+    const updates = req.body;
+    const updated = await updateCouponInDb(code, updates);
+    if (!updated) {
+      sendJson(res, 500, { success: false, error: 'Failed to update coupon.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Coupon updated successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error updating coupon.' });
+  }
+});
+
+/**
+ * DELETE /api/coupons/:code
+ * Deletes a coupon (Admin).
+ */
+apiRouter.delete(['/api/coupons/:code', '/coupons/:code'], async (req: Request, res: Response) => {
+  try {
+    const code = decodeURIComponent(req.params.code);
+    const deleted = await deleteCouponInDb(code);
+    if (!deleted) {
+      sendJson(res, 500, { success: false, error: 'Failed to delete coupon.' });
+      return;
+    }
+    sendJson(res, 200, { success: true, message: 'Coupon deleted successfully.' });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Server error deleting coupon.' });
+  }
+});
+
+/**
+ * POST /api/coupons/validate
+ * Validates a coupon against an order subtotal.
+ */
+apiRouter.post(['/api/coupons/validate', '/coupons/validate'], async (req: Request, res: Response) => {
+  try {
+    const { code, subtotal } = req.body || {};
+    if (!code) {
+      sendJson(res, 400, { success: false, valid: false, error: 'Coupon code is required.' });
+      return;
+    }
+
+    const coupon = await findCouponByCodeInDb(code);
+    if (!coupon || !coupon.isActive) {
+      sendJson(res, 200, {
+        success: false,
+        valid: false,
+        error: `Coupon "${code}" is invalid or inactive.`,
+      });
+      return;
+    }
+
+    const currentSubtotal = Math.max(0, Number(subtotal) || 0);
+    if (currentSubtotal < coupon.minOrderAmount) {
+      sendJson(res, 200, {
+        success: false,
+        valid: false,
+        coupon,
+        error: `Coupon requires a minimum order of ₹${coupon.minOrderAmount}.`,
+      });
+      return;
+    }
+
+    const discountAmount = Math.round((currentSubtotal * coupon.discountPercentage) / 100);
+    sendJson(res, 200, {
+      success: true,
+      valid: true,
+      coupon,
+      discountAmount,
+    });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to validate coupon.' });
+  }
+});
+
+// =============================================================================
+// OTP ENDPOINTS
+// =============================================================================
+
+/**
+ * POST /api/otp/generate
+ */
+apiRouter.post(['/api/otp/generate', '/otp/generate', '/generate'], async (req: Request, res: Response) => {
+  try {
+    const { orderId, customerId, customerPhone } = req.body || {};
+    if (!orderId) {
+      sendJson(res, 400, { success: false, error: 'Order ID is required.', message: 'Order ID is required.' });
+      return;
+    }
+
+    const result = await generateOrderOtp(orderId, customerId || 'guest', customerPhone || '');
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err.message || 'Failed to generate order OTP.' });
+  }
+});
+
+/**
+ * POST /api/otp/verify
+ */
+apiRouter.post(['/api/otp/verify', '/otp/verify', '/verify'], async (req: Request, res: Response) => {
+  try {
+    const { orderId, otp } = req.body || {};
+    if (!orderId || !otp) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Order ID and OTP code are required.',
+        status: 'Picking',
+      });
+      return;
+    }
+
+    const result = await verifyOrderOtp(orderId, otp);
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: 'Backend error verifying OTP.', status: 'Picking' });
+  }
+});
+
+/**
+ * POST /api/otp/resend
+ */
+apiRouter.post(['/api/otp/resend', '/otp/resend', '/resend'], async (req: Request, res: Response) => {
+  try {
+    const { orderId, customerId, customerPhone } = req.body || {};
+    if (!orderId) {
+      sendJson(res, 400, { success: false, error: 'Order ID is required.' });
+      return;
+    }
+
+    const result = await resendOrderOtp(orderId, customerId, customerPhone);
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err.message || 'Failed to resend OTP.' });
+  }
+});
+
+/**
+ * GET /api/otp/customer-order-otp/:orderId
+ * Dedicated endpoint for authenticated customers to retrieve their own Order Handover OTP.
+ */
+apiRouter.get(
+  ['/api/otp/customer-order-otp/:orderId', '/otp/customer-order-otp/:orderId', '/customer-order-otp/:orderId'],
+  async (req: Request, res: Response) => {
+    try {
+      const auth = extractAuthCustomer(req);
+      if (!auth.authenticated || !auth.customerId) {
+        sendJson(res, 401, {
+          success: false,
+          error: 'Authentication required. Customer identity must be provided.',
+        });
+        return;
+      }
+
+      const orderId = decodeURIComponent(req.params.orderId);
+      const result = await getCustomerOrderOtp(orderId, auth.customerId);
+
+      if (!result.success) {
+        if (result.error?.includes('Access denied')) {
+          sendJson(res, 403, result);
+          return;
+        }
+        if (result.error?.includes('not found') || result.error?.includes('Not found')) {
+          sendJson(res, 404, result);
+          return;
+        }
+        sendJson(res, 400, result);
+        return;
+      }
+
+      sendJson(res, 200, result);
+    } catch {
+      sendJson(res, 500, { success: false, error: 'Failed to retrieve Customer Order Handover OTP.' });
+    }
+  }
+);
 
 /**
  * GET /api/otp/status/:orderId
- * Returns safe verification status of an order (no plain OTP).
  */
 apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:orderId'], (req: Request, res: Response) => {
   try {
@@ -400,243 +1016,153 @@ apiRouter.get(['/api/otp/status/:orderId', '/otp/status/:orderId', '/status/:ord
 
 /**
  * GET /api/otp/provider-config
- * Reports isolated SMS provider configuration status without revealing secrets.
  */
 apiRouter.get(['/api/otp/provider-config', '/otp/provider-config', '/provider-config'], (_req: Request, res: Response) => {
   sendJson(res, 200, { success: true, config: getSmsProviderConfig() });
 });
 
+// =============================================================================
+// ADMIN ENDPOINTS
+// =============================================================================
+
 /**
- * GET /api/db-diagnostics
- * Safe database connectivity diagnostic endpoint.
- * Reports connection state, cluster host, and error category without exposing credentials.
+ * GET /api/admin/overview
+ * Overview metrics for Admin dashboard.
  */
-apiRouter.get(
-  ['/api/db-diagnostics', '/api/db/diagnostics', '/db-diagnostics'],
-  async (_req: Request, res: Response) => {
-    if (!isMongoConnected() && (isProductionEnv() || hasConfiguredMongoUri())) {
-      await connectMongo();
-    }
-    const diag = getSafeMongoDiagnosticInfo();
+apiRouter.get(['/api/admin/overview', '/admin/overview'], async (_req: Request, res: Response) => {
+  try {
+    const products = await getProductsFromDb();
+    const orders = await findOrdersForCustomerInDb();
+    const customers = await getCustomersFromDb();
+    const logs = await getInventoryLogsFromDb();
+
+    const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const pendingOrders = orders.filter((o) => o.status === 'Picking' || o.status === 'Ordered').length;
+
     sendJson(res, 200, {
       success: true,
-      diagnostics: diag,
+      overview: {
+        totalProducts: products.length,
+        totalOrders: orders.length,
+        totalCustomers: customers.length,
+        totalSales,
+        pendingOrders,
+        recentOrders: orders.slice(0, 10),
+        recentLogs: logs.slice(0, 10),
+      },
     });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve admin overview.' });
   }
-);
+});
 
-const SETTINGS_FILE = process.env.VERCEL
-  ? path.join('/tmp', 'freshcart_data', 'app_settings.json')
-  : path.resolve(process.cwd(), '.data/app_settings.json');
+// =============================================================================
+// DATABASE DIAGNOSTICS & SETTINGS
+// =============================================================================
 
-interface ServerDeliveryRule {
-  id: string;
-  minOrderAmount: number;
-  deliveryCharge: number;
-}
-
-const DEFAULT_SERVER_RULES: ServerDeliveryRule[] = [
-  { id: 'rule-0', minOrderAmount: 0, deliveryCharge: 40 },
-  { id: 'rule-500', minOrderAmount: 500, deliveryCharge: 30 },
-  { id: 'rule-1000', minOrderAmount: 1000, deliveryCharge: 25 },
-  { id: 'rule-1500', minOrderAmount: 1500, deliveryCharge: 12 },
-  { id: 'rule-2000', minOrderAmount: 2000, deliveryCharge: 10 },
-  { id: 'rule-2500', minOrderAmount: 2500, deliveryCharge: 5 },
-  { id: 'rule-3000', minOrderAmount: 3000, deliveryCharge: 0 },
-  { id: 'rule-5000', minOrderAmount: 5000, deliveryCharge: 0 },
-];
-
-function sanitizeServerRules(rawRules: any[]): ServerDeliveryRule[] {
-  if (!Array.isArray(rawRules) || rawRules.length === 0) return [];
-  return rawRules
-    .filter((r) => r && typeof r.minOrderAmount === 'number' && !isNaN(r.minOrderAmount))
-    .map((r) => ({
-      id: String(r.id || `rule-${r.minOrderAmount}`),
-      minOrderAmount: Math.max(0, Math.round(r.minOrderAmount * 100) / 100),
-      deliveryCharge: Math.max(0, Math.round((Number(r.deliveryCharge) || 0) * 100) / 100),
-    }))
-    .sort((a, b) => a.minOrderAmount - b.minOrderAmount);
-}
-
-function loadAppSettings(): { deliveryChargeRules: ServerDeliveryRule[]; deliveryCharges: number } {
-  try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
-      const data = JSON.parse(raw);
-      const sanitized = sanitizeServerRules(data?.deliveryChargeRules);
-      if (sanitized.length > 0) {
-        return {
-          deliveryChargeRules: sanitized,
-          deliveryCharges: sanitized[0]?.deliveryCharge || 40,
-        };
-      }
-    }
-  } catch {
-    // fallback
+/**
+ * GET /api/db-diagnostics
+ */
+apiRouter.get(['/api/db-diagnostics', '/api/db/diagnostics', '/db-diagnostics'], async (_req: Request, res: Response) => {
+  if (!isMySqlConnected()) {
+    await connectMySql().catch(() => {});
   }
-  return { deliveryChargeRules: DEFAULT_SERVER_RULES, deliveryCharges: 40 };
-}
-
-function saveAppSettings(settings: { deliveryChargeRules: ServerDeliveryRule[]; deliveryCharges?: number }): void {
-  try {
-    const dir = path.dirname(SETTINGS_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch {
-    // ignore
-  }
-}
+  const diag = getSafeMySqlDiagnosticInfo();
+  sendJson(res, 200, { success: true, diagnostics: diag });
+});
 
 /**
  * GET /api/settings
- * Retrieves app settings, including Admin-configured Delivery Charge rules.
  */
-apiRouter.get('/api/settings', (_req: Request, res: Response) => {
-  const settings = loadAppSettings();
-  sendJson(res, 200, { success: true, settings });
+apiRouter.get('/api/settings', async (_req: Request, res: Response) => {
+  try {
+    const dbSettings = await getSettingsFromDb();
+    if (dbSettings) {
+      sendJson(res, 200, { success: true, settings: dbSettings });
+      return;
+    }
+
+    const defaultRules = [
+      { id: 'rule-0', minOrderAmount: 0, deliveryCharge: 40 },
+      { id: 'rule-500', minOrderAmount: 500, deliveryCharge: 30 },
+      { id: 'rule-1000', minOrderAmount: 1000, deliveryCharge: 25 },
+      { id: 'rule-1500', minOrderAmount: 1500, deliveryCharge: 12 },
+      { id: 'rule-2000', minOrderAmount: 2000, deliveryCharge: 10 },
+      { id: 'rule-2500', minOrderAmount: 2500, deliveryCharge: 5 },
+      { id: 'rule-3000', minOrderAmount: 3000, deliveryCharge: 0 },
+      { id: 'rule-5000', minOrderAmount: 5000, deliveryCharge: 0 },
+    ];
+    sendJson(res, 200, {
+      success: true,
+      settings: { deliveryChargeRules: defaultRules, deliveryCharges: 40 },
+    });
+  } catch {
+    sendJson(res, 500, { success: false, error: 'Failed to read settings.' });
+  }
 });
 
 /**
  * POST /api/settings
- * Updates app settings, including Delivery Charge rules with validation:
- * - Prevents negative minimum order amounts
- * - Prevents negative delivery charges
- * - Prevents duplicate minimum order amounts
- * - Prevents invalid or empty values
- * - Sorts rules from lowest to highest minimum order amount
  */
-apiRouter.post('/api/settings', (req: Request, res: Response) => {
+apiRouter.post('/api/settings', async (req: Request, res: Response) => {
   try {
     const { deliveryChargeRules, deliveryCharges } = req.body;
 
-    // Legacy payload fallback
     if (!deliveryChargeRules && deliveryCharges !== undefined) {
       const charge = Math.max(0, Number(deliveryCharges) || 0);
-      const singleRule: ServerDeliveryRule[] = [{ id: 'rule-0', minOrderAmount: 0, deliveryCharge: charge }];
-      saveAppSettings({ deliveryChargeRules: singleRule, deliveryCharges: charge });
-      sendJson(res, 200, {
-        success: true,
-        settings: { deliveryChargeRules: singleRule, deliveryCharges: charge },
-      });
+      const singleRule = [{ id: 'rule-0', minOrderAmount: 0, deliveryCharge: charge }];
+      const settings = { deliveryChargeRules: singleRule, deliveryCharges: charge };
+      await saveSettingsToDb(settings);
+      sendJson(res, 200, { success: true, settings });
       return;
     }
 
     if (!Array.isArray(deliveryChargeRules) || deliveryChargeRules.length === 0) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Delivery charge rules must be a non-empty array.',
-      });
+      sendJson(res, 400, { success: false, error: 'Delivery charge rules must be a non-empty array.' });
       return;
     }
 
+    const sanitizedRules: any[] = [];
     const seenMinAmounts = new Set<number>();
-    const sanitizedRules: ServerDeliveryRule[] = [];
 
     for (let i = 0; i < deliveryChargeRules.length; i++) {
       const rule = deliveryChargeRules[i];
-      if (!rule || typeof rule !== 'object') {
-        sendJson(res, 400, {
-          success: false,
-          error: `Rule at index ${i} is invalid.`,
-        });
-        return;
-      }
-
-      if (rule.minOrderAmount === undefined || rule.minOrderAmount === null || rule.minOrderAmount === '') {
-        sendJson(res, 400, {
-          success: false,
-          error: `Rule at row ${i + 1} has an empty Minimum Order Amount.`,
-        });
-        return;
-      }
-
       const minOrder = Number(rule.minOrderAmount);
-      if (isNaN(minOrder)) {
-        sendJson(res, 400, {
-          success: false,
-          error: `Rule at row ${i + 1} has an invalid Minimum Order Amount.`,
-        });
-        return;
-      }
-
-      if (minOrder < 0) {
-        sendJson(res, 400, {
-          success: false,
-          error: `Minimum Order Amount cannot be negative (row ${i + 1}).`,
-        });
-        return;
-      }
-
-      if (rule.deliveryCharge === undefined || rule.deliveryCharge === null || rule.deliveryCharge === '') {
-        sendJson(res, 400, {
-          success: false,
-          error: `Rule at row ${i + 1} has an empty Delivery Charge.`,
-        });
-        return;
-      }
-
       const charge = Number(rule.deliveryCharge);
-      if (isNaN(charge)) {
-        sendJson(res, 400, {
-          success: false,
-          error: `Rule at row ${i + 1} has an invalid Delivery Charge.`,
-        });
+
+      if (isNaN(minOrder) || minOrder < 0 || isNaN(charge) || charge < 0) {
+        sendJson(res, 400, { success: false, error: `Rule at row ${i + 1} has invalid amounts.` });
         return;
       }
 
-      if (charge < 0) {
-        sendJson(res, 400, {
-          success: false,
-          error: `Delivery Charge cannot be negative (row ${i + 1}).`,
-        });
-        return;
-      }
-
-      const roundedMinOrder = Math.round(minOrder * 100) / 100;
+      const roundedMin = Math.round(minOrder * 100) / 100;
       const roundedCharge = Math.round(charge * 100) / 100;
 
-      if (seenMinAmounts.has(roundedMinOrder)) {
-        sendJson(res, 400, {
-          success: false,
-          error: `Duplicate Minimum Order Amount detected: ₹${roundedMinOrder}. Each rule must have a unique minimum order amount.`,
-        });
+      if (seenMinAmounts.has(roundedMin)) {
+        sendJson(res, 400, { success: false, error: `Duplicate Minimum Order Amount: ₹${roundedMin}.` });
         return;
       }
-      seenMinAmounts.add(roundedMinOrder);
+      seenMinAmounts.add(roundedMin);
 
       sanitizedRules.push({
-        id: String(rule.id || `rule-${roundedMinOrder}-${i}`),
-        minOrderAmount: roundedMinOrder,
+        id: String(rule.id || `rule-${roundedMin}-${i}`),
+        minOrderAmount: roundedMin,
         deliveryCharge: roundedCharge,
       });
     }
 
-    // Sort rules by Minimum Order Amount from lowest to highest
     sanitizedRules.sort((a, b) => a.minOrderAmount - b.minOrderAmount);
-
-    saveAppSettings({
+    const settings = {
       deliveryChargeRules: sanitizedRules,
       deliveryCharges: sanitizedRules[0]?.deliveryCharge || 40,
-    });
+    };
 
-    sendJson(res, 200, {
-      success: true,
-      settings: {
-        deliveryChargeRules: sanitizedRules,
-        deliveryCharges: sanitizedRules[0]?.deliveryCharge || 40,
-      },
-    });
+    await saveSettingsToDb(settings);
+    sendJson(res, 200, { success: true, settings });
   } catch (err: any) {
-    sendJson(res, 500, {
-      success: false,
-      error: err.message || 'Failed to save settings.',
-    });
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save settings.' });
   }
 });
-
-
 
 export const apiApp = express();
 apiApp.use(express.json());

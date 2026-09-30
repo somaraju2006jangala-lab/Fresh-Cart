@@ -1,6 +1,5 @@
-import type { IncomingMessage, ServerResponse } from 'http';
 import { apiApp } from '../server/apiRouter.ts';
-import { connectMongo, isProductionEnv, hasConfiguredMongoUri } from '../server/db.ts';
+import { connectMySql } from '../server/db.ts';
 
 export default async function handler(req: any, res: any) {
   // Restore original request path if Vercel destination is rewritten to bare /api
@@ -16,11 +15,8 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // In Vercel serverless functions, ensure DB connection attempt is awaited before handling request
-  if (isProductionEnv() || hasConfiguredMongoUri()) {
-    await connectMongo().catch(() => {});
-  }
+  // Ensure MySQL connection pool is ready
+  await connectMySql().catch(() => {});
 
   return (apiApp as any)(req, res);
 }
-

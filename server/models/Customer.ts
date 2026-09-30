@@ -1,36 +1,30 @@
-import mongoose, { Schema, type Document } from 'mongoose';
-
-export interface ICustomerDocument extends Document {
-  id: string;
-  name: string;
+export interface CustomerEntity {
+  id?: number;
+  customer_id: string;
+  full_name: string;
   email: string;
-  phone: string;
+  mobile: string;
   address?: string;
-  savedAddresses?: any[];
-  passwordHash?: string;
-  passwordSalt?: string;
-  createdAt?: string;
-  avatarUrl?: string;
-  loyaltyTier?: string;
+  password_hash: string;
+  loyalty_tier?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
 }
 
-const CustomerSchema = new Schema<ICustomerDocument>(
-  {
-    id: { type: String, required: true, unique: true, index: true },
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true, index: true },
-    phone: { type: String, default: '', index: true },
-    address: { type: String, default: '' },
-    savedAddresses: { type: Array, default: [] },
-    passwordHash: { type: String, default: '' },
-    passwordSalt: { type: String, default: '' },
-    createdAt: { type: String, default: () => new Date().toISOString() },
-    avatarUrl: { type: String, default: '' },
-    loyaltyTier: { type: String, default: 'Fresh Member' },
-  },
-  { timestamps: true }
-);
+export interface AddressEntity {
+  id?: number;
+  customer_id: string;
+  address_id: string;
+  label: string;
+  full_address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  is_default?: boolean;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}
 
-export const CustomerModel =
-  mongoose.models.Customer ||
-  mongoose.model<ICustomerDocument>('Customer', CustomerSchema);
+export interface CustomerWithAddresses extends CustomerEntity {
+  addresses?: AddressEntity[];
+}
