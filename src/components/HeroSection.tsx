@@ -44,16 +44,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     <div className="w-full flex flex-col justify-center">
       {/* 1. Top: Hero text content, centered */}
       <section className="w-full px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 md:pt-12 pb-4 sm:pb-5 max-w-7xl mx-auto flex flex-col items-center justify-center">
-        <div className="w-full max-w-3xl flex flex-col items-center text-center space-y-4 sm:space-y-5">
+        <div className="w-full max-w-4xl lg:max-w-5xl flex flex-col items-center text-center space-y-4 sm:space-y-5">
           {/* Harvester Badge */}
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/35 backdrop-blur-xs text-[#131b2e] text-[12px] font-semibold border border-white/50 shadow-2xs">
             <Sprout className="w-4 h-4 text-[#006b2c]" />
             <span>{t('heroBadge')}</span>
           </div>
 
-          {/* Centered Main Heading */}
-          <h1 className="text-[32px] sm:text-[42px] md:text-[48px] text-[#0b1c30] tracking-tight leading-tight font-extrabold font-display max-w-2xl text-center">
-            {t('heroHeadingLine1')} {t('heroHeadingLine2')}{' '}
+          {/* Centered Main Heading on a single straight line */}
+          <h1 className="text-[26px] sm:text-[32px] md:text-[38px] lg:text-[44px] xl:text-[48px] text-[#0b1c30] tracking-tight leading-tight font-extrabold font-display w-full max-w-5xl text-center whitespace-normal md:whitespace-nowrap">
+            {`${t('heroHeadingLine1')} ${t('heroHeadingLine2')} `}
             <span className="text-[#006b2c] italic">{t('heroHeadingMinutes')}</span>
           </h1>
 
