@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
   body {
     font-family: 'Inter', sans-serif;
     color: #f1f5f9;
     background-color: #030305;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+  }
+
+  body,
+  #root {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -372,12 +383,20 @@
   background-color: rgba(255, 255, 255, 0.03) !important;
 }
 
-.bg-\[\#f8f9ff\],
-.bg-\[\#f8fafc\],
-.bg-\[\#f1f5f9\] {
+:not(body):not(html):not(#root).bg-\[\#f8f9ff\],
+:not(body):not(html):not(#root).bg-\[\#f8fafc\],
+:not(body):not(html):not(#root).bg-\[\#f1f5f9\] {
   background-color: rgba(6, 9, 15, 0.42) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
+}
+
+body.bg-\[\#f8f9ff\],
+body.bg-\[\#f8fafc\],
+body.bg-\[\#f1f5f9\] {
+  background-color: #030305 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .bg-\[\#e2e8f0\] {
