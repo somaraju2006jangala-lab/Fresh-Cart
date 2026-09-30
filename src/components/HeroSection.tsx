@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { HERO_IMAGE_URL } from '../data/products';
 import {
-  ShoppingBag,
   Zap,
   ArrowRight,
   Sprout,
-  X,
-  Check,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -14,39 +11,23 @@ interface HeroSectionProps {
   onSearch: (term: string) => void;
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
-  onApplyCoupon: (code: string) => void;
-  appliedCoupon: string | null;
+  onApplyCoupon?: (code: string) => void;
+  appliedCoupon?: string | null;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onSearch,
   selectedCategory,
   onSelectCategory,
-  onApplyCoupon,
-  appliedCoupon,
 }) => {
   const { t } = useLanguage();
-  const [showBanner, setShowBanner] = useState(true);
   const [heroSearch, setHeroSearch] = useState('');
-  const [couponCopied, setCouponCopied] = useState(false);
 
   const handleHeroSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (heroSearch.trim()) {
       onSearch(heroSearch.trim());
     }
-  };
-
-  const handleCopyCoupon = () => {
-    try {
-      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText('SAVE10').catch(() => {});
-      }
-    } catch {
-      // fallback
-    }
-    setCouponCopied(true);
-    setTimeout(() => setCouponCopied(false), 2500);
   };
 
   const trendingTerms = [
@@ -58,54 +39,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <div className="w-full flex flex-col">
-      {/* Promo Announcement Banner */}
-      {showBanner && (
-        <div
-          id="promo-ribbon"
-          className="w-full bg-[#00873a]/92 backdrop-blur-md text-[#f7fff2] py-2 px-4 sm:px-6 flex items-center justify-between shadow-xs relative border-b border-emerald-600/30"
-        >
-          <div className="flex items-center gap-2 mx-auto text-[12px] sm:text-[13px] flex-wrap justify-center">
-            <ShoppingBag className="w-4 h-4 text-[#7ffc97] shrink-0" />
-            <span>
-              {t('promoBannerText')}{' '}
-              <button
-                type="button"
-                onClick={handleCopyCoupon}
-                className="font-bold underline tracking-wider text-white hover:text-[#7ffc97] transition-colors cursor-pointer inline-flex items-center gap-1"
-                title="Copy coupon code SAVE10"
-              >
-                SAVE10
-                {couponCopied ? (
-                  <span className="text-[10px] bg-[#7ffc97] text-[#002109] px-1.5 py-0.2 rounded-full font-bold ml-1">
-                    Copied! Apply in Cart
-                  </span>
-                ) : appliedCoupon === 'SAVE10' ? (
-                  <span className="text-[10px] bg-[#7ffc97] text-[#002109] px-1.5 py-0.2 rounded-full font-bold ml-1">
-                    {t('promoApplied')}
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-sm ml-0.5">
-                    Click to copy
-                  </span>
-                )}
-              </button>{' '}
-              {t('promoDiscountText')}
-            </span>
-            <span className="hidden md:inline-flex items-center gap-1 text-[11px] bg-[#006b2c] text-white px-2 py-0.5 rounded-full font-semibold ml-1 shadow-2xs">
-              {t('promoMinOrder')}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowBanner(false)}
-            className="text-white hover:opacity-75 transition-opacity cursor-pointer"
-            title="Dismiss announcement"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Main Hero Showcase */}
       <section className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">

@@ -33,14 +33,6 @@ export const hi: typeof en = {
   itemsCount: '{count} वस्तुएं',
 
   // Hero Section
-  promoBannerText: 'FreshCart में आपका स्वागत है! कूपन कोड का उपयोग करें',
-  promoDiscountText: 'अपने पहले प्रमाणित जैविक ऑर्डर पर 30% की छूट पाएं।',
-  promoMinOrder: 'न्यूनतम ₹499 का ऑर्डर',
-  promoClickToApply: 'लागू करने के लिए क्लिक करें',
-  promoApplied: 'लागू किया गया!',
-  tickerSync: '⚡ स्टोर #104 MongoDB क्लस्टर के साथ रीयल-टाइम इन्वेंटरी सिंक सक्रिय है',
-  tickerAvgDelivery: 'औसत डिलीवरी: 24 मिनट',
-  tickerColdChain: 'सक्रिय कोल्ड-चेन सत्यापित (3.8°C)',
   heroBadge: 'कीटनाशक-मुक्त स्थानीय किसान • दैनिक ताज़ा बैच',
   heroHeadingLine1: 'खेतों से ताज़ा किराना',
   heroHeadingLine2: 'डिलीवरी सिर्फ',

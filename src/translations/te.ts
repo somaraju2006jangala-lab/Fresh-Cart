@@ -33,14 +33,6 @@ export const te: typeof en = {
   itemsCount: '{count} వస్తువులు',
 
   // Hero Section
-  promoBannerText: 'FreshCart కి స్వాగతం! కూపన్ కోడ్ ఉపయోగించండి',
-  promoDiscountText: 'మీ మొదటి ఆర్గానిక్ ఆర్డర్‌పై 30% తగ్గింపు పొందండి.',
-  promoMinOrder: 'కనీస ఆర్డర్ ₹499',
-  promoClickToApply: 'వర్తింపజేయడానికి క్లిక్ చేయండి',
-  promoApplied: 'వర్తింపజేయబడింది!',
-  tickerSync: '⚡ స్టోర్ #104 MongoDB క్లస్టర్‌తో రియల్-టైమ్ ఇన్వెంటరీ సింక్ సక్రియంగా ఉంది',
-  tickerAvgDelivery: 'సగటు డెలివరీ: 24 నిమిషాలు',
-  tickerColdChain: 'కోల్డ్-చైన్ నిర్ధారించబడింది (3.8°C)',
   heroBadge: 'పురుగుమందులు లేని స్థానిక రైతుల పంట • రోజువారీ తాజా బ్యాచ్',
   heroHeadingLine1: 'రైతు క్షేత్రాల నుండి తాజా కిరాణా',
   heroHeadingLine2: 'డెలివరీ కేవలం',

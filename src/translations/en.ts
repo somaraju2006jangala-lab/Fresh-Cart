@@ -31,14 +31,6 @@ export const en = {
   itemsCount: '{count} items',
 
   // Hero Section
-  promoBannerText: 'Welcome to FreshCart! Use coupon code',
-  promoDiscountText: 'for 30% off your first certified organic farm order.',
-  promoMinOrder: 'Min ₹499 Order',
-  promoClickToApply: 'Click to apply',
-  promoApplied: 'APPLIED!',
-  tickerSync: '⚡ Real-time inventory synchronization active with Store #104 MongoDB cluster',
-  tickerAvgDelivery: 'Avg Delivery: 24 mins',
-  tickerColdChain: 'Active Cold-Chain Validated (3.8°C)',
   heroBadge: 'Zero-Pesticide Local Harvesters • Direct Daily Batch',
   heroHeadingLine1: 'Farm–Fresh Groceries',
   heroHeadingLine2: 'Delivered in',
