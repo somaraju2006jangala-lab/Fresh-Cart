@@ -5,6 +5,8 @@ import {
   Sprout,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { Product } from '../types';
+import { ProductImageCarousel } from './ProductImageCarousel';
 
 interface HeroSectionProps {
   onSearch: (term: string) => void;
@@ -12,12 +14,14 @@ interface HeroSectionProps {
   onSelectCategory: (category: string) => void;
   onApplyCoupon?: (code: string) => void;
   appliedCoupon?: string | null;
+  products: Product[];
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onSearch,
   selectedCategory,
   onSelectCategory,
+  products,
 }) => {
   const { t } = useLanguage();
   const [heroSearch, setHeroSearch] = useState('');
@@ -38,8 +42,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <div className="w-full flex flex-col justify-center">
-      {/* Main Hero Showcase */}
-      <section className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-14 max-w-7xl mx-auto flex flex-col items-center justify-center">
+      {/* 1. Top: Hero text content, centered */}
+      <section className="w-full px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 md:pt-12 pb-4 sm:pb-5 max-w-7xl mx-auto flex flex-col items-center justify-center">
         <div className="w-full max-w-3xl flex flex-col items-center text-center space-y-4 sm:space-y-5">
           {/* Harvester Badge */}
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/35 backdrop-blur-xs text-[#131b2e] text-[12px] font-semibold border border-white/50 shadow-2xs">
@@ -100,84 +104,87 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Centered Aisle Filter Buttons - Crystal Glass */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-2 sm:pt-3 max-w-2xl">
-            <button
-              type="button"
-              id="hero-category-all"
-              onClick={() => onSelectCategory('all')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'all'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('allAisles')}
-            </button>
-            <button
-              type="button"
-              id="hero-category-produce"
-              onClick={() => onSelectCategory('produce')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'produce'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('catProduce')}
-            </button>
-            <button
-              type="button"
-              id="hero-category-dairy"
-              onClick={() => onSelectCategory('dairy')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'dairy'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('catDairy')}
-            </button>
-            <button
-              type="button"
-              id="hero-category-bakery"
-              onClick={() => onSelectCategory('bakery')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'bakery'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('catBakery')}
-            </button>
-            <button
-              type="button"
-              id="hero-category-beverages"
-              onClick={() => onSelectCategory('beverages')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'beverages'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('catBeverages')}
-            </button>
-            <button
-              type="button"
-              id="hero-category-grains"
-              onClick={() => onSelectCategory('grains')}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
-                selectedCategory === 'grains'
-                  ? 'bg-[#006b2c] text-white shadow-xs'
-                  : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
-              }`}
-            >
-              {t('catGrains')}
-            </button>
-          </div>
         </div>
       </section>
+
+      {/* 2. Below the Hero text: Existing Product Image Carousel */}
+      <ProductImageCarousel products={products} />
+
+      {/* 3. Below the carousel: Existing category navigation */}
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-6 flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          id="hero-category-all"
+          onClick={() => onSelectCategory('all')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'all'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('allAisles')}
+        </button>
+        <button
+          type="button"
+          id="hero-category-produce"
+          onClick={() => onSelectCategory('produce')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'produce'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('catProduce')}
+        </button>
+        <button
+          type="button"
+          id="hero-category-dairy"
+          onClick={() => onSelectCategory('dairy')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'dairy'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('catDairy')}
+        </button>
+        <button
+          type="button"
+          id="hero-category-bakery"
+          onClick={() => onSelectCategory('bakery')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'bakery'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('catBakery')}
+        </button>
+        <button
+          type="button"
+          id="hero-category-beverages"
+          onClick={() => onSelectCategory('beverages')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'beverages'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('catBeverages')}
+        </button>
+        <button
+          type="button"
+          id="hero-category-grains"
+          onClick={() => onSelectCategory('grains')}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${
+            selectedCategory === 'grains'
+              ? 'bg-[#006b2c] text-white shadow-xs'
+              : 'bg-white/30 backdrop-blur-xs text-[#3e4a3d] hover:bg-white/55 border border-white/50 shadow-2xs'
+          }`}
+        >
+          {t('catGrains')}
+        </button>
+      </div>
     </div>
   );
 };

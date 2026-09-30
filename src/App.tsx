@@ -7,7 +7,6 @@ import { getCustomerOrders, updateOrderStatus, deleteCustomerOrder } from './ser
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { getStoredSettings, fetchServerSettings, updateServerSettings } from './services/settingsService';
 import { Header } from './components/Header';
-import { ProductImageCarousel } from './components/ProductImageCarousel';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
 import { ProductCard } from './components/ProductCard';
@@ -832,16 +831,14 @@ function FreshCartStore() {
         ) : currentUser ? (
           /* Main Grocery Storefront (Protected: only visible when successfully logged in) */
           <div className="flex flex-col w-full">
-            {/* Horizontal Product Image Carousel */}
-            <ProductImageCarousel products={products} />
-
-            {/* Hero Section */}
+            {/* Hero Section (Top: Centered Text -> Below: Product Image Carousel -> Below: Category Navigation) */}
             <HeroSection
               onSearch={handleSearchSubmit}
               selectedCategory={selectedCategory}
               onSelectCategory={handleCategorySelect}
               onApplyCoupon={(code) => setAppliedCoupon(code)}
               appliedCoupon={appliedCoupon}
+              products={products}
             />
 
             {/* Curated Catalog Category Grid */}
