@@ -686,13 +686,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <ArrowLeft className="w-4 h-4" />
               <span>{t('backToStorefrontBtn')}</span>
             </button>
-            <div className="h-4 w-px bg-[#475569] hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-              <span className="text-[13px] font-bold tracking-tight">
-                {t('adminStoreTitle')}
-              </span>
-            </div>
           </div>
 
           <div className="flex items-center gap-2.5 sm:gap-3">
