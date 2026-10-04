@@ -35,7 +35,23 @@ import {
   KeyRound,
   Percent,
   Truck,
+  CreditCard,
+  QrCode,
+  Eye,
+  CheckCircle2,
+  XCircle,
+  Upload,
+  RefreshCw,
+  FileText,
+  Download,
 } from 'lucide-react';
+import {
+  getPaymentSettings,
+  updatePaymentSettings,
+  subscribePaymentSettings,
+  PaymentSettings,
+} from '../services/paymentSettingsService';
+import { generateUpiQrCodeSvg } from '../utils/qrCodeGenerator';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
@@ -167,7 +183,18 @@ interface AdminPortalProps {
   onToggleCoupon: (couponId: string) => void;
   onDeleteInventoryLog?: (logId: string) => void;
   onClearInventoryLogs?: () => void;
-  onUpdateOrderStatus?: (orderId: string, status: string, extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }) => void;
+  onUpdateOrderStatus?: (
+    orderId: string,
+    status: string,
+    extraMeta?: {
+      otpVerifiedAt?: string;
+      handoverReleased?: boolean;
+      paymentStatus?: any;
+      paymentProofStatus?: any;
+      paymentProofRejectionReason?: string;
+      [key: string]: any;
+    }
+  ) => void;
   onDeleteCustomerOrder?: (orderId: string) => void;
   deliveryCharges?: number;
   onUpdateDeliveryCharges?: (charge: number) => Promise<void> | void;
@@ -175,6 +202,8 @@ interface AdminPortalProps {
   onUpdateDeliveryRules?: (rules: DeliveryChargeRule[]) => Promise<void> | void;
   taxAndPackingPercentage?: number;
   onUpdateTaxAndPacking?: (percentage: number) => Promise<void> | void;
+  onVerifyPayment?: (order: CustomerOrder) => void;
+  onRejectPayment?: (order: CustomerOrder, reason?: string) => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -203,12 +232,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onUpdateDeliveryRules,
   taxAndPackingPercentage,
   onUpdateTaxAndPacking,
+  onVerifyPayment,
+  onRejectPayment,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings'>('inventory');
 
   // Customizable Delivery Charges Rules State
   const [rules, setRules] = useState<DeliveryChargeRule[]>(() => {
@@ -453,6 +484,142 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const selectedOtpOrder = selectedOtpOrderId
     ? customerOrders.find((o) => o.id === selectedOtpOrderId)
     : null;
+
+  // Payment Settings state
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getPaymentSettings);
+  const [adminUpiId, setAdminUpiId] = useState<string>(paymentSettings.upiId);
+  const [adminPayeeName, setAdminPayeeName] = useState<string>(paymentSettings.payeeName);
+  const [adminQrCodeUrl, setAdminQrCodeUrl] = useState<string>(paymentSettings.qrCodeUrl || '');
+  const [adminUpiEnabled, setAdminUpiEnabled] = useState<boolean>(paymentSettings.upiPaymentEnabled);
+  const [adminDirectUpiEnabled, setAdminDirectUpiEnabled] = useState<boolean>(paymentSettings.directUpiAppEnabled);
+  const [initialUpiId, setInitialUpiId] = useState<string>(paymentSettings.upiId);
+  const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState<boolean>(false);
+  const [savePaymentSuccess, setSavePaymentSuccess] = useState<string>('');
+  const [savePaymentError, setSavePaymentError] = useState<string>('');
+
+  // Payment Proof Viewer & Rejection state for Customer Orders
+  const [selectedProofOrder, setSelectedProofOrder] = useState<CustomerOrder | null>(null);
+  const [rejectingOrder, setRejectingOrder] = useState<CustomerOrder | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribePaymentSettings((settings: PaymentSettings) => {
+      setPaymentSettings(settings);
+      setAdminUpiId(settings.upiId);
+      setAdminPayeeName(settings.payeeName);
+      setAdminQrCodeUrl(settings.qrCodeUrl || '');
+      setAdminUpiEnabled(settings.upiPaymentEnabled);
+      setAdminDirectUpiEnabled(settings.directUpiAppEnabled);
+      setInitialUpiId(settings.upiId);
+    });
+    return () => unsub();
+  }, []);
+
+  const isUpiIdChanged = adminUpiId.trim().toLowerCase() !== initialUpiId.trim().toLowerCase();
+
+  const handleAdminQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setSavePaymentError('Please select a valid image file (PNG, JPG, or SVG).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      if (dataUrl) {
+        setAdminQrCodeUrl(dataUrl);
+        setSavePaymentError('');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleAdminRegenerateQr = () => {
+    const cleanUpi = adminUpiId.trim() || 'freshcart@upi';
+    const cleanPayee = adminPayeeName.trim() || 'FreshCart Grocery Store';
+    const upiUri = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
+    const newSvg = generateUpiQrCodeSvg(upiUri, 320);
+    setAdminQrCodeUrl(newSvg);
+    setSavePaymentError('');
+  };
+
+  const handleSavePaymentSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingPaymentSettings(true);
+    setSavePaymentSuccess('');
+    setSavePaymentError('');
+    try {
+      await updatePaymentSettings({
+        upiId: adminUpiId.trim(),
+        payeeName: adminPayeeName.trim(),
+        qrCodeUrl: adminQrCodeUrl,
+        upiPaymentEnabled: adminUpiEnabled,
+        directUpiAppEnabled: adminDirectUpiEnabled,
+      });
+      setInitialUpiId(adminUpiId.trim());
+      setSavePaymentSuccess('Payment settings saved successfully and updated live across the store.');
+      setTimeout(() => setSavePaymentSuccess(''), 4000);
+    } catch (err: any) {
+      setSavePaymentError(err?.message || 'Failed to save payment settings.');
+    } finally {
+      setIsSavingPaymentSettings(false);
+    }
+  };
+
+  const handleAdminVerifyPayment = async (order: CustomerOrder) => {
+    setVerifyingOrderId(order.id);
+    try {
+      await fetch(`/api/orders/${encodeURIComponent(order.id)}/verify-payment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify' }),
+      });
+    } catch (e) {
+      console.warn('Backend verify API sync fallback', e);
+    }
+
+    if (onVerifyPayment) {
+      onVerifyPayment(order);
+    } else if (onUpdateOrderStatus) {
+      onUpdateOrderStatus(order.id, 'Confirmed', {
+        paymentStatus: 'Paid',
+        paymentProofStatus: 'Verified',
+      });
+    }
+    setVerifyingOrderId(null);
+    setSelectedProofOrder(null);
+    setPulseToast(`Payment for order ${order.id} verified as PAID. Order confirmed.`);
+    setTimeout(() => setPulseToast(null), 3500);
+  };
+
+  const handleAdminRejectPayment = async (order: CustomerOrder, reason: string) => {
+    try {
+      await fetch(`/api/orders/${encodeURIComponent(order.id)}/verify-payment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', reason }),
+      });
+    } catch (e) {
+      console.warn('Backend reject API sync fallback', e);
+    }
+
+    if (onRejectPayment) {
+      onRejectPayment(order, reason);
+    } else if (onUpdateOrderStatus) {
+      onUpdateOrderStatus(order.id, 'Pending', {
+        paymentStatus: 'Rejected',
+        paymentProofStatus: 'Rejected',
+        paymentProofRejectionReason: reason || 'Payment proof verification rejected by merchant',
+      });
+    }
+    setRejectingOrder(null);
+    setSelectedProofOrder(null);
+    setPulseToast(`Payment proof for order ${order.id} rejected.`);
+    setTimeout(() => setPulseToast(null), 3500);
+  };
 
   const customCategories = Array.from(
     new Set(products.map((p) => p.category))
@@ -857,6 +1024,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Truck className="w-4 h-4" />
             <span>{t('tabSettings') || 'Delivery Charges'}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-payment-settings"
+            onClick={() => {
+              setActiveTab('payment-settings');
+              setSelectedOtpOrderId(null);
+            }}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'payment-settings'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>{t('adminPaymentSettings') || 'Payment Settings'}</span>
           </button>
         </div>
 
@@ -1861,6 +2044,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   textLines.push('');
                   textLines.push(`Total: ${formatINR(order.total)}`);
                   textLines.push(`Status: ${order.status}`);
+                  if (order.paymentMethod) {
+                    textLines.push(`Payment Method: ${order.paymentMethod}`);
+                  }
+                  if (order.paymentStatus) {
+                    textLines.push(`Payment Status: ${order.paymentStatus}`);
+                  }
+                  if (order.paymentProofStatus) {
+                    textLines.push(`Payment Proof Status: ${order.paymentProofStatus}`);
+                  }
 
                   const fullOrderText = textLines.join('\n');
 
@@ -1876,7 +2068,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                               order.status === 'Picking'
                                 ? 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
-                                : order.status === 'Ordered'
+                                : order.status === 'Ordered' || order.status === 'Confirmed'
                                 ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
                                 : order.status === 'Delivered'
                                 ? 'bg-[#eff4ff] text-[#1d4ed8] border-[#bfdbfe]'
@@ -1887,8 +2079,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </span>
                         </div>
 
-                        {/* Actions: Copy Record, OTP button, Read-only Status */}
-                        <div className="flex items-center gap-2">
+                        {/* Actions: Copy Record, OTP button, Payment Proof actions, Read-only Status */}
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             title="Copy order record text"
@@ -1912,6 +2104,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
+                          {/* Payment Proof: View Proof button */}
+                          {(order.paymentProofUrl || (order.paymentProofStatus && order.paymentProofStatus !== 'Not Uploaded')) && (
+                            <button
+                              type="button"
+                              id={`order-view-proof-btn-${order.id.replace('#', '')}`}
+                              onClick={() => setSelectedProofOrder(order)}
+                              title={`View payment proof for ${displayOrderId}`}
+                              className="px-2.5 py-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-950/40 hover:bg-sky-900/50 border border-sky-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-sky-400" />
+                              <span>View Proof</span>
+                            </button>
+                          )}
+
+                          {/* Verify Payment and Reject Proof buttons for pending verification */}
+                          {(order.paymentStatus === 'Pending Verification' || order.paymentProofStatus === 'Under Verification' || order.paymentProofStatus === 'Uploaded') && (
+                            <>
+                              <button
+                                type="button"
+                                id={`order-verify-payment-btn-${order.id.replace('#', '')}`}
+                                onClick={() => handleAdminVerifyPayment(order)}
+                                disabled={verifyingOrderId === order.id}
+                                title={`Verify payment as PAID and confirm order ${displayOrderId}`}
+                                className="px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981]" />
+                                <span>{verifyingOrderId === order.id ? 'Verifying...' : 'Verify Payment'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                id={`order-reject-proof-btn-${order.id.replace('#', '')}`}
+                                onClick={() => {
+                                  setRejectingOrder(order);
+                                  setRejectionReason('');
+                                }}
+                                title={`Reject payment proof for ${displayOrderId}`}
+                                className="px-2.5 py-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
+                              >
+                                <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                                <span>Reject Proof</span>
+                              </button>
+                            </>
+                          )}
+
                           {/* Small "OTP" button to open separate OTP Verification page */}
                           {order.status === 'Picking' && (
                             <button
@@ -1928,7 +2164,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             </button>
                           )}
 
-                          {/* Automatic read-only status display — manual status control removed */}
+                          {/* Automatic read-only status display */}
                           <div
                             id={`order-status-display-${order.id}`}
                             className={`px-2.5 py-1 text-[11px] font-bold border rounded-lg select-none cursor-default ${
@@ -1936,6 +2172,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                 ? 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
                                 : order.status === 'Delivered'
                                 ? 'bg-[#eff4ff] text-[#1d4ed8] border-[#bfdbfe]'
+                                : order.status === 'Confirmed'
+                                ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
                                 : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'
                             }`}
                           >
@@ -1992,13 +2230,80 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             })}
                           </ul>
                         </div>
-                        <div className="pt-2 border-t border-white/10">
-                          <span className="font-semibold text-[#94a3b8]">Total: </span>
-                          <span className="font-bold text-[#10b981]">{formatINR(order.total)}</span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-[#94a3b8]">Status: </span>
-                          <span className="font-bold text-[#10b981]">{order.status}</span>
+                        <div className="pt-2 border-t border-white/10 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-[#94a3b8]">Total: </span>
+                            <span className="font-bold text-[#10b981]">{formatINR(order.total)}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-[#94a3b8]">Status: </span>
+                            <span className="font-bold text-[#10b981]">{order.status}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-[#94a3b8]">Payment Method: </span>
+                            <span className="font-semibold text-white">
+                              {order.paymentMethod || 'Cash on Delivery'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-[#94a3b8]">Payment Status: </span>
+                            <span
+                              id={`order-payment-status-${order.id.replace('#', '')}`}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                order.paymentStatus === 'Paid'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                  : order.paymentStatus === 'Pending Verification'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                  : order.paymentStatus === 'Rejected'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                  : 'bg-slate-700/40 text-slate-300 border border-slate-600/40'
+                              }`}
+                            >
+                              {order.paymentStatus || (order.status === 'Delivered' ? 'Paid' : 'Pending')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-[#94a3b8]">Payment Proof: </span>
+                            <span
+                              id={`order-proof-status-${order.id.replace('#', '')}`}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                order.paymentProofStatus === 'Verified'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                  : order.paymentProofStatus === 'Under Verification' || order.paymentProofStatus === 'Uploaded'
+                                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                                  : order.paymentProofStatus === 'Rejected'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                  : 'bg-slate-700/40 text-slate-400 border border-slate-600/40'
+                              }`}
+                            >
+                              {order.paymentProofStatus || 'Not Uploaded'}
+                            </span>
+                          </div>
+                          {order.paymentProofName && (
+                            <div>
+                              <span className="font-semibold text-[#94a3b8]">Uploaded File: </span>
+                              <span className="text-slate-200 text-[12px]">{order.paymentProofName}</span>
+                              {order.paymentProofSize && (
+                                <span className="text-[#94a3b8] text-[11px] ml-1">
+                                  ({(order.paymentProofSize / 1024).toFixed(1)} KB)
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {order.paymentProofUploadedAt && (
+                            <div>
+                              <span className="font-semibold text-[#94a3b8]">Upload Date/Time: </span>
+                              <span className="text-slate-200 text-[12px]">
+                                {formatOrderDateTime(order.paymentProofUploadedAt)}
+                              </span>
+                            </div>
+                          )}
+                          {order.paymentProofRejectionReason && (
+                            <div className="text-rose-400 text-[12px]">
+                              <span className="font-semibold">Rejection Reason: </span>
+                              <span>{order.paymentProofRejectionReason}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2589,6 +2894,241 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Tab 6: Payment Settings */}
+        {activeTab === 'payment-settings' && (
+          <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl p-5 sm:p-6 space-y-6">
+            {/* Header */}
+            <div className="pb-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[18px] font-bold text-white font-display flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-[#10b981]" />
+                  <span>PAYMENT SETTINGS</span>
+                </h3>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">
+                  Configure store UPI credentials, merchant name, scan-and-pay QR code, and payment method toggles.
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold flex items-center gap-1.5 ${
+                  adminUpiEnabled || adminDirectUpiEnabled
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${adminUpiEnabled || adminDirectUpiEnabled ? 'bg-[#10b981]' : 'bg-rose-500'}`} />
+                  {adminUpiEnabled || adminDirectUpiEnabled ? 'Online Payments Active' : 'Online Payments Disabled'}
+                </span>
+              </div>
+            </div>
+
+            {/* Notification Toasts */}
+            {savePaymentSuccess && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[13px] flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{savePaymentSuccess}</span>
+              </div>
+            )}
+            {savePaymentError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[13px] flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{savePaymentError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSavePaymentSettings} className="space-y-6">
+              {/* UPI ID Field */}
+              <div className="space-y-1.5">
+                <label htmlFor="admin-upi-id-input" className="block text-[13px] font-bold text-slate-200">
+                  UPI ID <span className="text-emerald-400">*</span>
+                </label>
+                <div className="relative max-w-md">
+                  <input
+                    id="admin-upi-id-input"
+                    type="text"
+                    value={adminUpiId}
+                    onChange={(e) => setAdminUpiId(e.target.value)}
+                    placeholder="e.g. freshcart@upi"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/30 border border-white/15 text-white font-mono text-[14px] focus:outline-hidden focus:ring-2 focus:ring-[#10b981] placeholder:text-[#64748b]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#94a3b8]">
+                  The Virtual Payment Address (VPA) customers will pay to (e.g. freshcart@okhdfcbank, merchant@upi).
+                </p>
+              </div>
+
+              {/* Requirement 6: UPI ID Change Warning Banner */}
+              {isUpiIdChanged && (
+                <div
+                  id="admin-upi-qr-warning"
+                  className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex items-start gap-3 animate-in fade-in"
+                >
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-[13px]">
+                    <p className="font-bold text-amber-300">Warning: UPI ID has been modified</p>
+                    <p>Changing the UPI ID may make the current QR code invalid. Please upload a new QR code for the updated UPI ID.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Payee / Merchant Name Field */}
+              <div className="space-y-1.5">
+                <label htmlFor="admin-payee-name-input" className="block text-[13px] font-bold text-slate-200">
+                  Payee / Merchant Name <span className="text-emerald-400">*</span>
+                </label>
+                <div className="relative max-w-md">
+                  <input
+                    id="admin-payee-name-input"
+                    type="text"
+                    value={adminPayeeName}
+                    onChange={(e) => setAdminPayeeName(e.target.value)}
+                    placeholder="e.g. FreshCart Grocery Store"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/30 border border-white/15 text-white text-[14px] focus:outline-hidden focus:ring-2 focus:ring-[#10b981] placeholder:text-[#64748b]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#94a3b8]">
+                  Verified merchant or business name shown to customers inside Google Pay, PhonePe, and Paytm.
+                </p>
+              </div>
+
+              {/* Current QR Code Preview & Management */}
+              <div className="space-y-2">
+                <label className="block text-[13px] font-bold text-slate-200">
+                  Current QR Code
+                </label>
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 p-4 rounded-xl bg-black/25 border border-white/10">
+                  {/* QR Preview Box */}
+                  <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center shrink-0">
+                    {adminQrCodeUrl ? (
+                      <img
+                        id="admin-qr-preview-img"
+                        src={adminQrCodeUrl}
+                        alt="Current Payment QR Code Preview"
+                        className="w-full h-full object-contain select-none"
+                      />
+                    ) : (
+                      <div className="text-center text-slate-400 text-[12px] p-2">
+                        <QrCode className="w-10 h-10 mx-auto mb-1 text-slate-300" />
+                        <span>No QR Code active</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* QR Actions & Details */}
+                  <div className="space-y-3 flex-1 text-center sm:text-left">
+                    <div className="text-[12px] text-slate-300 space-y-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <span className="font-semibold text-[#94a3b8]">Currently Active UPI:</span>
+                        <span className="font-mono text-emerald-400 font-bold">{adminUpiId || 'freshcart@upi'}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <span className="font-semibold text-[#94a3b8]">Merchant Name:</span>
+                        <span className="text-white font-medium">{adminPayeeName || 'FreshCart Grocery Store'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 pt-1">
+                      {/* Upload New QR Button */}
+                      <label
+                        id="admin-upload-qr-btn"
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-bold transition-colors cursor-pointer flex items-center gap-2 shadow-xs"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload New QR</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAdminQrFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {/* Auto-generate / Reset Standard QR Button */}
+                      <button
+                        type="button"
+                        id="admin-generate-qr-btn"
+                        onClick={handleAdminRegenerateQr}
+                        className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[13px] font-semibold transition-colors cursor-pointer flex items-center gap-2"
+                        title="Generate standard UPI QR code from current UPI ID"
+                      >
+                        <RefreshCw className="w-4 h-4 text-emerald-400" />
+                        <span>Auto-Generate from UPI ID</span>
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-[#94a3b8]">
+                      Upload your official QR code image (PNG, JPG, or SVG) or click "Auto-Generate from UPI ID" to generate an SVG QR code matching your active UPI credentials.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Methods Enable/Disable Toggles */}
+              <div className="space-y-3 pt-2 border-t border-white/10">
+                <label className="block text-[13px] font-bold text-slate-200">
+                  Payment Method Availability
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Toggle 1: UPI / QR Payment */}
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-black/25 border border-white/10 cursor-pointer hover:bg-black/35 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="admin-toggle-upi-payment"
+                      checked={adminUpiEnabled}
+                      onChange={(e) => setAdminUpiEnabled(e.target.checked)}
+                      className="w-4 h-4 mt-1 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[13px] font-bold text-white block">
+                        UPI / QR Payment
+                      </span>
+                      <span className="text-[11px] text-[#94a3b8] block mt-0.5">
+                        Display QR code, UPI ID, and scan-to-pay info in checkout.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Toggle 2: Direct UPI App Payment */}
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-black/25 border border-white/10 cursor-pointer hover:bg-black/35 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="admin-toggle-direct-upi-payment"
+                      checked={adminDirectUpiEnabled}
+                      onChange={(e) => setAdminDirectUpiEnabled(e.target.checked)}
+                      className="w-4 h-4 mt-1 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[13px] font-bold text-white block">
+                        Direct UPI App Payment
+                      </span>
+                      <span className="text-[11px] text-[#94a3b8] block mt-0.5">
+                        Allow customers to launch Google Pay, PhonePe, Paytm, or BHIM apps.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-4 border-t border-white/10 flex items-center justify-end">
+                <button
+                  type="submit"
+                  id="admin-save-payment-settings-btn"
+                  disabled={isSavingPaymentSettings}
+                  className="px-6 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[14px] font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingPaymentSettings ? 'Saving Settings...' : 'Save Payment Settings'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Add New Product Modal */}
@@ -2836,6 +3376,196 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           setTimeout(() => setPulseToast(null), 3500);
         }}
       />
+
+      {/* Payment Proof Viewer Modal */}
+      {selectedProofOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#0b1c30] border border-white/15 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-[16px] font-bold text-white">
+                    Payment Proof — {selectedProofOrder.id.startsWith('#') ? selectedProofOrder.id : `#${selectedProofOrder.id}`}
+                  </h3>
+                  <p className="text-[11px] text-[#94a3b8]">
+                    Customer: {selectedProofOrder.customerName} • Total: {formatINR(selectedProofOrder.total)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedProofOrder(null)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Meta details grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-black/30 border border-white/10 text-[11px]">
+                <div>
+                  <span className="text-[#94a3b8] block">Payment Method</span>
+                  <span className="font-bold text-white block mt-0.5">
+                    {selectedProofOrder.paymentMethod || 'Online Payment'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#94a3b8] block">Payment Status</span>
+                  <span className="font-bold text-emerald-400 block mt-0.5">
+                    {selectedProofOrder.paymentStatus || 'Pending Verification'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#94a3b8] block">Proof Status</span>
+                  <span className="font-bold text-sky-400 block mt-0.5">
+                    {selectedProofOrder.paymentProofStatus || 'Uploaded'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#94a3b8] block">Uploaded At</span>
+                  <span className="font-bold text-slate-300 block mt-0.5">
+                    {selectedProofOrder.paymentProofUploadedAt
+                      ? formatOrderDateTime(selectedProofOrder.paymentProofUploadedAt)
+                      : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              {/* File preview */}
+              <div className="border border-white/10 rounded-xl overflow-hidden bg-black/40 p-3 flex flex-col items-center justify-center min-h-[240px]">
+                {selectedProofOrder.paymentProofUrl ? (
+                  selectedProofOrder.paymentProofType?.includes('pdf') || selectedProofOrder.paymentProofName?.toLowerCase().endsWith('.pdf') ? (
+                    <div className="w-full space-y-3 text-center py-6">
+                      <FileText className="w-16 h-16 text-rose-400 mx-auto" />
+                      <div>
+                        <p className="text-[14px] font-bold text-white">{selectedProofOrder.paymentProofName || 'Receipt.pdf'}</p>
+                        <p className="text-[12px] text-[#94a3b8] mt-0.5">
+                          PDF Document {selectedProofOrder.paymentProofSize ? `(${(selectedProofOrder.paymentProofSize / 1024).toFixed(1)} KB)` : ''}
+                        </p>
+                      </div>
+                      <a
+                        href={selectedProofOrder.paymentProofUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[12px] font-bold transition-colors cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Open / Download PDF Document</span>
+                      </a>
+                    </div>
+                  ) : (
+                    <img
+                      src={selectedProofOrder.paymentProofUrl}
+                      alt="Uploaded Payment Receipt Proof"
+                      className="max-h-[380px] max-w-full object-contain rounded-lg shadow-md"
+                    />
+                  )
+                ) : (
+                  <div className="text-center py-8 text-slate-400 text-[13px]">
+                    <FileText className="w-12 h-12 mx-auto mb-2 opacity-40 text-slate-300" />
+                    <span>No proof file uploaded for this order yet.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 bg-black/20">
+              <button
+                type="button"
+                onClick={() => setSelectedProofOrder(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-300 hover:bg-white/10 cursor-pointer"
+              >
+                Close
+              </button>
+
+              {(selectedProofOrder.paymentStatus === 'Pending Verification' ||
+                selectedProofOrder.paymentProofStatus === 'Under Verification' ||
+                selectedProofOrder.paymentProofStatus === 'Uploaded') && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectingOrder(selectedProofOrder);
+                      setRejectionReason('');
+                    }}
+                    className="px-4 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-500/50 text-rose-300 text-[13px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Reject Proof</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAdminVerifyPayment(selectedProofOrder)}
+                    disabled={verifyingOrderId === selectedProofOrder.id}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{verifyingOrderId === selectedProofOrder.id ? 'Verifying...' : 'Verify Payment (Confirm Order)'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Proof Prompt Modal */}
+      {rejectingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#0b1c30] border border-white/15 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
+                <XCircle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-white font-display">
+                  Reject Payment Proof
+                </h3>
+                <p className="text-[12px] text-[#94a3b8]">
+                  Order {rejectingOrder.id.startsWith('#') ? rejectingOrder.id : `#${rejectingOrder.id}`} • Total {formatINR(rejectingOrder.total)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-slate-300 leading-relaxed">
+              Rejecting this proof will keep the order unconfirmed and mark payment as Rejected. Please provide a reason for the customer:
+            </p>
+
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="e.g. Transaction reference not found / amount does not match order total"
+              rows={3}
+              className="w-full px-3 py-2 text-[13px] rounded-xl bg-black/30 border border-white/15 text-white placeholder:text-[#64748b] focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setRejectingOrder(null)}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold text-slate-300 hover:bg-white/10 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-reject-payment-btn"
+                onClick={() => handleAdminRejectPayment(rejectingOrder, rejectionReason)}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Reject Proof
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

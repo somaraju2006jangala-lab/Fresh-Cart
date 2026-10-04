@@ -935,7 +935,14 @@ export function saveOrderForCustomer(order: CustomerOrder): void {
 export function updateOrderStatus(
   orderId: string,
   newStatus: string,
-  extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }
+  extraMeta?: {
+    otpVerifiedAt?: string;
+    handoverReleased?: boolean;
+    paymentStatus?: any;
+    paymentProofStatus?: any;
+    paymentProofRejectionReason?: string;
+    [key: string]: any;
+  }
 ): void {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);

@@ -65,6 +65,15 @@ export interface Order {
   createdAt: string;
   otpVerifiedAt?: string;
   handoverReleased?: boolean;
+  paymentMethod?: string;
+  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'Pending Verification' | 'Rejected' | string;
+  paymentProofStatus?: 'Not Uploaded' | 'Uploaded' | 'Under Verification' | 'Verified' | 'Rejected' | string;
+  paymentProofUrl?: string;
+  paymentProofName?: string;
+  paymentProofSize?: number;
+  paymentProofType?: string;
+  paymentProofUploadedAt?: string;
+  paymentProofRejectionReason?: string;
 }
 
 export interface CustomerAddress {
@@ -95,7 +104,6 @@ export interface Customer {
 export interface CustomerOrder extends Order {
   customerId?: string;
   estimatedDeliveryTime?: string;
-  paymentMethod?: string;
 }
 
 export interface Coupon {
@@ -118,5 +126,14 @@ export interface DeliveryChargeRule {
   id: string;
   minOrderAmount: number;
   deliveryCharge: number; // 0 indicates FREE delivery
+}
+
+export interface PaymentSettings {
+  upiId: string;
+  payeeName: string;
+  qrCodeUrl?: string;
+  upiPaymentEnabled: boolean;
+  directUpiAppEnabled: boolean;
+  updatedAt?: string;
 }
 

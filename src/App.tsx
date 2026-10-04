@@ -472,6 +472,56 @@ function FreshCartStore() {
     setCustomerOrders(getCustomerOrders());
   };
 
+  const handleVerifyPayment = (order: CustomerOrder) => {
+    // 1. Deduct inventory for all items in order
+    setProducts((prev) =>
+      prev.map((p) => {
+        const purchased = order.items.find((it) => it.product.id === p.id);
+        if (purchased) {
+          const newStock = Math.max(0, p.stock - purchased.quantity);
+          return { ...p, stock: newStock };
+        }
+        return p;
+      })
+    );
+
+    // 2. Record CDC audit logs for the purchase
+    order.items.forEach((it) => {
+      const currentProd = products.find((p) => p.id === it.product.id);
+      const remainingStock = Math.max(0, (currentProd ? currentProd.stock : it.product.stock) - it.quantity);
+      const { date, time, timestamp } = createLogTimestamp();
+      const logEntry: InventoryLog = {
+        id: `log-${Date.now()}-${it.product.id}`,
+        timestamp,
+        date,
+        time,
+        sku: it.product.sku,
+        productTitle: it.product.title,
+        changeType: 'SALE',
+        quantityChange: -it.quantity,
+        newStock: remainingStock,
+        operator: 'Admin Payment Verification',
+        notes: `Online Payment Verified for Order ${order.id} (${it.quantity} ${it.product.unit})`,
+      };
+      setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+    });
+
+    // 3. Mark payment as Paid and order as Confirmed
+    handleUpdateOrderStatus(order.id, 'Confirmed', {
+      paymentStatus: 'Paid',
+      paymentProofStatus: 'Verified',
+    });
+  };
+
+  const handleRejectPayment = (order: CustomerOrder, reason?: string) => {
+    // Payment rejected: keep order unconfirmed and do NOT deduct inventory
+    handleUpdateOrderStatus(order.id, 'Pending', {
+      paymentStatus: 'Rejected',
+      paymentProofStatus: 'Rejected',
+      paymentProofRejectionReason: reason || 'Invalid payment receipt',
+    });
+  };
+
   // Inventory Updates (from Admin or simulated events)
   const handleUpdateProductStock = (productId: string, newStock: number, reason: string) => {
     const validStock = Math.max(0, newStock);
@@ -753,6 +803,8 @@ function FreshCartStore() {
             onUpdateDeliveryCharges={handleUpdateDeliveryCharges}
             deliveryRules={deliveryRules}
             onUpdateDeliveryRules={handleUpdateDeliveryRules}
+            onVerifyPayment={handleVerifyPayment}
+            onRejectPayment={handleRejectPayment}
           />
         ) : currentView === 'login' ? (
           <LoginPage
