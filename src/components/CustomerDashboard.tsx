@@ -321,7 +321,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       </div>
 
       {/* Welcome Banner Card */}
-      <div className="mt-6 rounded-3xl bg-linear-to-r from-[#006b2c]/95 via-[#007832]/95 to-[#044c21]/95 backdrop-blur-xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-white/20">
+      <div className="mt-6 rounded-3xl bg-[#006b2c]/20 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-emerald-500/30">
         {/* Subtle decorative circles */}
         <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-2xl pointer-events-none transform translate-x-20 -translate-y-20" />
 

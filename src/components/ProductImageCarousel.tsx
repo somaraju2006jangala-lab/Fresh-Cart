@@ -161,7 +161,7 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({ prod
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full rounded-3xl bg-[#06140c]/85 border border-emerald-500/25 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.35)] py-6 sm:py-8 overflow-hidden select-none"
+        className="relative w-full rounded-3xl bg-transparent border border-emerald-500/20 shadow-[0_16px_45px_rgba(0,0,0,0.25)] py-6 sm:py-8 overflow-hidden select-none"
       >
         {/* Ambient emerald backlight in the container */}
         <div
@@ -230,7 +230,7 @@ export const ProductImageCarousel: React.FC<ProductImageCarouselProps> = ({ prod
                 }`}
               >
                 {/* Pure Product Image Only — No text, no price, no labels, no badges, no buttons */}
-                <div className="relative w-full h-full bg-[#0a1610]">
+                <div className="relative w-full h-full bg-transparent">
                   <img
                     src={item.image}
                     alt=""

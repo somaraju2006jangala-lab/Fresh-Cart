@@ -15,7 +15,7 @@ export const Footer: React.FC<FooterProps> = ({
 }) => {
   const { t } = useLanguage();
   return (
-    <footer className="w-full bg-white/60 backdrop-blur-xl mt-10 border-t border-white/70">
+    <footer className="w-full bg-transparent mt-10 border-t border-white/10">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
         {/* Customer Care */}
         <div>

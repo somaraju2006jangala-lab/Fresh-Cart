@@ -5,9 +5,9 @@ import { useLanguage } from '../context/LanguageContext';
 export const TrustBanner: React.FC = () => {
   const { t } = useLanguage();
   return (
-    <section className="w-full bg-white/50 backdrop-blur-md py-10 px-4 sm:px-6 lg:px-8 my-8 border-y border-white/70">
+    <section className="w-full bg-transparent py-10 px-4 sm:px-6 lg:px-8 my-8 border-y border-white/10">
       <div className="max-w-2xl mx-auto flex items-start justify-center gap-4">
-        <div className="p-3 rounded-2xl bg-white/90 backdrop-blur-md text-[#006b2c] shadow-sm shrink-0 border border-white/80">
+        <div className="p-3 rounded-2xl bg-white/[0.04] text-[#006b2c] shadow-sm shrink-0 border border-white/15">
           <Timer className="w-7 h-7 text-[#006b2c]" />
         </div>
         <div>

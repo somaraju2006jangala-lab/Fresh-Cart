@@ -675,7 +675,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   return (
     <div className="w-full min-h-screen bg-transparent text-[#0b1c30] pb-16 relative z-10">
       {/* Top Admin Action Bar */}
-      <div className="bg-[#1e293b]/92 backdrop-blur-xl text-white py-3 px-4 sm:px-6 shadow-md border-b border-[#334155]/80">
+      <div className="bg-transparent text-white py-3 px-4 sm:px-6 border-b border-white/10">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button

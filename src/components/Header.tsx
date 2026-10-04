@@ -87,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="fixed top-0 left-0 w-full z-40 bg-white/40 backdrop-blur-lg border-b border-white/50 shadow-[0_4px_24px_rgba(0,0,0,0.02)] transition-all">
+    <header className="fixed top-0 left-0 w-full z-40 bg-transparent border-b border-white/10 transition-all">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-2.5 flex flex-col justify-between">
         {/* Top Tier */}
         <div className="flex items-center justify-between gap-3 sm:gap-6">

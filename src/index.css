@@ -34,21 +34,29 @@
 }
 
 /* ==========================================================================
-   BLACK LIQUID CRYSTAL-CLEAR GLASS THEME
-   - High transparency black glass (rgba(10, 14, 23, 0.42))
-   - Deep dimensional depth & blur
-   - Thin translucent crystal borders (rgba(255, 255, 255, 0.12))
-   - Subtle inner specular highlights
-   - Background liquid & orbital particle visibility through all panels
+   GLOBAL TRANSPARENT VISUAL DESIGN
+   - Main surfaces, panels, tables, and content containers are transparent
+   - The underlying organic black liquid crystal and orbital particle background
+     remains 100% visible throughout the entire website
+   - No heavy glass blurs or opaque panels obscuring the liquid canvas
+   - Subtle crystal borders provide clean separation of sections
+   - Text is high contrast, crisp, and readable
+   - Buttons, badges, and controls are visually distinct and interactive
    ========================================================================== */
 
-/* Base Black Crystal Glass Panel */
+/* Universal elimination of heavy backdrop blurs across all containers */
+*,
+*::before,
+*::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Base Transparent Panel */
 .glass-panel {
-  background: rgba(10, 14, 23, 0.42);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12);
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
   position: relative;
 }
 
@@ -59,17 +67,15 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
   pointer-events: none;
 }
 
-/* Elevated Black Crystal Glass Surface (Modals, drawers, hero banners) */
+/* Elevated Transparent Surface (Modals, drawers, popups) */
 .glass-panel-elevated {
-  background: rgba(12, 17, 28, 0.58);
-  backdrop-filter: blur(20px) saturate(190%);
-  -webkit-backdrop-filter: blur(20px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.75), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+  background: rgba(6, 9, 15, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7) !important;
   position: relative;
 }
 
@@ -80,28 +86,26 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
   pointer-events: none;
 }
 
-/* Product & Content Black Crystal Glass Card */
+/* Product & Content Transparent Card */
 .glass-card {
-  background: rgba(10, 14, 22, 0.38);
-  backdrop-filter: blur(14px) saturate(170%);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 24px -2px rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.3s ease,
-              background 0.3s ease;
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s ease,
+              background-color 0.25s ease !important;
   position: relative;
 }
 
 .glass-card:hover {
-  background: rgba(16, 22, 34, 0.52);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.65), 0 0 20px 1px rgba(16, 185, 129, 0.15), inset 0 1px 2px 0 rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 107, 44, 0.2) !important;
 }
 
 .glass-card::before {
@@ -111,55 +115,55 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
   pointer-events: none;
 }
 
-/* Black Crystal Glass Pill / Chip */
+/* Transparent Pill / Chip */
 .glass-pill {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-pill:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
   transform: translateY(-1px);
 }
 
-/* Black Crystal Glass Header */
-.glass-header {
-  background: rgba(6, 9, 15, 0.65);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6), inset 0 -1px 0 0 rgba(255, 255, 255, 0.08);
+/* Transparent Header */
+.glass-header,
+header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
 }
 
-/* Black Crystal Glass Input */
-.glass-input {
-  background: rgba(14, 20, 32, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #f8fafc;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+/* Inputs & Form Elements (crisp contrast & high legibility) */
+.glass-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),
+select,
+textarea {
+  background-color: rgba(10, 16, 26, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
   transition: all 0.2s ease;
 }
 
-.glass-input:focus {
-  background: rgba(20, 28, 44, 0.65);
-  border-color: rgba(16, 185, 129, 0.6);
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.15);
+.glass-input:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  background-color: rgba(14, 22, 35, 0.85) !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.1) !important;
 }
 
 /* ==========================================================================
    BUTTON & HOVER ELEVATIONS
-   - Emerald accents glowing against black crystal
+   - Emerald accents glowing against transparent black liquid background
    ========================================================================== */
 
 .glass-button {
@@ -185,7 +189,7 @@
 .bg-\[\#15803d\],
 .bg-\[\#16a34a\] {
   background: linear-gradient(135deg, #00873a 0%, #006b2c 100%) !important;
-  border: 1px solid rgba(127, 252, 151, 0.25) !important;
+  border: 1px solid rgba(127, 252, 151, 0.3) !important;
   box-shadow: 0 4px 16px -2px rgba(0, 107, 44, 0.4), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25) !important;
   color: #ffffff !important;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
@@ -208,7 +212,6 @@
 
 /* ==========================================================================
    CART & FLOATING TOGGLE INTERACTIONS
-   - Black crystal glass base + subtle emerald accent glow
    ========================================================================== */
 
 .cart-icon-glow {
@@ -228,7 +231,6 @@
   transform: translateY(0px) scale(0.97);
 }
 
-/* Floating cart toggle button with flowing animation */
 @keyframes cartFloatFlow {
   0%, 100% {
     transform: translateY(0px);
@@ -243,8 +245,6 @@
 .cart-floating-glow {
   background: #006b2c !important;
   color: #ffffff !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   box-shadow: 0 12px 28px -4px rgba(0, 107, 44, 0.6), 0 0 20px 3px rgba(16, 185, 129, 0.35) !important;
   animation: cartFloatFlow 5s ease-in-out infinite;
@@ -294,9 +294,9 @@
 }
 
 /* ==========================================================================
-   COMPREHENSIVE BLACK CRYSTAL GLASS CLASS MAPPINGS
-   Ensures EVERY existing panel, table, input, row, card, and modal
-   seamlessly transforms into crystal-clear black glass.
+   COMPREHENSIVE TRANSPARENT CLASS MAPPINGS
+   Ensures EVERY existing panel, table, row, card, section, and modal
+   is transparent so the liquid crystal effects are visible through everything.
    ========================================================================== */
 
 /* 1. TEXT CONTRAST & LEGIBILITY */
@@ -306,7 +306,8 @@
 .text-\[\#3e4a3d\],
 .text-\[\#334155\],
 .text-\[\#002109\] {
-  color: #f8fafc !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .text-\[\#565e74\],
@@ -352,7 +353,7 @@
   color: #f87171 !important;
 }
 
-/* 2. TRANSLUCENT BLACK CRYSTAL GLASS PANELS & CARDS */
+/* 2. TRANSPARENT PANELS, CARDS & CONTAINERS */
 .bg-white\/35,
 .bg-white\/40,
 .bg-white\/45,
@@ -362,98 +363,51 @@
 .bg-white\/70,
 .bg-white\/80,
 .bg-white\/90,
-.bg-white {
-  background-color: rgba(10, 14, 23, 0.42) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12) !important;
-}
-
+.bg-white,
 .bg-white\/20,
 .bg-white\/25,
-.bg-white\/30 {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-}
-
+.bg-white\/30,
 .bg-white\/15,
 .bg-white\/10,
 .bg-white\/5 {
-  background-color: rgba(255, 255, 255, 0.03) !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 
 :not(body):not(html):not(#root).bg-\[\#f8f9ff\],
 :not(body):not(html):not(#root).bg-\[\#f8fafc\],
-:not(body):not(html):not(#root).bg-\[\#f1f5f9\] {
-  background-color: rgba(6, 9, 15, 0.42) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
+:not(body):not(html):not(#root).bg-\[\#f1f5f9\],
+:not(body):not(html):not(#root).bg-\[\#e2e8f0\],
+:not(body):not(html):not(#root).bg-\[\#eff4ff\],
+:not(body):not(html):not(#root).bg-\[\#dce9ff\],
+:not(body):not(html):not(#root).bg-\[\#e0e7ff\],
+:not(body):not(html):not(#root).bg-\[\#e5eeff\],
+:not(body):not(html):not(#root).bg-\[\#dbeafe\],
+.bg-\[\#1e293b\]\/92,
+.bg-\[\#06140c\]\/85,
+.bg-\[\#0a1610\],
+.bg-\[\#eff4ff\]\/60,
+.bg-\[\#f1f5f9\]\/50 {
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 
 body.bg-\[\#f8f9ff\],
 body.bg-\[\#f8fafc\],
 body.bg-\[\#f1f5f9\] {
   background-color: #030305 !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
-.bg-\[\#e2e8f0\] {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-}
-
-.bg-\[\#eff4ff\],
-.bg-\[\#dce9ff\],
-.bg-\[\#e0e7ff\],
-.bg-\[\#e5eeff\],
-.bg-\[\#dbeafe\] {
-  background-color: rgba(14, 26, 42, 0.42) !important;
-  border-color: rgba(56, 189, 248, 0.18) !important;
-}
-
-.bg-\[\#1e293b\]\/92 {
-  background-color: rgba(10, 14, 23, 0.55) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-}
-
-.bg-\[\#00873a\]\/92 {
-  background-color: rgba(0, 107, 44, 0.52) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-}
-
-/* Safety overrides: strip opaque white-to-gray linear gradients on order cards & ledger */
+/* Strip opaque white-to-gray linear gradients on order cards & ledger */
 .from-white,
 .from-white\/100,
 .to-\[\#f8fafc\],
-[class*="from-white"][class*="to-"] {
-  background-image: none !important;
-}
-
+[class*="from-white"][class*="to-"],
 .bg-gradient-to-br.from-white.to-\[\#f8fafc\] {
   background-image: none !important;
-  background-color: rgba(10, 14, 23, 0.35) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
-
-/* Safety overrides for delivery charges & live tester panels */
-.bg-\[\#eff4ff\]\/60 {
-  background-color: rgba(10, 14, 23, 0.32) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
-}
-
-.bg-\[\#f1f5f9\]\/50 {
-  background-color: rgba(10, 14, 23, 0.22) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-}
-
 
 /* Global full-viewport background layer */
 #global-black-liquid-background {
@@ -469,7 +423,7 @@ body.bg-\[\#f1f5f9\] {
   overflow: hidden !important;
 }
 
-/* 3. POLISHED TRANSLUCENT CRYSTAL BORDERS */
+/* 3. SUBTLE CRYSTAL BORDERS & DIVIDERS */
 .border-white\/50,
 .border-white\/55,
 .border-white\/60,
@@ -488,114 +442,113 @@ body.bg-\[\#f1f5f9\] {
 .border-\[\#d3e4fe\],
 .border-\[\#cbdcfc\],
 .border-\[\#bfdbfe\],
-.border-\[\#f1f5f9\] {
-  border-color: rgba(255, 255, 255, 0.12) !important;
+.border-\[\#f1f5f9\],
+.border-\[\#334155\]\/80,
+.border-\[\#475569\],
+.divide-\[\#f1f5f9\] > * + *,
+.divide-\[\#e2e8f0\] > * + * {
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* 4. STATUS TAGS & BADGES AS TRANSLUCENT COLOURED GLASS */
+/* 4. STATUS TAGS & BADGES AS TRANSLUCENT COLOURED ACCENTS */
 .bg-\[\#dcfce7\],
 .bg-\[\#f0fdf4\],
 .bg-\[\#e8f5e9\],
 .bg-\[\#f8fff9\] {
-  background-color: rgba(16, 185, 129, 0.16) !important;
-  border-color: rgba(52, 211, 153, 0.28) !important;
+  background-color: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(52, 211, 153, 0.35) !important;
   color: #86efac !important;
 }
 
 .border-\[\#86efac\],
 .border-\[\#bbf7d0\],
 .border-\[\#a7f3d0\] {
-  border-color: rgba(52, 211, 153, 0.28) !important;
+  border-color: rgba(52, 211, 153, 0.35) !important;
 }
 
 .bg-\[\#fee2e2\],
 .bg-\[\#fef2f2\],
 .bg-\[\#ffdad6\] {
-  background-color: rgba(220, 38, 38, 0.15) !important;
-  border-color: rgba(239, 68, 68, 0.28) !important;
+  background-color: rgba(220, 38, 38, 0.18) !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
   color: #fca5a5 !important;
 }
 
 .border-\[\#fecaca\] {
-  border-color: rgba(239, 68, 68, 0.28) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
 }
 
 .bg-\[\#fef3c7\],
 .bg-\[\#fffbeb\] {
-  background-color: rgba(245, 158, 11, 0.15) !important;
-  border-color: rgba(245, 158, 11, 0.28) !important;
+  background-color: rgba(245, 158, 11, 0.18) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
   color: #fcd34d !important;
 }
 
 .border-\[\#fde68a\] {
-  border-color: rgba(245, 158, 11, 0.28) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
 }
 
-/* 5. FORM INPUTS & SELECTS */
-input,
-select,
-textarea {
-  color: #f8fafc !important;
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: rgba(148, 163, 184, 0.6) !important;
-}
-
-.focus\:bg-white\/60:focus,
-.focus\:bg-white\/70:focus,
-.focus\:bg-white:focus {
-  background-color: rgba(18, 25, 38, 0.65) !important;
-  border-color: rgba(16, 185, 129, 0.6) !important;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
-}
-
-/* 6. TABLES & INVENTORY ROWS */
-table {
+/* 5. TABLES, ROWS & LEDGERS */
+table,
+thead,
+tbody,
+tr,
+td {
   background: transparent !important;
 }
 
 table th {
-  background-color: rgba(8, 11, 18, 0.65) !important;
+  background-color: rgba(255, 255, 255, 0.03) !important;
   color: #94a3b8 !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 table td {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
-.divide-\[\#f1f5f9\] > * + * {
-  border-color: rgba(255, 255, 255, 0.08) !important;
-}
-
-tr.hover\:bg-\[\#f8fafc\]\/80:hover,
-tr:hover {
+tr:hover,
+tr.hover\:bg-\[\#f8fafc\]\/80:hover {
   background-color: rgba(255, 255, 255, 0.04) !important;
 }
 
-/* 7. MODALS & BACKDROPS */
-.bg-\[\#0b1c30\]\/40 {
-  background-color: rgba(0, 0, 0, 0.72) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
+/* 6. MODALS, DRAWERS & DIALOGS */
+#cart-drawer-panel {
+  background-color: rgba(6, 9, 15, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75) !important;
 }
 
-/* 8. HOVER EFFECTS */
+[role="dialog"],
+div[id$="-modal"],
+div[id$="-modal-panel"] {
+  background-color: rgba(6, 9, 15, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75) !important;
+}
+
+.bg-\[\#0b1c30\]\/40,
+.bg-black\/50,
+.bg-black\/60,
+.bg-black\/70 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* 7. HOVER HIGHLIGHTS */
 .hover\:bg-white\/45:hover,
 .hover\:bg-white\/50:hover,
 .hover\:bg-white\/55:hover,
 .hover\:bg-white\/60:hover,
 .hover\:bg-white\/70:hover,
 .hover\:bg-\[\#f8fafc\]:hover {
-  background-color: rgba(18, 26, 40, 0.55) !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 .hover\:border-white\/80:hover,
 .hover\:border-white\/85:hover,
 .hover\:border-white:hover {
-  border-color: rgba(255, 255, 255, 0.26) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
 }
 
 .hover\:text-\[\#006b2c\]:hover {
@@ -604,7 +557,7 @@ tr:hover {
 }
 
 .hover\:text-\[\#0b1c30\]:hover {
-  color: #f8fafc !important;
+  color: #ffffff !important;
 }
 
 /* ==========================================================================
