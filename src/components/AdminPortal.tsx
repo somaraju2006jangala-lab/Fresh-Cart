@@ -20,7 +20,6 @@ import {
   CheckCircle,
   AlertTriangle,
   History,
-  Radio,
   Edit2,
   Check,
   TrendingUp,
@@ -161,7 +160,7 @@ interface AdminPortalProps {
   onAddProduct: (product: Product) => void;
   onEditProduct?: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
-  onSimulateCdcPulse: () => void;
+  onSimulateCdcPulse?: () => void;
   onCreateCoupon: (couponData: Omit<Coupon, 'id'>) => void;
   onUpdateCoupon: (coupon: Coupon) => void;
   onDeleteCoupon: (couponId: string) => void;
@@ -190,7 +189,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onAddProduct,
   onEditProduct,
   onDeleteProduct,
-  onSimulateCdcPulse,
   onCreateCoupon,
   onUpdateCoupon,
   onDeleteCoupon,
@@ -674,12 +672,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setEditingCustomUnitId(null);
   };
 
-  const handleTriggerPulse = () => {
-    onSimulateCdcPulse();
-    setPulseToast('MongoDB CDC Pulse Broadcast: Store #104 stock synchronized in 18ms');
-    setTimeout(() => setPulseToast(null), 3500);
-  };
-
   return (
     <div className="w-full min-h-screen bg-transparent text-[#0b1c30] pb-16 relative z-10">
       {/* Top Admin Action Bar */}
@@ -717,16 +709,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             >
               <Truck className="w-3.5 h-3.5 text-[#7ffc97]" />
               <span>Delivery Charges: <strong className="text-[#7ffc97]">{activeDeliveryCharge > 0 ? formatINR(activeDeliveryCharge) : 'FREE'}</strong></span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleTriggerPulse}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 cursor-pointer"
-              title="Simulate incoming order sale and live stock countdown"
-            >
-              <Radio className="w-3.5 h-3.5 text-[#7ffc97] animate-pulse" />
-              <span>{t('simulateCdcPulse')}</span>
             </button>
 
             <div className="flex items-center gap-2 pl-2">
