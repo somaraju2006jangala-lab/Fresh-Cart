@@ -151,3 +151,20 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
 export const getPaymentSettings = getStoredPaymentSettings;
 export const updatePaymentSettings = updateServerPaymentSettings;
 export const subscribePaymentSettings = onPaymentSettingsChange;
+
+/**
+ * Builds the canonical dynamic UPI Payment URI for an order:
+ * upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_AMOUNT>&cu=INR
+ */
+export function buildDynamicUpiUri(
+  upiId: string,
+  payeeName: string,
+  finalOrderAmount: number
+): string {
+  const cleanUpi = (upiId || DEFAULT_UPI_ID).trim();
+  const cleanPayee = (payeeName || DEFAULT_PAYEE_NAME).trim();
+  const formattedAmount =
+    finalOrderAmount % 1 === 0 ? finalOrderAmount.toString() : finalOrderAmount.toFixed(2);
+  return `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&am=${formattedAmount}&cu=INR`;
+}
+
