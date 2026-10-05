@@ -148,11 +148,33 @@ async function runTests() {
   const scanValidation799 = verifyScenario('9c. Scan ₹799 QR in UPI App', upiId, merchantName, 799, 'UPI Intent validates pa=freshcart@upi, pn=FreshCart, am=799, cu=INR');
   results.push(scanValidation10, scanValidation239, scanValidation799);
 
-  // 10. Admin Payment Settings custom UPI configuration
-  const customUpi = 'store@okhdfcbank';
-  const customMerchant = 'FreshCart Supermarket';
-  const customConfigTest = verifyScenario('10. Custom Admin Settings (store@okhdfcbank, FreshCart Supermarket, ₹350)', customUpi, customMerchant, 350, 'Dynamic QR encodes admin-configured credentials and order total');
-  results.push(customConfigTest);
+  // ==============================================================
+  // SECTION 12: QR VALIDATION TEST CASES
+  // ==============================================================
+
+  // Test Case 1: Admin UPI ID: oldupi@upi, Merchant: FreshCart, Amount: ₹100
+  const tc1 = verifyScenario('Section 12 - Test Case 1 (oldupi@upi, FreshCart, ₹100)', 'oldupi@upi', 'FreshCart', 100, 'Verify pa=oldupi@upi, pn=FreshCart, am=100, cu=INR');
+  results.push(tc1);
+
+  // Test Case 2: Change Admin UPI ID to newupi@upi -> Generate NEW QR -> pa=newupi@upi, MUST NOT contain oldupi@upi
+  const tc2 = verifyScenario('Section 12 - Test Case 2 (newupi@upi, FreshCart, ₹100)', 'newupi@upi', 'FreshCart', 100, 'Must contain newupi@upi and NOT contain oldupi@upi');
+  const tc2NotContainOld = !tc2.decodedUri.includes('pa=oldupi@upi') && tc2.decodedUri.includes('pa=newupi@upi');
+  tc2.passed = tc2.passed && tc2NotContainOld;
+  results.push(tc2);
+
+  // Test Case 3: Change amount ₹100 -> ₹150 -> Verify QR contains am=150
+  const tc3 = verifyScenario('Section 12 - Test Case 3 (newupi@upi, FreshCart, ₹150)', 'newupi@upi', 'FreshCart', 150, 'Verify am=150');
+  results.push(tc3);
+
+  // Test Case 4: Change merchant name: FreshCart -> FreshCart Supermarket
+  const tc4 = verifyScenario('Section 12 - Test Case 4 (newupi@upi, FreshCart Supermarket, ₹150)', 'newupi@upi', 'FreshCart Supermarket', 150, 'Verify pn=FreshCart%20Supermarket');
+  results.push(tc4);
+
+  // Test Case 5: Change UPI ID + Merchant + Amount all at once
+  const tc5 = verifyScenario('Section 12 - Test Case 5 (all 3 changed: final@upi, Final Store, ₹499)', 'final@upi', 'Final Store', 499, 'Verify all 3 values (pa, pn, am) change simultaneously');
+  const all3Changed = tc5.decodedUri.includes('pa=final@upi') && tc5.decodedUri.includes('pn=Final%20Store') && tc5.decodedUri.includes('am=499');
+  tc5.passed = tc5.passed && all3Changed;
+  results.push(tc5);
 
   console.log('\n----------------------------------------------------------------');
   let allPassed = true;

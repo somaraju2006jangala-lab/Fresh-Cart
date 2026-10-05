@@ -183,32 +183,54 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
   // Dynamic UPI URI and QR Code generation using customer's current final payable amount
-  const upiPayee = (paymentSettings.payeeName || 'FreshCart Grocery Store').trim();
-  const upiId = (paymentSettings.upiId || 'freshcart@upi').trim();
+  const currentMerchantName = (paymentSettings.payeeName || 'FreshCart Grocery Store').trim();
+  const currentUpiId = (paymentSettings.upiId || 'freshcart@upi').trim();
+  const finalPayableAmount = total;
+
   const upiPaymentUri = useMemo(() => {
-    return buildDynamicUpiUri(upiId, upiPayee, total);
-  }, [upiId, upiPayee, total]);
+    const uri = buildDynamicUpiUri(currentUpiId, currentMerchantName, finalPayableAmount);
+    console.log(
+      `[Dynamic UPI QR]\nUPI ID: ${currentUpiId}\nMerchant: ${currentMerchantName}\nAmount: ${finalPayableAmount}\nUPI URI: ${uri}`
+    );
+    return uri;
+  }, [currentUpiId, currentMerchantName, finalPayableAmount]);
 
   // Active QR code: Always dynamically generated from upiPaymentUri for the current order amount
   const activeQrCodeUrl = useMemo(() => {
     return generateQrDataUrl(upiPaymentUri, { size: 300 });
   }, [upiPaymentUri]);
 
+  const [upiAppError, setUpiAppError] = useState<string>('');
+
   const handleCopyUpi = () => {
     if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(upiId);
+      navigator.clipboard.writeText(currentUpiId);
       setCopiedUpi(true);
       setTimeout(() => setCopiedUpi(false), 2000);
     }
   };
 
   const handleOpenUpiDeepLink = () => {
+    setUpiAppError('');
+    const clickTime = Date.now();
     window.location.href = upiPaymentUri;
+    setTimeout(() => {
+      if (!document.hidden && Date.now() - clickTime >= 1800) {
+        setUpiAppError('No compatible UPI payment app found. Please install a UPI app or use another payment method.');
+      }
+    }, 2000);
   };
 
   const handleDirectUpiPayNow = () => {
     setDirectUpiLaunched(true);
+    setUpiAppError('');
+    const clickTime = Date.now();
     window.location.href = upiPaymentUri;
+    setTimeout(() => {
+      if (!document.hidden && Date.now() - clickTime >= 1800) {
+        setUpiAppError('No compatible UPI payment app found. Please install a UPI app or use another payment method.');
+      }
+    }, 2000);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -724,25 +746,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Payable Amount</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Amount to Pay</span>
                     <span id="checkout-upi-order-amount" className="text-[15px] font-bold text-[#4ade80] font-display tabular-nums">
-                      {formatINR(total)}
+                      {formatINR(finalPayableAmount)}
                     </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
                   <div>
-                    <span className="text-[11px] text-slate-400 font-medium block">Merchant Name</span>
+                    <span className="text-[11px] text-slate-400 font-medium block">Merchant / Payee Name</span>
                     <span id="checkout-merchant-name" className="font-semibold text-white block">
-                      {upiPayee}
+                      {currentMerchantName}
                     </span>
                   </div>
                   <div>
                     <span className="text-[11px] text-slate-400 font-medium block">UPI ID</span>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <code id="checkout-upi-id" className="font-mono text-[12px] font-bold text-[#4ade80] bg-black/50 px-2 py-0.5 rounded border border-white/15 select-all">
-                        {upiId}
+                        {currentUpiId}
                       </code>
                       <button
                         type="button"
@@ -781,7 +803,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       SCAN QR CODE TO PAY
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      Pay {formatINR(total)} via Google Pay, PhonePe, Paytm, or BHIM
+                      Pay {formatINR(finalPayableAmount)} via Google Pay, PhonePe, Paytm, or BHIM
                     </p>
                   </div>
 
@@ -796,6 +818,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <span>Pay with UPI App →</span>
                     </button>
                   </div>
+
+                  {upiAppError && (
+                    <div
+                      id="checkout-upi-app-error-qr"
+                      className="w-full p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-[11px] font-semibold text-amber-200 flex items-start gap-2 animate-in fade-in"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{upiAppError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Proof Section */}
@@ -851,9 +883,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     className="w-full py-3 rounded-xl bg-[#006b2c] text-white font-bold text-[14px] hover:bg-[#00873a] hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
                     <Smartphone className="w-4 h-4" />
-                    <span>PAY NOW ({formatINR(total)})</span>
+                    <span>PAY NOW ({formatINR(finalPayableAmount)})</span>
                   </button>
                 </div>
+
+                {upiAppError && (
+                  <div
+                    id="checkout-upi-app-error-direct"
+                    className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-[11px] font-semibold text-amber-200 flex items-start gap-2 animate-in fade-in"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>{upiAppError}</span>
+                  </div>
+                )}
 
                 {directUpiLaunched && (
                   <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-[12px] text-emerald-200 space-y-1 animate-in fade-in">

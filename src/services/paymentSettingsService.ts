@@ -44,11 +44,30 @@ export function getStoredPaymentSettings(): PaymentSettings {
 }
 
 /**
+ * Cross-tab communication channel for live payment settings synchronization.
+ */
+let paymentBroadcastChannel: BroadcastChannel | null = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    paymentBroadcastChannel = new BroadcastChannel('freshcart_payment_channel');
+  }
+} catch {
+  // ignore in non-browser or unsupported environments
+}
+
+/**
  * Fetches authoritative payment settings from the backend database/API.
+ * Uses no-cache headers and timestamp query parameter to prevent stale caches.
  */
 export async function fetchServerPaymentSettings(): Promise<PaymentSettings> {
   try {
-    const res = await fetch('/api/payment-settings');
+    const res = await fetch(`/api/payment-settings?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.success && data?.settings) {
@@ -65,6 +84,7 @@ export async function fetchServerPaymentSettings(): Promise<PaymentSettings> {
         try {
           localStorage.setItem(STORAGE_PAYMENT_SETTINGS_KEY, JSON.stringify(validated));
           window.dispatchEvent(new CustomEvent(PAYMENT_SETTINGS_EVENT, { detail: validated }));
+          paymentBroadcastChannel?.postMessage(validated);
         } catch {
           // ignore
         }
@@ -95,7 +115,7 @@ export async function updateServerPaymentSettings(
     updatedAt: new Date().toISOString(),
   };
 
-  // If no QR code provided, generate dynamic QR code
+  // If no QR code provided, generate dynamic standard QR code
   if (!nextSettings.qrCodeUrl) {
     nextSettings.qrCodeUrl = generateQrDataUrl(
       `upi://pay?pa=${nextSettings.upiId}&pn=${encodeURIComponent(nextSettings.payeeName)}&cu=INR`
@@ -106,6 +126,7 @@ export async function updateServerPaymentSettings(
   try {
     localStorage.setItem(STORAGE_PAYMENT_SETTINGS_KEY, JSON.stringify(nextSettings));
     window.dispatchEvent(new CustomEvent(PAYMENT_SETTINGS_EVENT, { detail: nextSettings }));
+    paymentBroadcastChannel?.postMessage(nextSettings);
   } catch {
     // ignore
   }
@@ -123,6 +144,11 @@ export async function updateServerPaymentSettings(
     if (res.ok) {
       const data = await res.json();
       if (data?.success && data?.settings) {
+        try {
+          localStorage.setItem(STORAGE_PAYMENT_SETTINGS_KEY, JSON.stringify(data.settings));
+          window.dispatchEvent(new CustomEvent(PAYMENT_SETTINGS_EVENT, { detail: data.settings }));
+          paymentBroadcastChannel?.postMessage(data.settings);
+        } catch {}
         return { success: true, settings: data.settings };
       }
     }
@@ -135,7 +161,7 @@ export async function updateServerPaymentSettings(
 }
 
 /**
- * Hook or helper to subscribe to payment settings changes in the UI.
+ * Hook or helper to subscribe to payment settings changes in the UI across tabs and windows.
  */
 export function onPaymentSettingsChange(callback: (settings: PaymentSettings) => void): () => void {
   const handler = (e: Event) => {
@@ -144,8 +170,33 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
       callback(custom.detail);
     }
   };
+
+  const storageHandler = (e: StorageEvent) => {
+    if (e.key === STORAGE_PAYMENT_SETTINGS_KEY && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (parsed && typeof parsed.upiId === 'string') {
+          callback(parsed);
+        }
+      } catch {}
+    }
+  };
+
+  const bcHandler = (e: MessageEvent) => {
+    if (e.data && typeof e.data.upiId === 'string') {
+      callback(e.data);
+    }
+  };
+
   window.addEventListener(PAYMENT_SETTINGS_EVENT, handler);
-  return () => window.removeEventListener(PAYMENT_SETTINGS_EVENT, handler);
+  window.addEventListener('storage', storageHandler);
+  paymentBroadcastChannel?.addEventListener('message', bcHandler);
+
+  return () => {
+    window.removeEventListener(PAYMENT_SETTINGS_EVENT, handler);
+    window.removeEventListener('storage', storageHandler);
+    paymentBroadcastChannel?.removeEventListener('message', bcHandler);
+  };
 }
 
 export const getPaymentSettings = getStoredPaymentSettings;

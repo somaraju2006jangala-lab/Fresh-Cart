@@ -552,14 +552,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setSavePaymentSuccess('');
     setSavePaymentError('');
     try {
+      const cleanUpi = adminUpiId.trim();
+      const cleanPayee = adminPayeeName.trim();
+      if (!cleanUpi) {
+        setSavePaymentError('UPI ID is required.');
+        setIsSavingPaymentSettings(false);
+        return;
+      }
+      const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+      if (!upiRegex.test(cleanUpi)) {
+        setSavePaymentError('Please enter a valid UPI ID (e.g. freshcart@upi or store@bank).');
+        setIsSavingPaymentSettings(false);
+        return;
+      }
+
+      // Auto-generate fresh standard QR when saving with updated credentials
+      let targetQr = adminQrCodeUrl;
+      if (!targetQr || isUpiIdChanged) {
+        targetQr = generateUpiQrCodeSvg(`upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`, 320);
+        setAdminQrCodeUrl(targetQr);
+      }
+
       await updatePaymentSettings({
-        upiId: adminUpiId.trim(),
-        payeeName: adminPayeeName.trim(),
-        qrCodeUrl: adminQrCodeUrl,
+        upiId: cleanUpi,
+        payeeName: cleanPayee,
+        qrCodeUrl: targetQr,
         upiPaymentEnabled: adminUpiEnabled,
         directUpiAppEnabled: adminDirectUpiEnabled,
       });
-      setInitialUpiId(adminUpiId.trim());
+      setInitialUpiId(cleanUpi);
       setSavePaymentSuccess('Payment settings saved successfully and updated live across the store.');
       setTimeout(() => setSavePaymentSuccess(''), 4000);
     } catch (err: any) {
