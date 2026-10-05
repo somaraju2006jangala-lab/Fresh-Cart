@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
@@ -181,16 +181,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  // Generate dynamic standard UPI payment string
-  const upiPayee = paymentSettings.payeeName || 'FreshCart Grocery Store';
-  const upiId = paymentSettings.upiId || 'freshcart@upi';
-  const upiPaymentUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiPayee)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('FreshCart Grocery')}`;
+  // Generate dynamic standard UPI payment string using customer's actual order amount
+  const upiPayee = (paymentSettings.payeeName || 'FreshCart Grocery Store').trim();
+  const upiId = (paymentSettings.upiId || 'freshcart@upi').trim();
+  // Format amount with actual order total (supports whole numbers and decimal amounts)
+  const formattedAmount = total % 1 === 0 ? total.toString() : total.toFixed(2);
+  const upiPaymentUri = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiPayee)}&am=${formattedAmount}&cu=INR&tn=${encodeURIComponent('FreshCart Grocery')}`;
 
-  // Active QR code: admin-uploaded image URL/data URL or dynamically rendered SVG QR
-  const activeQrCodeUrl =
-    paymentSettings.qrCodeUrl && paymentSettings.qrCodeUrl.trim().length > 0
-      ? paymentSettings.qrCodeUrl
-      : generateQrDataUrl(upiPaymentUri);
+  // Customer Checkout QR is dynamically generated using actual order total
+  const dynamicQrCodeUrl = useMemo(() => {
+    return generateQrDataUrl(upiPaymentUri, { size: 300 });
+  }, [upiPaymentUri]);
+
+  // Dynamic QR code for the customer's order total, with fallback if needed
+  const activeQrCodeUrl = dynamicQrCodeUrl || paymentSettings.qrCodeUrl;
 
   const handleCopyUpi = () => {
     if (navigator?.clipboard?.writeText) {
@@ -729,18 +733,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px] bg-white/[0.03] p-3 rounded-xl border border-white/10">
                   <div>
                     <span className="text-[11px] text-slate-400 font-medium block">Payee / Merchant Name</span>
-                    <span id="checkout-merchant-name" className="font-semibold text-white block">
-                      {paymentSettings.payeeName}
+                    <span id="checkout-merchant-name" className="font-semibold text-white block mt-0.5">
+                      {upiPayee}
                     </span>
                   </div>
                   <div>
                     <span className="text-[11px] text-slate-400 font-medium block">UPI ID</span>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <code id="checkout-upi-id" className="font-mono text-[12px] font-bold text-[#4ade80] bg-black/50 px-2 py-0.5 rounded border border-white/15 select-all">
-                        {paymentSettings.upiId}
+                        {upiId}
                       </code>
                       <button
                         type="button"
@@ -761,6 +765,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         )}
                       </button>
                     </div>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-medium block">Amount</span>
+                    <span id="checkout-upi-amount-display" className="font-bold text-[14px] text-[#4ade80] block mt-0.5 tabular-nums">
+                      {formatINR(total)}
+                    </span>
                   </div>
                 </div>
 
