@@ -47,7 +47,6 @@ import {
   saveOrderPaymentProofInDb,
   verifyOrRejectPaymentInDb,
 } from './db.ts';
-import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -1177,7 +1176,7 @@ apiRouter.post('/api/settings', async (req: Request, res: Response) => {
 
 /**
  * GET /api/payment-settings
- * Returns active payment settings (UPI ID, merchant name, QR code, enable/disable toggles).
+ * Returns active payment settings (direct UPI app toggle).
  */
 apiRouter.get('/api/payment-settings', async (_req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1201,42 +1200,9 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
   res.setHeader('Expires', '0');
   try {
     const current = await getPaymentSettingsFromDb();
-    let upiId = current.upiId;
-    if (req.body?.upiId !== undefined) {
-      if (typeof req.body.upiId !== 'string' || !req.body.upiId.trim()) {
-        sendJson(res, 400, { success: false, error: 'UPI ID cannot be empty.' });
-        return;
-      }
-      const trimmed = req.body.upiId.trim();
-      const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-      if (!upiRegex.test(trimmed)) {
-        sendJson(res, 400, {
-          success: false,
-          error: 'Invalid UPI ID format. Must be in the format username@bank or handle@upi (e.g. freshcart@upi).',
-        });
-        return;
-      }
-      upiId = trimmed;
-    }
-    const payeeName = req.body?.payeeName !== undefined && typeof req.body.payeeName === 'string' && req.body.payeeName.trim()
-      ? req.body.payeeName.trim()
-      : current.payeeName;
-    let qrCodeUrl = req.body?.qrCodeUrl !== undefined
-      ? req.body.qrCodeUrl
-      : (upiId !== current.upiId || payeeName !== current.payeeName)
-        ? generateQrDataUrl(`upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&cu=INR`)
-        : current.qrCodeUrl;
-    if (!qrCodeUrl) {
-      qrCodeUrl = generateQrDataUrl(`upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&cu=INR`);
-    }
-    const upiPaymentEnabled = req.body?.upiPaymentEnabled !== undefined ? !!req.body.upiPaymentEnabled : current.upiPaymentEnabled;
     const directUpiAppEnabled = req.body?.directUpiAppEnabled !== undefined ? !!req.body.directUpiAppEnabled : current.directUpiAppEnabled;
 
     const settings = {
-      upiId,
-      payeeName,
-      qrCodeUrl,
-      upiPaymentEnabled,
       directUpiAppEnabled,
       updatedAt: new Date().toISOString(),
     };

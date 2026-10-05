@@ -2,7 +2,6 @@ import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mys
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
-import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
 
 const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'freshcart_data')
@@ -2379,19 +2378,11 @@ export async function saveSettingsToDb(settings: any): Promise<boolean> {
 // -----------------------------------------------------------------------------
 
 export interface PaymentSettingsRecord {
-  upiId: string;
-  payeeName: string;
-  qrCodeUrl?: string;
-  upiPaymentEnabled: boolean;
   directUpiAppEnabled: boolean;
   updatedAt?: string;
 }
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentSettingsRecord = {
-  upiId: 'freshcart@upi',
-  payeeName: 'FreshCart Grocery Store',
-  qrCodeUrl: generateQrDataUrl('upi://pay?pa=freshcart@upi&pn=FreshCart%20Grocery%20Store&cu=INR'),
-  upiPaymentEnabled: true,
   directUpiAppEnabled: true,
   updatedAt: new Date().toISOString(),
 };
@@ -2407,14 +2398,8 @@ export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord>
       const val = typeof rows[0].setting_value === 'string'
         ? JSON.parse(rows[0].setting_value)
         : rows[0].setting_value;
-      if (val && typeof val.upiId === 'string' && val.upiId.trim().length > 0) {
-        const cleanUpi = val.upiId.trim();
-        const cleanPayee = val.payeeName?.trim() || 'FreshCart Grocery Store';
+      if (val) {
         return {
-          upiId: cleanUpi,
-          payeeName: cleanPayee,
-          qrCodeUrl: val.qrCodeUrl || generateQrDataUrl(`upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`),
-          upiPaymentEnabled: val.upiPaymentEnabled !== false,
           directUpiAppEnabled: val.directUpiAppEnabled !== false,
           updatedAt: val.updatedAt || new Date().toISOString(),
         };
@@ -2428,12 +2413,12 @@ export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord>
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const fileData = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-      if (fileData?.paymentSettings && typeof fileData.paymentSettings.upiId === 'string') {
+      if (fileData?.paymentSettings) {
         const p = fileData.paymentSettings;
-        if (!p.qrCodeUrl) {
-          p.qrCodeUrl = generateQrDataUrl(`upi://pay?pa=${p.upiId}&pn=${encodeURIComponent(p.payeeName || 'FreshCart Grocery Store')}&cu=INR`);
-        }
-        return p;
+        return {
+          directUpiAppEnabled: p.directUpiAppEnabled !== false,
+          updatedAt: p.updatedAt || new Date().toISOString(),
+        };
       }
     }
   } catch {

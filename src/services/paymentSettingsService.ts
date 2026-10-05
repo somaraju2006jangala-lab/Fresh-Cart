@@ -1,16 +1,8 @@
 import { PaymentSettings } from '../types';
-import { generateQrDataUrl } from '../utils/qrCodeGenerator';
 
 export type { PaymentSettings };
 
-export const DEFAULT_UPI_ID = 'freshcart@upi';
-export const DEFAULT_PAYEE_NAME = 'FreshCart Grocery Store';
-
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
-  upiId: DEFAULT_UPI_ID,
-  payeeName: DEFAULT_PAYEE_NAME,
-  qrCodeUrl: generateQrDataUrl(`upi://pay?pa=${DEFAULT_UPI_ID}&pn=${encodeURIComponent(DEFAULT_PAYEE_NAME)}&cu=INR`),
-  upiPaymentEnabled: true,
   directUpiAppEnabled: true,
   updatedAt: new Date().toISOString(),
 };
@@ -26,12 +18,8 @@ export function getStoredPaymentSettings(): PaymentSettings {
     const raw = localStorage.getItem(STORAGE_PAYMENT_SETTINGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.upiId === 'string' && parsed.upiId.trim().length > 0) {
+      if (parsed && typeof parsed === 'object') {
         return {
-          upiId: parsed.upiId.trim(),
-          payeeName: parsed.payeeName?.trim() || DEFAULT_PAYEE_NAME,
-          qrCodeUrl: parsed.qrCodeUrl || DEFAULT_PAYMENT_SETTINGS.qrCodeUrl,
-          upiPaymentEnabled: parsed.upiPaymentEnabled !== false,
           directUpiAppEnabled: parsed.directUpiAppEnabled !== false,
           updatedAt: parsed.updatedAt || new Date().toISOString(),
         };
@@ -73,10 +61,6 @@ export async function fetchServerPaymentSettings(): Promise<PaymentSettings> {
       if (data?.success && data?.settings) {
         const s = data.settings;
         const validated: PaymentSettings = {
-          upiId: typeof s.upiId === 'string' && s.upiId.trim() ? s.upiId.trim() : DEFAULT_UPI_ID,
-          payeeName: typeof s.payeeName === 'string' && s.payeeName.trim() ? s.payeeName.trim() : DEFAULT_PAYEE_NAME,
-          qrCodeUrl: s.qrCodeUrl || generateQrDataUrl(`upi://pay?pa=${s.upiId || DEFAULT_UPI_ID}&pn=${encodeURIComponent(s.payeeName || DEFAULT_PAYEE_NAME)}&cu=INR`),
-          upiPaymentEnabled: s.upiPaymentEnabled !== false,
           directUpiAppEnabled: s.directUpiAppEnabled !== false,
           updatedAt: s.updatedAt || new Date().toISOString(),
         };
@@ -107,20 +91,9 @@ export async function updateServerPaymentSettings(
 ): Promise<{ success: boolean; settings: PaymentSettings; error?: string }> {
   const current = getStoredPaymentSettings();
   const nextSettings: PaymentSettings = {
-    upiId: patch.upiId !== undefined ? patch.upiId.trim() : current.upiId,
-    payeeName: patch.payeeName !== undefined ? patch.payeeName.trim() : current.payeeName,
-    qrCodeUrl: patch.qrCodeUrl !== undefined ? patch.qrCodeUrl : current.qrCodeUrl,
-    upiPaymentEnabled: patch.upiPaymentEnabled !== undefined ? !!patch.upiPaymentEnabled : current.upiPaymentEnabled,
     directUpiAppEnabled: patch.directUpiAppEnabled !== undefined ? !!patch.directUpiAppEnabled : current.directUpiAppEnabled,
     updatedAt: new Date().toISOString(),
   };
-
-  // If no QR code provided, generate dynamic standard QR code
-  if (!nextSettings.qrCodeUrl) {
-    nextSettings.qrCodeUrl = generateQrDataUrl(
-      `upi://pay?pa=${nextSettings.upiId}&pn=${encodeURIComponent(nextSettings.payeeName)}&cu=INR`
-    );
-  }
 
   // Update local storage immediately for fast UI response
   try {
@@ -175,7 +148,7 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
     if (e.key === STORAGE_PAYMENT_SETTINGS_KEY && e.newValue) {
       try {
         const parsed = JSON.parse(e.newValue);
-        if (parsed && typeof parsed.upiId === 'string') {
+        if (parsed && typeof parsed === 'object') {
           callback(parsed);
         }
       } catch {}
@@ -183,7 +156,7 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
   };
 
   const bcHandler = (e: MessageEvent) => {
-    if (e.data && typeof e.data.upiId === 'string') {
+    if (e.data && typeof e.data === 'object') {
       callback(e.data);
     }
   };
@@ -202,20 +175,3 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
 export const getPaymentSettings = getStoredPaymentSettings;
 export const updatePaymentSettings = updateServerPaymentSettings;
 export const subscribePaymentSettings = onPaymentSettingsChange;
-
-/**
- * Builds the canonical dynamic UPI Payment URI for an order:
- * upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_AMOUNT>&cu=INR
- */
-export function buildDynamicUpiUri(
-  upiId: string,
-  payeeName: string,
-  finalOrderAmount: number
-): string {
-  const cleanUpi = (upiId || DEFAULT_UPI_ID).trim();
-  const cleanPayee = (payeeName || DEFAULT_PAYEE_NAME).trim();
-  const formattedAmount =
-    finalOrderAmount % 1 === 0 ? finalOrderAmount.toString() : finalOrderAmount.toFixed(2);
-  return `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&am=${formattedAmount}&cu=INR`;
-}
-

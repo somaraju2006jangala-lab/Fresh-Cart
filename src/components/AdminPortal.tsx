@@ -36,7 +36,6 @@ import {
   Percent,
   Truck,
   CreditCard,
-  QrCode,
   Eye,
   CheckCircle2,
   XCircle,
@@ -51,7 +50,6 @@ import {
   subscribePaymentSettings,
   PaymentSettings,
 } from '../services/paymentSettingsService';
-import { generateUpiQrCodeSvg } from '../utils/qrCodeGenerator';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
@@ -487,12 +485,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Payment Settings state
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getPaymentSettings);
-  const [adminUpiId, setAdminUpiId] = useState<string>(paymentSettings.upiId);
-  const [adminPayeeName, setAdminPayeeName] = useState<string>(paymentSettings.payeeName);
-  const [adminQrCodeUrl, setAdminQrCodeUrl] = useState<string>(paymentSettings.qrCodeUrl || '');
-  const [adminUpiEnabled, setAdminUpiEnabled] = useState<boolean>(paymentSettings.upiPaymentEnabled);
   const [adminDirectUpiEnabled, setAdminDirectUpiEnabled] = useState<boolean>(paymentSettings.directUpiAppEnabled);
-  const [initialUpiId, setInitialUpiId] = useState<string>(paymentSettings.upiId);
   const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState<boolean>(false);
   const [savePaymentSuccess, setSavePaymentSuccess] = useState<string>('');
   const [savePaymentError, setSavePaymentError] = useState<string>('');
@@ -506,45 +499,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   useEffect(() => {
     const unsub = subscribePaymentSettings((settings: PaymentSettings) => {
       setPaymentSettings(settings);
-      setAdminUpiId(settings.upiId);
-      setAdminPayeeName(settings.payeeName);
-      setAdminQrCodeUrl(settings.qrCodeUrl || '');
-      setAdminUpiEnabled(settings.upiPaymentEnabled);
       setAdminDirectUpiEnabled(settings.directUpiAppEnabled);
-      setInitialUpiId(settings.upiId);
     });
     return () => unsub();
   }, []);
-
-  const isUpiIdChanged = adminUpiId.trim().toLowerCase() !== initialUpiId.trim().toLowerCase();
-
-  const handleAdminQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setSavePaymentError('Please select a valid image file (PNG, JPG, or SVG).');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const dataUrl = uploadEvent.target?.result as string;
-      if (dataUrl) {
-        setAdminQrCodeUrl(dataUrl);
-        setSavePaymentError('');
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const handleAdminRegenerateQr = () => {
-    const cleanUpi = adminUpiId.trim() || 'freshcart@upi';
-    const cleanPayee = adminPayeeName.trim() || 'FreshCart Grocery Store';
-    const upiUri = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
-    const newSvg = generateUpiQrCodeSvg(upiUri, 320);
-    setAdminQrCodeUrl(newSvg);
-    setSavePaymentError('');
-  };
 
   const handleSavePaymentSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -552,35 +510,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setSavePaymentSuccess('');
     setSavePaymentError('');
     try {
-      const cleanUpi = adminUpiId.trim();
-      const cleanPayee = adminPayeeName.trim();
-      if (!cleanUpi) {
-        setSavePaymentError('UPI ID is required.');
-        setIsSavingPaymentSettings(false);
-        return;
-      }
-      const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-      if (!upiRegex.test(cleanUpi)) {
-        setSavePaymentError('Please enter a valid UPI ID (e.g. freshcart@upi or store@bank).');
-        setIsSavingPaymentSettings(false);
-        return;
-      }
-
-      // Auto-generate fresh standard QR when saving with updated credentials
-      let targetQr = adminQrCodeUrl;
-      if (!targetQr || isUpiIdChanged) {
-        targetQr = generateUpiQrCodeSvg(`upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`, 320);
-        setAdminQrCodeUrl(targetQr);
-      }
-
       await updatePaymentSettings({
-        upiId: cleanUpi,
-        payeeName: cleanPayee,
-        qrCodeUrl: targetQr,
-        upiPaymentEnabled: adminUpiEnabled,
         directUpiAppEnabled: adminDirectUpiEnabled,
       });
-      setInitialUpiId(cleanUpi);
       setSavePaymentSuccess('Payment settings saved successfully and updated live across the store.');
       setTimeout(() => setSavePaymentSuccess(''), 4000);
     } catch (err: any) {
@@ -2927,19 +2859,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span>PAYMENT SETTINGS</span>
                 </h3>
                 <p className="text-[12px] text-[#94a3b8] mt-0.5">
-                  Configure store UPI credentials, merchant name, scan-and-pay QR code, and payment method toggles.
+                  Configure store online payment options and payment method availability.
                 </p>
               </div>
 
               {/* Status Badge */}
               <div className="flex items-center gap-2">
                 <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold flex items-center gap-1.5 ${
-                  adminUpiEnabled || adminDirectUpiEnabled
+                  adminDirectUpiEnabled
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                     : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${adminUpiEnabled || adminDirectUpiEnabled ? 'bg-[#10b981]' : 'bg-rose-500'}`} />
-                  {adminUpiEnabled || adminDirectUpiEnabled ? 'Online Payments Active' : 'Online Payments Disabled'}
+                  <span className={`w-2 h-2 rounded-full ${adminDirectUpiEnabled ? 'bg-[#10b981]' : 'bg-rose-500'}`} />
+                  {adminDirectUpiEnabled ? 'Online Payments Active' : 'Online Payments Disabled'}
                 </span>
               </div>
             </div>
@@ -2960,161 +2892,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
             {/* Form */}
             <form onSubmit={handleSavePaymentSettings} className="space-y-6">
-              {/* UPI ID Field */}
-              <div className="space-y-1.5">
-                <label htmlFor="admin-upi-id-input" className="block text-[13px] font-bold text-slate-200">
-                  UPI ID <span className="text-emerald-400">*</span>
-                </label>
-                <div className="relative max-w-md">
-                  <input
-                    id="admin-upi-id-input"
-                    type="text"
-                    value={adminUpiId}
-                    onChange={(e) => setAdminUpiId(e.target.value)}
-                    placeholder="e.g. freshcart@upi"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/30 border border-white/15 text-white font-mono text-[14px] focus:outline-hidden focus:ring-2 focus:ring-[#10b981] placeholder:text-[#64748b]"
-                  />
-                </div>
-                <p className="text-[11px] text-[#94a3b8]">
-                  The Virtual Payment Address (VPA) customers will pay to (e.g. freshcart@okhdfcbank, merchant@upi).
-                </p>
-              </div>
-
-              {/* Requirement 6: UPI ID Change Warning Banner */}
-              {isUpiIdChanged && (
-                <div
-                  id="admin-upi-qr-warning"
-                  className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex items-start gap-3 animate-in fade-in"
-                >
-                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1 text-[13px]">
-                    <p className="font-bold text-amber-300">Warning: UPI ID has been modified</p>
-                    <p>Changing the UPI ID may make the current QR code invalid. Please upload a new QR code for the updated UPI ID.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Payee / Merchant Name Field */}
-              <div className="space-y-1.5">
-                <label htmlFor="admin-payee-name-input" className="block text-[13px] font-bold text-slate-200">
-                  Payee / Merchant Name <span className="text-emerald-400">*</span>
-                </label>
-                <div className="relative max-w-md">
-                  <input
-                    id="admin-payee-name-input"
-                    type="text"
-                    value={adminPayeeName}
-                    onChange={(e) => setAdminPayeeName(e.target.value)}
-                    placeholder="e.g. FreshCart Grocery Store"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/30 border border-white/15 text-white text-[14px] focus:outline-hidden focus:ring-2 focus:ring-[#10b981] placeholder:text-[#64748b]"
-                  />
-                </div>
-                <p className="text-[11px] text-[#94a3b8]">
-                  Verified merchant or business name shown to customers inside Google Pay, PhonePe, and Paytm.
-                </p>
-              </div>
-
-              {/* Current QR Code Preview & Management */}
-              <div className="space-y-2">
-                <label className="block text-[13px] font-bold text-slate-200">
-                  Current QR Code
-                </label>
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 p-4 rounded-xl bg-black/25 border border-white/10">
-                  {/* QR Preview Box */}
-                  <div className="w-48 h-48 bg-white p-3 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center shrink-0">
-                    {adminQrCodeUrl ? (
-                      <img
-                        id="admin-qr-preview-img"
-                        src={adminQrCodeUrl}
-                        alt="Current Payment QR Code Preview"
-                        className="w-full h-full object-contain select-none"
-                      />
-                    ) : (
-                      <div className="text-center text-slate-400 text-[12px] p-2">
-                        <QrCode className="w-10 h-10 mx-auto mb-1 text-slate-300" />
-                        <span>No QR Code active</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* QR Actions & Details */}
-                  <div className="space-y-3 flex-1 text-center sm:text-left">
-                    <div className="text-[12px] text-slate-300 space-y-1">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-semibold text-[#94a3b8]">Currently Active UPI:</span>
-                        <span className="font-mono text-emerald-400 font-bold">{adminUpiId || 'freshcart@upi'}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-semibold text-[#94a3b8]">Merchant Name:</span>
-                        <span className="text-white font-medium">{adminPayeeName || 'FreshCart Grocery Store'}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 pt-1">
-                      {/* Upload New QR Button */}
-                      <label
-                        id="admin-upload-qr-btn"
-                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-bold transition-colors cursor-pointer flex items-center gap-2 shadow-xs"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>Upload New QR</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAdminQrFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-
-                      {/* Auto-generate / Reset Standard QR Button */}
-                      <button
-                        type="button"
-                        id="admin-generate-qr-btn"
-                        onClick={handleAdminRegenerateQr}
-                        className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[13px] font-semibold transition-colors cursor-pointer flex items-center gap-2"
-                        title="Generate standard UPI QR code from current UPI ID"
-                      >
-                        <RefreshCw className="w-4 h-4 text-emerald-400" />
-                        <span>Auto-Generate from UPI ID</span>
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-[#94a3b8]">
-                      Upload your official QR code image (PNG, JPG, or SVG) or click "Auto-Generate from UPI ID" to generate an SVG QR code matching your active UPI credentials.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               {/* Payment Methods Enable/Disable Toggles */}
-              <div className="space-y-3 pt-2 border-t border-white/10">
+              <div className="space-y-3">
                 <label className="block text-[13px] font-bold text-slate-200">
                   Payment Method Availability
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Toggle 1: UPI / QR Payment */}
-                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-black/25 border border-white/10 cursor-pointer hover:bg-black/35 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="admin-toggle-upi-payment"
-                      checked={adminUpiEnabled}
-                      onChange={(e) => setAdminUpiEnabled(e.target.checked)}
-                      className="w-4 h-4 mt-1 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-[13px] font-bold text-white block">
-                        UPI / QR Payment
-                      </span>
-                      <span className="text-[11px] text-[#94a3b8] block mt-0.5">
-                        Display QR code, UPI ID, and scan-to-pay info in checkout.
-                      </span>
-                    </div>
-                  </label>
-
-                  {/* Toggle 2: Direct UPI App Payment */}
+                  {/* Direct UPI App Payment */}
                   <label className="flex items-start gap-3 p-3.5 rounded-xl bg-black/25 border border-white/10 cursor-pointer hover:bg-black/35 transition-colors">
                     <input
                       type="checkbox"

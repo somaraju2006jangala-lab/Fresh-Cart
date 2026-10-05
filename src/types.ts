@@ -129,10 +129,6 @@ export interface DeliveryChargeRule {
 }
 
 export interface PaymentSettings {
-  upiId: string;
-  payeeName: string;
-  qrCodeUrl?: string;
-  upiPaymentEnabled: boolean;
   directUpiAppEnabled: boolean;
   updatedAt?: string;
 }

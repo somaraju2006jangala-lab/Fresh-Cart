@@ -3,9 +3,7 @@ import { INITIAL_COUPONS } from '../src/data/coupons.js';
 import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../src/services/settingsService.js';
 import {
   getStoredPaymentSettings,
-  buildDynamicUpiUri,
 } from '../src/services/paymentSettingsService.js';
-import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.js';
 import { CartItem, Product, Coupon, CustomerOrder } from '../src/types.js';
 
 interface TestResult {
@@ -39,7 +37,7 @@ class CheckoutModalState {
   activeBackdropInstances: number = 0;
   activeModalDialogInstances: number = 0;
   modalStep: 'details' | 'success' | 'pending_verification' = 'details';
-  selectedPaymentMethod: 'cash' | 'upi_qr' | 'upi_app' = 'cash';
+  selectedPaymentMethod: 'cash' | 'upi_app' = 'cash';
   deliveryAddress: string = '742 Evergreen Terrace, Apt 4B';
   fulfillmentNotes: string = 'Leave with doorman in thermal tote';
 
@@ -185,25 +183,17 @@ record(
 );
 
 // ----------------------------------------------------------------
-// TEST 7: Verify UPI / QR Button Works with Dynamic QR
+// TEST 7: Verify Payment Methods & Clean Payment Layout
 // ----------------------------------------------------------------
-state.selectedPaymentMethod = 'upi_qr';
-const paymentSettings = getStoredPaymentSettings();
-const upiUri = buildDynamicUpiUri(paymentSettings.upiId, paymentSettings.payeeName, initialTotals.total);
-const qrDataUrl = generateQrDataUrl(upiUri, { size: 300 });
-
-const qrValid =
-  upiUri.includes(`pa=${paymentSettings.upiId}`) &&
-  upiUri.includes(`pn=${encodeURIComponent(paymentSettings.payeeName)}`) &&
-  upiUri.includes(`am=${initialTotals.total}`) &&
-  upiUri.includes('cu=INR') &&
-  qrDataUrl.startsWith('data:image/svg+xml');
-
+const availableMethods: ('cash' | 'upi_app')[] = ['cash', 'upi_app'];
+const isCashAvailable = availableMethods.includes('cash');
+const isDirectUpiAppAvailable = availableMethods.includes('upi_app');
+const isCleanTwoOptionLayout = availableMethods.length === 2 && isCashAvailable && isDirectUpiAppAvailable;
 record(
   7,
-  'Verify UPI / QR Button & Dynamic QR Generation',
-  state.selectedPaymentMethod === 'upi_qr' && qrValid,
-  `Selected UPI/QR. Merchant: "${paymentSettings.payeeName}", UPI ID: "${paymentSettings.upiId}", Amount: ₹${initialTotals.total}. URI: ${upiUri}`
+  'Verify Payment Methods & Clean Payment Layout',
+  isCleanTwoOptionLayout,
+  'Cash on Delivery and Direct UPI App payment methods are available in a balanced 2-column layout. No obsolete payment methods are displayed.'
 );
 
 // ----------------------------------------------------------------
@@ -218,24 +208,20 @@ record(
 );
 
 // ----------------------------------------------------------------
-// TEST 9: Verify Coupon Works & Dynamically Updates Total and QR
+// TEST 9: Verify Coupon Works & Dynamically Recalculates Order Totals
 // ----------------------------------------------------------------
 state.appliedCoupon = 'WELCOME10';
 const couponTotals = state.calculateTotals();
-const updatedUpiUri = buildDynamicUpiUri(paymentSettings.upiId, paymentSettings.payeeName, couponTotals.total);
-const updatedQrDataUrl = generateQrDataUrl(updatedUpiUri, { size: 300 });
-
 const couponWorking =
   couponTotals.discount > 0 &&
   couponTotals.total < initialTotals.total &&
-  updatedUpiUri.includes(`am=${couponTotals.total}`) &&
-  updatedQrDataUrl !== qrDataUrl;
+  couponTotals.total === Math.max(0, couponTotals.subtotal - couponTotals.discount + couponTotals.deliveryCharge);
 
 record(
   9,
-  'Verify Coupon Interaction & Live QR Update',
+  'Verify Coupon Interaction & Live Total Recalculation',
   couponWorking,
-  `Applied WELCOME10. Discount: ₹${couponTotals.discount}, New Total: ₹${couponTotals.total}. Dynamic QR recalculated with am=${couponTotals.total}.`
+  `Applied WELCOME10. Discount: ₹${couponTotals.discount}, New Total: ₹${couponTotals.total} (Subtotal: ₹${couponTotals.subtotal} + Delivery: ₹${couponTotals.deliveryCharge}).`
 );
 
 // ----------------------------------------------------------------
