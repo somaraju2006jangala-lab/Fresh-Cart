@@ -13,10 +13,11 @@ import React, { useEffect, useRef } from 'react';
  * 3. 8 Morphing Organic Black Liquid Crystal Blobs distributed from top to bottom
  * 4. High-tech Liquid Glass Distortion Ripples responding to cursor across entire viewport
  * 5. Full-Screen 3D Orbital Particle System:
- *    - Central quantum nucleus that smoothly follows cursor across full page height & width
+ *    - Central quantum nucleus completely FIXED in its original center position
  *    - Expansive 3D elliptical orbits sweeping through top, middle, and bottom of screen
  *    - Satellite quantum cores ensuring permanent luminous activity in upper and lower zones
- *    - Depth-sorted orbiting particles with light trails and magnetic cursor deflection
+ *    - Smooth, subtle cursor-originating liquid ripples expanding naturally as cursor moves
+ *    - Depth-sorted orbiting particles with light trails
  *    - Ambient quantum crystal sparkles drifting throughout full screen
  * 6. High-DPI 60fps Canvas rendering, zero React re-renders, accessible fallback
  */
@@ -126,27 +127,116 @@ export const CursorReactiveBackground: React.FC = () => {
     window.addEventListener('resize', resize, { passive: true });
 
     // Accessibility and Touch checks
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = motionQuery.matches;
+    const handleMotionChange = (e: MediaQueryListEvent) => {
+      prefersReducedMotion = e.matches;
+    };
+    motionQuery.addEventListener('change', handleMotionChange);
+
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
-    // Mouse tracking state across entire screen
+    // Cursor tracking state strictly for the ripple effect and active cursor aura
     let mouseX = width * 0.5;
     let mouseY = height * 0.5;
     let targetMouseX = width * 0.5;
     let targetMouseY = height * 0.5;
+    let isPointerActive = false;
 
-    let prevMouseX = width * 0.5;
-    let prevMouseY = height * 0.5;
-
-    let normX = 0;
-    let normY = 0;
-    let targetNormX = 0;
-    let targetNormY = 0;
-
-    // Liquid ripple distortion waves
+    // Liquid ripple distortion waves originating around cursor
     const ripples: LiquidRipple[] = [];
     let lastRippleX = width * 0.5;
     let lastRippleY = height * 0.5;
+    let lastRippleTime = performance.now();
+
+    // Spawns smooth, subtle, natural ripples around the cursor position
+    const spawnRipple = (clientX: number, clientY: number, strength: number = 1) => {
+      if (prefersReducedMotion) return;
+
+      const now = performance.now();
+      const distFromLast = Math.hypot(clientX - lastRippleX, clientY - lastRippleY);
+      const timeSinceLast = now - lastRippleTime;
+
+      // Only spawn if moved sufficiently or enough time elapsed with movement, or forced (tap/click)
+      if (distFromLast < 14 && timeSinceLast < 55 && strength <= 1) {
+        return;
+      }
+
+      lastRippleX = clientX;
+      lastRippleY = clientY;
+      lastRippleTime = now;
+
+      const velocity = Math.min(distFromLast * 0.12, 5);
+      const baseMaxRadius = 130 + velocity * 22;
+
+      ripples.push({
+        x: clientX,
+        y: clientY,
+        radius: 6,
+        maxRadius: Math.min(baseMaxRadius * strength, 240),
+        speed: (2.0 + velocity * 0.22) * (0.95 + Math.random() * 0.1),
+        opacity: Math.min((0.36 + velocity * 0.04) * strength, 0.52),
+        maxOpacity: Math.min((0.36 + velocity * 0.04) * strength, 0.52),
+        thickness: 1.35,
+      });
+
+      if (ripples.length > 22) {
+        ripples.shift();
+      }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      targetMouseX = e.clientX;
+      targetMouseY = e.clientY;
+      isPointerActive = true;
+      spawnRipple(e.clientX, e.clientY);
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      targetMouseX = e.clientX;
+      targetMouseY = e.clientY;
+      isPointerActive = true;
+      // Tap / click produces a crisp, responsive ripple
+      spawnRipple(e.clientX, e.clientY, 1.25);
+    };
+
+    const handlePointerLeave = () => {
+      isPointerActive = false;
+    };
+
+    // Touch event fallback
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        targetMouseX = touch.clientX;
+        targetMouseY = touch.clientY;
+        isPointerActive = true;
+        spawnRipple(touch.clientX, touch.clientY);
+      }
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        targetMouseX = touch.clientX;
+        targetMouseY = touch.clientY;
+        isPointerActive = true;
+        spawnRipple(touch.clientX, touch.clientY, 1.25);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isPointerActive = false;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointerleave', handlePointerLeave, { passive: true });
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     // Smooth scroll velocity tracking to keep liquid physically continuous during scrolling
     let scrollVelocity = 0;
@@ -160,41 +250,6 @@ export const CursorReactiveBackground: React.FC = () => {
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      targetMouseX = e.clientX;
-      targetMouseY = e.clientY;
-      const w = window.innerWidth || 1;
-      const h = window.innerHeight || 1;
-      targetNormX = (e.clientX - w / 2) / (w / 2);
-      targetNormY = (e.clientY - h / 2) / (h / 2);
-
-      // High-tech liquid distortion ripples everywhere cursor moves
-      const distFromLastRipple = Math.hypot(e.clientX - lastRippleX, e.clientY - lastRippleY);
-      if (distFromLastRipple > 32 && !prefersReducedMotion) {
-        lastRippleX = e.clientX;
-        lastRippleY = e.clientY;
-        const velocity = Math.min(distFromLastRipple * 0.15, 6);
-        ripples.push({
-          x: e.clientX,
-          y: e.clientY,
-          radius: 10,
-          maxRadius: Math.min(180 + velocity * 25, 280),
-          speed: 2.0 + velocity * 0.35,
-          opacity: Math.min(0.32 + velocity * 0.05, 0.5),
-          maxOpacity: Math.min(0.32 + velocity * 0.05, 0.5),
-          thickness: 1.3 + Math.random() * 0.8,
-        });
-
-        if (ripples.length > 20) {
-          ripples.shift();
-        }
-      }
-    };
-
-    if (!isTouch) {
-      window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    }
 
     // 1. Definition of 6 Expansive 3D Orbital Planes
     // Proportions dynamically sweep through top, middle, and bottom of entire screen
@@ -563,38 +618,28 @@ export const CursorReactiveBackground: React.FC = () => {
 
     let lastTime = performance.now();
 
-    // Central Nucleus state: starts centered in viewport
-    let nucleusX = width * 0.5;
-    let nucleusY = height * 0.5;
-
     // Main 60fps Animation Loop
     const render = (currentTime: number) => {
       const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
       lastTime = currentTime;
       const timeSec = currentTime * 0.001;
 
-      // 1. Smooth cursor physics damping
-      const lerpFactor = 0.055;
+      // Smooth cursor coordinate interpolation strictly for ripple origin / cursor aura
+      const lerpFactor = 0.12;
       mouseX += (targetMouseX - mouseX) * lerpFactor;
       mouseY += (targetMouseY - mouseY) * lerpFactor;
-      normX += (targetNormX - normX) * lerpFactor;
-      normY += (targetNormY - normY) * lerpFactor;
-
-      const cursorSpeed = Math.hypot(mouseX - prevMouseX, mouseY - prevMouseY);
-      prevMouseX = mouseX;
-      prevMouseY = mouseY;
 
       // Decay scroll velocity smoothly
       scrollVelocity *= 0.92;
 
-      // 2. Clear canvas with Deep Black Liquid Crystal base
+      // 1. Clear canvas with Deep Black Liquid Crystal base
       ctx.fillStyle = '#030305';
       ctx.fillRect(0, 0, width, height);
 
-      // Deep obsidian ambient gradients spanning full window
+      // Deep obsidian ambient gradients centered symmetrically in viewport
       const baseGrad = ctx.createRadialGradient(
-        width * 0.5 + normX * 60,
-        height * 0.5 + normY * 60,
+        width * 0.5,
+        height * 0.5,
         100,
         width * 0.5,
         height * 0.5,
@@ -607,33 +652,33 @@ export const CursorReactiveBackground: React.FC = () => {
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // 3. Render 8 Morphing Organic Black Liquid Crystal Blobs across full screen
+      // 2. Render 8 Morphing Organic Black Liquid Crystal Blobs across full screen
       liquidBlobs.forEach((blob) => {
-        // Smooth cursor tension attraction
-        const targetX = blob.baseXRatio * width + (isTouch ? 0 : normX * 55);
-        const targetY = blob.baseYRatio * height + (isTouch ? 0 : normY * 50);
+        // Blobs stay anchored to their designated screen sections
+        const targetX = blob.baseXRatio * width;
+        const targetY = blob.baseYRatio * height;
         blob.x += (targetX - blob.x) * 0.04;
         blob.y += (targetY - blob.y) * 0.04;
 
         if (!prefersReducedMotion) {
-          blob.rotation += blob.rotationSpeed * (1 + cursorSpeed * 0.12 + scrollVelocity * 0.2);
+          blob.rotation += blob.rotationSpeed * (1 + scrollVelocity * 0.2);
         }
 
-        // Distance to cursor everywhere on screen
-        const dx = mouseX - blob.x;
-        const dy = mouseY - blob.y;
-        const distToMouse = Math.hypot(dx, dy);
-
-        if (!isTouch && distToMouse < 450) {
-          const proximity = 1 - distToMouse / 450;
-          blob.targetStretch = 1 + proximity * 0.22;
-          blob.targetStretchAngle = Math.atan2(dy, dx);
-        } else {
-          blob.targetStretch = 1;
+        // Ripple interaction: expanding ripple wave subtly distorts nearby blob stretch as it passes
+        let rippleDistort = 0;
+        if (!prefersReducedMotion && ripples.length > 0) {
+          for (let r = 0; r < ripples.length; r++) {
+            const rip = ripples[r];
+            const d = Math.hypot(rip.x - blob.x, rip.y - blob.y);
+            const waveDelta = Math.abs(d - rip.radius);
+            if (waveDelta < 35) {
+              rippleDistort = Math.max(rippleDistort, (1 - waveDelta / 35) * rip.opacity * 0.12);
+            }
+          }
         }
 
+        blob.targetStretch = 1 + rippleDistort;
         blob.stretch += (blob.targetStretch - blob.stretch) * 0.05;
-        blob.stretchAngle += (blob.targetStretchAngle - blob.stretchAngle) * 0.05;
 
         // Spline points computation
         const pointsCount = 44;
@@ -718,8 +763,8 @@ export const CursorReactiveBackground: React.FC = () => {
         }
       });
 
-      // 4. Subtle Moving Diagonal Crystal Reflection across Glass Environment
-      const sheenAngle = Math.PI * 0.22 + (isTouch ? 0 : normX * 0.08);
+      // 3. Subtle Moving Diagonal Crystal Reflection across Glass Environment
+      const sheenAngle = Math.PI * 0.22;
       const sheenOffset = ((timeSec * 35) % (width + 600)) - 300;
       const sheenGrad = ctx.createLinearGradient(
         sheenOffset,
@@ -741,45 +786,104 @@ export const CursorReactiveBackground: React.FC = () => {
       ctx.fillRect(-200, -200, width + 400, height + 400);
       ctx.restore();
 
-      // 5. Update & Draw Liquid Glass Distortion Ripples anywhere on screen
+      // 4. Update & Draw Liquid Glass Distortion Ripples originating from cursor
       for (let rIdx = ripples.length - 1; rIdx >= 0; rIdx--) {
         const ripple = ripples[rIdx];
         ripple.radius += ripple.speed;
-        ripple.opacity *= 0.955;
+        ripple.speed *= 0.984; // Smooth natural fluid deceleration as wave spreads
 
-        if (ripple.opacity < 0.01 || ripple.radius >= ripple.maxRadius) {
+        const progress = ripple.radius / ripple.maxRadius;
+        // Smooth natural wave dissipation
+        ripple.opacity = ripple.maxOpacity * Math.max(0, 1 - progress);
+
+        if (ripple.opacity < 0.008 || ripple.radius >= ripple.maxRadius) {
           ripples.splice(rIdx, 1);
           continue;
         }
 
         ctx.save();
-        ctx.beginPath();
-        const wobblePoints = 32;
-        for (let p = 0; p <= wobblePoints; p++) {
-          const wAngle = (p / wobblePoints) * Math.PI * 2;
-          const wobbleDist = Math.sin(wAngle * 5 + timeSec * 6) * 1.5;
-          const rx = ripple.x + Math.cos(wAngle) * (ripple.radius + wobbleDist);
-          const ry = ripple.y + Math.sin(wAngle) * (ripple.radius * 0.72 + wobbleDist);
-          if (p === 0) ctx.moveTo(rx, ry);
-          else ctx.lineTo(rx, ry);
+
+        // A. Subtle refractive background caustic wave fill
+        if (ripple.radius > 12) {
+          const causticGrad = ctx.createRadialGradient(
+            ripple.x,
+            ripple.y,
+            Math.max(0, ripple.radius - 20),
+            ripple.x,
+            ripple.y,
+            ripple.radius + 6
+          );
+          causticGrad.addColorStop(0, 'transparent');
+          causticGrad.addColorStop(0.5, `rgba(16, 185, 129, ${(ripple.opacity * 0.10).toFixed(3)})`);
+          causticGrad.addColorStop(0.85, `rgba(56, 189, 248, ${(ripple.opacity * 0.07).toFixed(3)})`);
+          causticGrad.addColorStop(1, 'transparent');
+
+          ctx.fillStyle = causticGrad;
+          ctx.beginPath();
+          ctx.arc(ripple.x, ripple.y, ripple.radius + 6, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.closePath();
 
+        // B. Primary expanding wave crest (smooth, circular, natural)
+        ctx.beginPath();
+        ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+
+        // Emerald outer wave glow
+        ctx.lineWidth = ripple.thickness * 1.5;
+        ctx.strokeStyle = `rgba(16, 185, 129, ${(ripple.opacity * 0.36).toFixed(3)})`;
+        ctx.stroke();
+
+        // White crystalline crest
         ctx.lineWidth = ripple.thickness;
-        ctx.strokeStyle = `rgba(255, 255, 255, ${(ripple.opacity * 0.55).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${(ripple.opacity * 0.48).toFixed(3)})`;
         ctx.stroke();
 
-        ctx.lineWidth = ripple.thickness * 1.6;
-        ctx.strokeStyle = `rgba(16, 185, 129, ${(ripple.opacity * 0.35).toFixed(3)})`;
-        ctx.stroke();
+        // C. Secondary subtle inner echo wave (concentric ripple)
+        if (ripple.radius > 26) {
+          ctx.beginPath();
+          ctx.arc(ripple.x, ripple.y, ripple.radius * 0.72, 0, Math.PI * 2);
+          ctx.lineWidth = ripple.thickness * 0.8;
+          ctx.strokeStyle = `rgba(56, 189, 248, ${(ripple.opacity * 0.22).toFixed(3)})`;
+          ctx.stroke();
+        }
 
         ctx.restore();
       }
 
-      // 6. Secondary Quantum Satellites (Permanent upper & lower quadrant luminous activity)
+      // Subtle active cursor ripple aura (beacon where ripples originate)
+      if (isPointerActive && !prefersReducedMotion) {
+        ctx.save();
+        const cursorRadius = 22;
+        const cursorGlow = ctx.createRadialGradient(
+          mouseX,
+          mouseY,
+          0,
+          mouseX,
+          mouseY,
+          cursorRadius
+        );
+        cursorGlow.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+        cursorGlow.addColorStop(0.4, 'rgba(56, 189, 248, 0.10)');
+        cursorGlow.addColorStop(0.75, 'rgba(16, 185, 129, 0.05)');
+        cursorGlow.addColorStop(1, 'transparent');
+
+        ctx.fillStyle = cursorGlow;
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, cursorRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Delicate crystal micro spark at cursor
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 5. Secondary Quantum Satellites (Permanent upper & lower quadrant luminous activity)
       satellites.forEach((sat) => {
-        const targetSatX = sat.baseXRatio * width + (isTouch ? 0 : normX * 40);
-        const targetSatY = sat.baseYRatio * height + (isTouch ? 0 : normY * 40);
+        const targetSatX = sat.baseXRatio * width;
+        const targetSatY = sat.baseYRatio * height;
         sat.x += (targetSatX - sat.x) * 0.05;
         sat.y += (targetSatY - sat.y) * 0.05;
 
@@ -817,31 +921,18 @@ export const CursorReactiveBackground: React.FC = () => {
         });
       });
 
-      // 7. Dynamic Central Nucleus Position (Follows cursor smoothly across entire screen)
-      const baseCenterX = width * 0.5;
-      const baseCenterY = height * 0.5;
+      // 6. Central Nucleus: Completely FIXED in original position (exact center of viewport)
+      // The nucleus NEVER moves, follows, chases, or shifts toward the mouse cursor.
+      const nucleusX = width * 0.5;
+      const nucleusY = height * 0.5;
 
-      const targetNucleusX = isTouch ? baseCenterX : baseCenterX + normX * (width * 0.32);
-      const targetNucleusY = isTouch ? baseCenterY : baseCenterY + normY * (height * 0.32);
-
-      nucleusX += (targetNucleusX - nucleusX) * lerpFactor;
-      nucleusY += (targetNucleusY - nucleusY) * lerpFactor;
-
-      const distToCursor = Math.hypot(mouseX - nucleusX, mouseY - nucleusY);
-      const proximity = isTouch ? 0.35 : Math.max(0, 1 - distToCursor / 480);
-
-      const speedMultiplier = 1 + proximity * 0.55;
-      const glowBoost = 1 + proximity * 0.55;
-
-      const tiltX = isTouch ? 0 : -normY * 0.45;
-      const tiltY = isTouch ? 0 : normX * 0.48;
-
-      // 8. Draw Central Nucleus (Atomic Quantum Core)
+      // Draw Central Nucleus (Atomic Quantum Core) - completely stationary
+      // Preserves existing design, size, glow, color, and centered position exactly
       const pulse = prefersReducedMotion ? 0 : Math.sin(timeSec * 2.4) * 2.5;
-      const nucleusRadius = (22 + pulse) * (1 + proximity * 0.15);
+      const nucleusRadius = 22 + pulse;
 
-      // Outer Corona
-      const coronaRadius = 150 * glowBoost;
+      // Outer Corona (stationary glow)
+      const coronaRadius = 150;
       const coronaGrad = ctx.createRadialGradient(
         nucleusX,
         nucleusY,
@@ -850,9 +941,9 @@ export const CursorReactiveBackground: React.FC = () => {
         nucleusY,
         coronaRadius
       );
-      coronaGrad.addColorStop(0, `rgba(16, 185, 129, ${0.20 * glowBoost})`);
-      coronaGrad.addColorStop(0.35, `rgba(56, 189, 248, ${0.10 * glowBoost})`);
-      coronaGrad.addColorStop(0.7, `rgba(203, 213, 225, ${0.05 * glowBoost})`);
+      coronaGrad.addColorStop(0, 'rgba(16, 185, 129, 0.20)');
+      coronaGrad.addColorStop(0.35, 'rgba(56, 189, 248, 0.10)');
+      coronaGrad.addColorStop(0.7, 'rgba(203, 213, 225, 0.05)');
       coronaGrad.addColorStop(1, 'transparent');
 
       ctx.fillStyle = coronaGrad;
@@ -860,7 +951,7 @@ export const CursorReactiveBackground: React.FC = () => {
       ctx.arc(nucleusX, nucleusY, coronaRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Mid Halo
+      // Mid Halo (stationary halo)
       const haloGrad = ctx.createRadialGradient(
         nucleusX,
         nucleusY,
@@ -869,9 +960,9 @@ export const CursorReactiveBackground: React.FC = () => {
         nucleusY,
         nucleusRadius * 2.2
       );
-      haloGrad.addColorStop(0, `rgba(255, 255, 255, ${0.92 * glowBoost})`);
-      haloGrad.addColorStop(0.25, `rgba(110, 231, 183, ${0.78 * glowBoost})`);
-      haloGrad.addColorStop(0.65, `rgba(16, 185, 129, ${0.38 * glowBoost})`);
+      haloGrad.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
+      haloGrad.addColorStop(0.25, 'rgba(110, 231, 183, 0.78)');
+      haloGrad.addColorStop(0.65, 'rgba(16, 185, 129, 0.38)');
       haloGrad.addColorStop(1, 'transparent');
 
       ctx.fillStyle = haloGrad;
@@ -913,8 +1004,8 @@ export const CursorReactiveBackground: React.FC = () => {
         }
       }
 
-      // 9. Draw 6 Expansive 3D Elliptical Orbital Paths
-      // Scale dynamically with viewport dimensions so orbits span entire window
+      // 7. Draw 6 Expansive 3D Elliptical Orbital Paths
+      // Anchored symmetrically around the fixed central nucleus
       const computedOrbits = orbits.map((o) => {
         const radX = Math.max(o.baseRadiusX, width * o.radiusXFactor);
         const radY = Math.max(o.baseRadiusY, height * o.radiusYFactor);
@@ -929,8 +1020,8 @@ export const CursorReactiveBackground: React.FC = () => {
         const segments = 80;
         ctx.beginPath();
 
-        const combinedRotX = orbit.inclinationX + tiltX;
-        const combinedRotY = tiltY;
+        const combinedRotX = orbit.inclinationX;
+        const combinedRotY = 0;
         const combinedRotZ = orbit.inclinationZ;
 
         let firstPoint = true;
@@ -962,29 +1053,17 @@ export const CursorReactiveBackground: React.FC = () => {
 
         ctx.closePath();
         ctx.lineWidth = 1.1;
-        ctx.strokeStyle = orbit.color.replace(
-          /[\d.]+\)$/,
-          `${(0.14 + proximity * 0.16).toFixed(3)})`
-        );
+        ctx.strokeStyle = orbit.color;
         ctx.stroke();
-
-        if (proximity > 0.05) {
-          ctx.lineWidth = 1.8;
-          ctx.strokeStyle = orbit.glowColor.replace(
-            /[\d.]+\)$/,
-            `${(0.20 * proximity).toFixed(3)})`
-          );
-          ctx.stroke();
-        }
       });
 
-      // 10. Update & Draw Orbiting Particles (with 3D depth and light trails)
+      // 8. Update & Draw Orbiting Particles (with 3D depth, light trails, and subtle wave interaction)
       const renderedParticles = particles.map((p) => {
-        p.angle += p.speed * speedMultiplier * dt;
+        p.angle += p.speed * dt;
 
         const orbit = computedOrbits[p.orbitIndex];
-        const combinedRotX = orbit.inclinationX + tiltX;
-        const combinedRotY = tiltY;
+        const combinedRotX = orbit.inclinationX;
+        const combinedRotY = 0;
         const combinedRotZ = orbit.inclinationZ;
 
         const wobble = prefersReducedMotion ? 0 : Math.sin(timeSec * p.wobbleSpeed + p.wobbleOffset) * 4;
@@ -1003,16 +1082,20 @@ export const CursorReactiveBackground: React.FC = () => {
           nucleusY
         );
 
-        // Magnetic cursor deflection everywhere on screen
-        if (!isTouch) {
-          const dxCursor = proj.x - mouseX;
-          const dyCursor = proj.y - mouseY;
-          const distParticleToCursor = Math.hypot(dxCursor, dyCursor);
-
-          if (distParticleToCursor < 190 && distParticleToCursor > 0.1) {
-            const push = (1 - distParticleToCursor / 190) * 28;
-            proj.x += (dxCursor / distParticleToCursor) * push;
-            proj.y += (dyCursor / distParticleToCursor) * push;
+        // Ripple interaction: wave subtly nudges particles as the wave passes over them
+        if (!prefersReducedMotion && ripples.length > 0) {
+          for (let r = 0; r < ripples.length; r++) {
+            const rip = ripples[r];
+            const dx = proj.x - rip.x;
+            const dy = proj.y - rip.y;
+            const dist = Math.hypot(dx, dy);
+            const distDiff = Math.abs(dist - rip.radius);
+            if (distDiff < 22 && dist > 1) {
+              const push = (1 - distDiff / 22) * rip.opacity * 3.5;
+              proj.x += (dx / dist) * push;
+              proj.y += (dy / dist) * push;
+              break;
+            }
           }
         }
 
@@ -1033,9 +1116,9 @@ export const CursorReactiveBackground: React.FC = () => {
 
       renderedParticles.forEach(({ particle: p, proj }) => {
         const depthNorm = Math.max(0.35, Math.min(1.25, proj.scale));
-        const effectiveSize = Math.max(1, p.size * depthNorm * (1 + proximity * 0.2));
+        const effectiveSize = Math.max(1, p.size * depthNorm);
         const depthAlpha = proj.z > 0 ? 0.88 : 0.45;
-        const finalAlpha = Math.min(1, depthAlpha * glowBoost);
+        const finalAlpha = depthAlpha;
 
         // A. Light trail
         if (p.history.length > 1 && !prefersReducedMotion) {
@@ -1086,7 +1169,7 @@ export const CursorReactiveBackground: React.FC = () => {
         ctx.fill();
       });
 
-      // 11. Update and Draw Ambient Quantum Dust / Sparkles across entire screen
+      // 9. Update and Draw Ambient Quantum Dust / Sparkles across entire screen
       ambientNodes.forEach((node) => {
         if (!prefersReducedMotion) {
           node.x += node.vx;
@@ -1102,7 +1185,7 @@ export const CursorReactiveBackground: React.FC = () => {
           node.baseAlpha + (prefersReducedMotion ? 0 : Math.sin(timeSec * 2 + node.pulsePhase) * 0.12);
 
         ctx.fillStyle = node.color;
-        ctx.globalAlpha = Math.max(0.08, Math.min(0.65, alpha * glowBoost));
+        ctx.globalAlpha = Math.max(0.08, Math.min(0.65, alpha));
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2);
         ctx.fill();
@@ -1117,8 +1200,15 @@ export const CursorReactiveBackground: React.FC = () => {
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', resize);
+      motionQuery.removeEventListener('change', handleMotionChange);
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerleave', handlePointerLeave);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, []);
 
