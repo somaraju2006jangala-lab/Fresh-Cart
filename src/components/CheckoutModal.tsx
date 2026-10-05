@@ -9,6 +9,8 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
   DEFAULT_PAYMENT_SETTINGS,
+  extractMerchantPaymentConfig,
+  buildDynamicUpiUri,
 } from '../services/paymentSettingsService';
 import { generateQrDataUrl } from '../utils/qrCodeGenerator';
 import {
@@ -181,20 +183,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  // Generate dynamic standard UPI payment string using customer's actual order amount
-  const upiPayee = (paymentSettings.payeeName || 'FreshCart Grocery Store').trim();
-  const upiId = (paymentSettings.upiId || 'freshcart@upi').trim();
-  // Format amount with actual order total (supports whole numbers and decimal amounts)
-  const formattedAmount = total % 1 === 0 ? total.toString() : total.toFixed(2);
-  const upiPaymentUri = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiPayee)}&am=${formattedAmount}&cu=INR&tn=${encodeURIComponent('FreshCart Grocery')}`;
+  // Extract merchant payment configuration from Admin-configured payment settings
+  const { upiId, payeeName: upiPayee } = extractMerchantPaymentConfig(paymentSettings);
+
+  // Dynamically construct canonical UPI payment payload for the current order amount:
+  // upi://pay?pa=<ADMIN_UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_ORDER_AMOUNT>&cu=INR
+  const upiPaymentUri = useMemo(() => {
+    return buildDynamicUpiUri(upiId, upiPayee, total);
+  }, [upiId, upiPayee, total]);
 
   // Customer Checkout QR is dynamically generated using actual order total
-  const dynamicQrCodeUrl = useMemo(() => {
+  const activeQrCodeUrl = useMemo(() => {
     return generateQrDataUrl(upiPaymentUri, { size: 300 });
   }, [upiPaymentUri]);
-
-  // Dynamic QR code for the customer's order total, with fallback if needed
-  const activeQrCodeUrl = dynamicQrCodeUrl || paymentSettings.qrCodeUrl;
 
   const handleCopyUpi = () => {
     if (navigator?.clipboard?.writeText) {

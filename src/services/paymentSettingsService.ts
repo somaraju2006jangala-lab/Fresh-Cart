@@ -148,6 +148,61 @@ export function onPaymentSettingsChange(callback: (settings: PaymentSettings) =>
   return () => window.removeEventListener(PAYMENT_SETTINGS_EVENT, handler);
 }
 
+/**
+ * Extracts the merchant payment configuration (UPI ID and Payee Name) from
+ * the Admin Payment Settings. If the uploaded QR code is an SVG/URL containing
+ * a upi://pay payload, extracts any fallback configuration from it.
+ */
+export function extractMerchantPaymentConfig(settings?: PaymentSettings | null): {
+  upiId: string;
+  payeeName: string;
+} {
+  let upiId = settings?.upiId?.trim() || '';
+  let payeeName = settings?.payeeName?.trim() || '';
+
+  // If either field is missing, inspect qrCodeUrl for upi://pay parameters
+  if ((!upiId || !payeeName) && settings?.qrCodeUrl) {
+    try {
+      const decoded = decodeURIComponent(settings.qrCodeUrl);
+      const match = decoded.match(/upi:\/\/pay\?([^"'\s<>]+)/);
+      if (match && match[1]) {
+        const queryPart = match[1].replace(/&amp;/g, '&');
+        const params = new URLSearchParams(queryPart);
+        if (!upiId && params.get('pa')) {
+          upiId = params.get('pa')!.trim();
+        }
+        if (!payeeName && params.get('pn')) {
+          payeeName = params.get('pn')!.trim();
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    upiId: upiId || DEFAULT_UPI_ID,
+    payeeName: payeeName || DEFAULT_PAYEE_NAME,
+  };
+}
+
+/**
+ * Builds the canonical dynamic UPI Payment URI for an order:
+ * upi://pay?pa=<ADMIN_UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_ORDER_AMOUNT>&cu=INR
+ */
+export function buildDynamicUpiUri(
+  upiId: string,
+  payeeName: string,
+  finalOrderAmount: number
+): string {
+  const cleanUpi = upiId.trim() || DEFAULT_UPI_ID;
+  const cleanPayee = payeeName.trim() || DEFAULT_PAYEE_NAME;
+  // Whole numbers like 10, 239, 799 or decimal paise like 10.50
+  const formattedAmount = finalOrderAmount % 1 === 0 ? finalOrderAmount.toString() : finalOrderAmount.toFixed(2);
+  return `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&am=${formattedAmount}&cu=INR`;
+}
+
 export const getPaymentSettings = getStoredPaymentSettings;
 export const updatePaymentSettings = updateServerPaymentSettings;
 export const subscribePaymentSettings = onPaymentSettingsChange;
+
