@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
@@ -9,8 +9,6 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
   DEFAULT_PAYMENT_SETTINGS,
-  extractMerchantPaymentConfig,
-  buildDynamicUpiUri,
 } from '../services/paymentSettingsService';
 import { generateQrDataUrl } from '../utils/qrCodeGenerator';
 import {
@@ -183,19 +181,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  // Extract merchant payment configuration from Admin-configured payment settings
-  const { upiId, payeeName: upiPayee } = extractMerchantPaymentConfig(paymentSettings);
+  // Generate dynamic standard UPI payment string
+  const upiPayee = paymentSettings.payeeName || 'FreshCart Grocery Store';
+  const upiId = paymentSettings.upiId || 'freshcart@upi';
+  const upiPaymentUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiPayee)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('FreshCart Grocery')}`;
 
-  // Dynamically construct canonical UPI payment payload for the current order amount:
-  // upi://pay?pa=<ADMIN_UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_ORDER_AMOUNT>&cu=INR
-  const upiPaymentUri = useMemo(() => {
-    return buildDynamicUpiUri(upiId, upiPayee, total);
-  }, [upiId, upiPayee, total]);
-
-  // Customer Checkout QR is dynamically generated using actual order total
-  const activeQrCodeUrl = useMemo(() => {
-    return generateQrDataUrl(upiPaymentUri, { size: 300 });
-  }, [upiPaymentUri]);
+  // Active QR code: admin-uploaded image URL/data URL or dynamically rendered SVG QR
+  const activeQrCodeUrl =
+    paymentSettings.qrCodeUrl && paymentSettings.qrCodeUrl.trim().length > 0
+      ? paymentSettings.qrCodeUrl
+      : generateQrDataUrl(upiPaymentUri);
 
   const handleCopyUpi = () => {
     if (navigator?.clipboard?.writeText) {
@@ -734,18 +729,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px] bg-white/[0.03] p-3 rounded-xl border border-white/10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
                   <div>
                     <span className="text-[11px] text-slate-400 font-medium block">Payee / Merchant Name</span>
-                    <span id="checkout-merchant-name" className="font-semibold text-white block mt-0.5">
-                      {upiPayee}
+                    <span id="checkout-merchant-name" className="font-semibold text-white block">
+                      {paymentSettings.payeeName}
                     </span>
                   </div>
                   <div>
                     <span className="text-[11px] text-slate-400 font-medium block">UPI ID</span>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <code id="checkout-upi-id" className="font-mono text-[12px] font-bold text-[#4ade80] bg-black/50 px-2 py-0.5 rounded border border-white/15 select-all">
-                        {upiId}
+                        {paymentSettings.upiId}
                       </code>
                       <button
                         type="button"
@@ -766,12 +761,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         )}
                       </button>
                     </div>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-medium block">Amount</span>
-                    <span id="checkout-upi-amount-display" className="font-bold text-[14px] text-[#4ade80] block mt-0.5 tabular-nums">
-                      {formatINR(total)}
-                    </span>
                   </div>
                 </div>
 
