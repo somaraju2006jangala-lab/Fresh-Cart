@@ -20,6 +20,7 @@ export const FloatingCart: React.FC<FloatingCartProps> = ({
   return (
     <div id="cart-drawer-toggle" className="fixed bottom-6 right-6 z-50 pointer-events-auto">
       <button
+        id="floating-cart-btn"
         type="button"
         onClick={onNavigateToCart}
         aria-label={`${t('cart')} (${cartCount})`}

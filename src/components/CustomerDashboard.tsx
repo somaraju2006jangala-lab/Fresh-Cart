@@ -453,12 +453,18 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <div className="text-[11px] text-white/75">{t('totalOrdersCount')}</div>
             </div>
             <div className="w-px h-8 bg-white/20" />
-            <div className="text-center px-2 sm:px-3">
+            <button
+              type="button"
+              id="dashboard-cart-stat-btn"
+              onClick={onOpenCart}
+              title={t('cart')}
+              className="text-center px-2 sm:px-3 hover:opacity-80 transition-opacity cursor-pointer"
+            >
               <div className="text-[20px] font-bold font-display text-[#7ffc97]">
                 {cartItemCount}
               </div>
               <div className="text-[11px] text-white/75">{t('cartItemsCount')}</div>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -1010,10 +1016,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 </div>
                 <button
                   type="button"
+                  id="dashboard-view-cart-btn"
                   onClick={onOpenCart}
                   className="px-3 py-1.5 bg-[#eff4ff] text-[#006b2c] rounded-xl text-[12px] font-semibold border border-[#d3e4fe] hover:bg-[#dce9ff] cursor-pointer"
                 >
-                  Open Full Cart Drawer →
+                  View Cart Page →
                 </button>
               </div>
 

@@ -566,7 +566,7 @@ apiRouter.get(['/api/inventory/logs', '/inventory/logs'], async (_req: Request, 
  * GET /api/cart
  * Retrieves the logged-in customer's cart.
  */
-apiRouter.get(['/api/cart', '/cart'], async (req: Request, res: Response) => {
+apiRouter.get('/api/cart', async (req: Request, res: Response) => {
   try {
     const auth = extractAuthCustomer(req);
     if (!auth.authenticated || !auth.customerId) {
@@ -633,7 +633,7 @@ apiRouter.delete(['/api/cart/items/:productId', '/cart/items/:productId'], async
  * DELETE /api/cart
  * Clears the customer's cart.
  */
-apiRouter.delete(['/api/cart', '/cart'], async (req: Request, res: Response) => {
+apiRouter.delete('/api/cart', async (req: Request, res: Response) => {
   try {
     const auth = extractAuthCustomer(req);
     if (!auth.authenticated || !auth.customerId) {

@@ -282,6 +282,8 @@ function FreshCartStore() {
           setCurrentView('admin');
         } else if (hash === '#/register' || hash === '#register') {
           setCurrentView('register');
+        } else if (isCart) {
+          setCurrentView('cart');
         } else {
           // Default to login page on initial site visit or any protected page attempt
           setCurrentView('login');
@@ -358,25 +360,36 @@ function FreshCartStore() {
     if (view === 'admin') {
       setIsCheckoutOpen(false);
     }
-    if (window.location.pathname.toLowerCase() === '/cart' && view !== 'cart') {
-      try {
-        window.history.replaceState(null, '', '/' + (window.location.search || ''));
-      } catch {
-        // ignore
+
+    if (view === 'cart') {
+      if (window.location.pathname.toLowerCase() !== '/cart') {
+        try {
+          window.history.pushState({ view: 'cart' }, '', '/cart' + (window.location.search || ''));
+        } catch {
+          window.location.hash = '#/cart';
+        }
       }
-    }
-    if (view === 'storefront') {
-      window.location.hash = '#/storefront';
-    } else if (view === 'cart') {
-      window.location.hash = '#/cart';
-    } else if (view === 'search') {
-      const q = param !== undefined ? param : (submittedSearchQuery || searchQuery);
-      window.location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
-    } else if (view === 'category') {
-      const c = param !== undefined ? param : selectedCategory;
-      window.location.hash = c && c !== 'all' ? `#/category?c=${encodeURIComponent(c)}` : '#/category';
     } else {
-      window.location.hash = `#/${view}`;
+      const wasOnCart = window.location.pathname.toLowerCase() === '/cart';
+      if (wasOnCart) {
+        try {
+          const targetUrl = '/' + (window.location.search || '') + (view === 'storefront' ? '#/storefront' : `#/${view}`);
+          window.history.pushState({ view }, '', targetUrl);
+        } catch {
+          // ignore
+        }
+      }
+      if (view === 'storefront') {
+        window.location.hash = '#/storefront';
+      } else if (view === 'search') {
+        const q = param !== undefined ? param : (submittedSearchQuery || searchQuery);
+        window.location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
+      } else if (view === 'category') {
+        const c = param !== undefined ? param : selectedCategory;
+        window.location.hash = c && c !== 'all' ? `#/category?c=${encodeURIComponent(c)}` : '#/category';
+      } else {
+        window.location.hash = `#/${view}`;
+      }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
