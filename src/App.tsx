@@ -1063,8 +1063,8 @@ function FreshCartStore() {
         )}
       </main>
 
-      {/* Floating Cart Button (Only available in Customer Portal except on dedicated /cart, login, register, and admin views) */}
-      {currentView !== 'admin' && currentView !== 'cart' && currentView !== 'login' && currentView !== 'register' && (
+      {/* Floating Cart Button (Only available in Customer Portal except on dedicated /cart, login, register, admin views, and when checkout modal is closed) */}
+      {currentView !== 'admin' && currentView !== 'cart' && currentView !== 'login' && currentView !== 'register' && !isCheckoutOpen && (
         <FloatingCart
           cartCount={cartCount}
           onNavigateToCart={() => navigateToView('cart')}

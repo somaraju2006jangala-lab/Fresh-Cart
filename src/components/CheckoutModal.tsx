@@ -134,8 +134,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
       setProofError('');
       setDirectUpiLaunched(false);
+    } else {
+      setStep('details');
     }
   }, [isOpen]);
+
+  // Body scroll lock & Escape key handling when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (step === 'details') {
+          onClose();
+        } else {
+          handleDone();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, step, onClose]);
 
   // Check OTP 10-minute expiry
   useEffect(() => {
@@ -493,6 +519,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       <input
         ref={fileInputRef}
         id="checkout-payment-proof-input"
+        data-testid="checkout-payment-proof-input"
         type="file"
         accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
         onChange={handleFileSelect}
@@ -504,6 +531,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <button
             type="button"
             id="checkout-upload-proof-btn"
+            data-testid="checkout-upload-proof-btn"
             onClick={() => fileInputRef.current?.click()}
             className="w-full py-2.5 px-3 border-2 border-dashed border-[#00a843]/50 hover:border-[#22c55e] rounded-xl bg-emerald-950/20 hover:bg-emerald-950/40 text-[12px] font-semibold text-[#4ade80] flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
@@ -557,6 +585,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <button
               type="button"
               id="checkout-replace-proof-btn"
+              data-testid="checkout-replace-proof-btn"
               onClick={handleReplaceProof}
               className="px-2.5 py-1 text-[11px] font-semibold text-[#4ade80] hover:bg-[#006b2c]/20 rounded-lg transition-colors cursor-pointer"
             >
@@ -565,6 +594,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <button
               type="button"
               id="checkout-remove-proof-btn"
+              data-testid="checkout-remove-proof-btn"
               onClick={handleRemoveProof}
               className="px-2.5 py-1 text-[11px] font-semibold text-[#f87171] hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
             >
@@ -590,144 +620,178 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const proofPreview = proofDataUrl;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#0b131e]/82 backdrop-blur-xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8),0_0_40px_rgba(0,107,44,0.12)] max-w-lg w-full overflow-hidden border border-white/15 flex flex-col text-[#f1f5f9] animate-in fade-in zoom-in-95 duration-200">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-white/[0.04] backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#006b2c] text-white flex items-center justify-center shadow-2xs">
-              <Zap className="w-4 h-4 text-[#7ffc97]" />
+    <div id="checkout-modal-root" className="fixed inset-0 z-50">
+      {/* 1. Dedicated Backdrop Overlay */}
+      <div
+        id="checkout-modal-backdrop"
+        data-testid="checkout-backdrop"
+        onClick={step === 'details' ? onClose : handleDone}
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 pointer-events-auto z-0"
+        aria-hidden="true"
+      />
+
+      {/* 2. Scrollable Modal Centering Viewport */}
+      <div
+        className="fixed inset-0 z-10 overflow-y-auto p-4 sm:p-6 flex items-center justify-center pointer-events-none"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkout-modal-title"
+      >
+        {/* 3. Checkout Modal Dialog Container */}
+        <div
+          id="checkout-modal-container"
+          data-testid="checkout-modal"
+          onClick={(e) => e.stopPropagation()}
+          className="relative z-20 pointer-events-auto bg-[#0b131e]/90 backdrop-blur-xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8),0_0_40px_rgba(0,107,44,0.12)] max-w-lg w-full overflow-hidden border border-white/15 flex flex-col text-[#f1f5f9] animate-in fade-in zoom-in-95 duration-200 my-auto"
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-white/[0.04] backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-[#006b2c] text-white flex items-center justify-center shadow-2xs">
+                <Zap className="w-4 h-4 text-[#7ffc97]" />
+              </div>
+              <div>
+                <h2 id="checkout-modal-title" className="text-[17px] font-bold text-white font-display">
+                  {step === 'details'
+                    ? t('expressCheckout')
+                    : step === 'pending_verification'
+                    ? 'Payment Pending Verification'
+                    : t('orderConfirmed')}
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  {step === 'details'
+                    ? t('thirtyMinDelivery')
+                    : `${t('orderNumber')}: #${orderNumber}`}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-[17px] font-bold text-white font-display">
-                {step === 'details'
-                  ? t('expressCheckout')
-                  : step === 'pending_verification'
-                  ? 'Payment Pending Verification'
-                  : t('orderConfirmed')}
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                {step === 'details'
-                  ? t('thirtyMinDelivery')
-                  : `${t('orderNumber')}: #${orderNumber}`}
-              </p>
-            </div>
+            <button
+              type="button"
+              id="checkout-close-btn"
+              data-testid="checkout-close-btn"
+              aria-label="Close Checkout Modal"
+              onClick={step === 'details' ? onClose : handleDone}
+              className="w-8 h-8 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={step === 'details' ? onClose : handleDone}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Modal Body */}
-        {step === 'details' ? (
-          <form onSubmit={handlePlaceOrder} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-            {/* Speed delivery banner */}
-            <div className="bg-emerald-950/30 backdrop-blur-xs border border-emerald-500/25 p-3 rounded-xl flex items-center justify-between text-[12px]">
-              <div className="flex items-center gap-2 text-[#4ade80] font-semibold">
-                <Clock className="w-4 h-4 text-[#4ade80]" />
-                <span>{t('estimatedArrival')}: {t('minsArrival')}</span>
+          {/* Modal Body */}
+          {step === 'details' ? (
+            <form onSubmit={handlePlaceOrder} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto overscroll-contain">
+              {/* Speed delivery banner */}
+              <div className="bg-emerald-950/30 backdrop-blur-xs border border-emerald-500/25 p-3 rounded-xl flex items-center justify-between text-[12px]">
+                <div className="flex items-center gap-2 text-[#4ade80] font-semibold">
+                  <Clock className="w-4 h-4 text-[#4ade80]" />
+                  <span>{t('estimatedArrival')}: {t('minsArrival')}</span>
+                </div>
               </div>
-            </div>
 
-            {/* Delivery Destination */}
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-slate-200 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#4ade80]" />
-                {t('deliveryAddress')}
-              </label>
-              <input
-                type="text"
-                required
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-[13px] border border-white/15 rounded-xl bg-black/40 backdrop-blur-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:bg-black/60 focus:border-[#22c55e] focus:ring-2 focus:ring-[#006b2c]/40 transition-all"
-                placeholder={t('deliveryAddressPlaceholder')}
-              />
-            </div>
+              {/* Delivery Destination */}
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-[#4ade80]" />
+                  {t('deliveryAddress')}
+                </label>
+                <input
+                  id="checkout-address-input"
+                  data-testid="checkout-address-input"
+                  name="deliveryAddress"
+                  type="text"
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-[13px] border border-white/15 rounded-xl bg-black/40 backdrop-blur-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:bg-black/60 focus:border-[#22c55e] focus:ring-2 focus:ring-[#006b2c]/40 transition-all"
+                  placeholder={t('deliveryAddressPlaceholder')}
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-slate-200">
-                {t('fulfillmentNotes')}
-              </label>
-              <input
-                type="text"
-                value={deliveryNote}
-                onChange={(e) => setDeliveryNote(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-[13px] border border-white/15 rounded-xl bg-black/40 backdrop-blur-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:bg-black/60 focus:border-[#22c55e] focus:ring-2 focus:ring-[#006b2c]/40 transition-all"
-                placeholder={t('fulfillmentNotesPlaceholder')}
-              />
-            </div>
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-200">
+                  {t('fulfillmentNotes')}
+                </label>
+                <input
+                  id="checkout-notes-input"
+                  data-testid="checkout-notes-input"
+                  name="fulfillmentNotes"
+                  type="text"
+                  value={deliveryNote}
+                  onChange={(e) => setDeliveryNote(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-[13px] border border-white/15 rounded-xl bg-black/40 backdrop-blur-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:bg-black/60 focus:border-[#22c55e] focus:ring-2 focus:ring-[#006b2c]/40 transition-all"
+                  placeholder={t('fulfillmentNotesPlaceholder')}
+                />
+              </div>
 
-            {/* Payment Method Selector with 3 independent options */}
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-slate-200 flex items-center gap-1.5">
-                <Banknote className="w-3.5 h-3.5 text-[#4ade80]" />
-                {t('paymentMethod')}
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* 1. Cash on Delivery */}
-                <button
-                  type="button"
-                  id="checkout-pay-cod-btn"
-                  onClick={() => {
-                    setPaymentMethod('cash');
-                    setProofError('');
-                  }}
-                  className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                    paymentMethod === 'cash'
-                      ? 'border-[#22c55e] bg-[#006b2c]/30 text-[#4ade80] ring-2 ring-[#006b2c]/40 shadow-xs'
-                      : 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
-                  }`}
-                >
-                  <Banknote className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
-                  <span>{t('payCod')}</span>
-                </button>
-
-                {/* 2. UPI / QR Payment */}
-                {paymentSettings.upiPaymentEnabled !== false && (
+              {/* Payment Method Selector with 3 independent options */}
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Banknote className="w-3.5 h-3.5 text-[#4ade80]" />
+                  {t('paymentMethod')}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* 1. Cash on Delivery */}
                   <button
                     type="button"
-                    id="checkout-pay-upi-qr-btn"
+                    id="checkout-pay-cod-btn"
+                    data-testid="checkout-pay-cod-btn"
                     onClick={() => {
-                      setPaymentMethod('upi_qr');
+                      setPaymentMethod('cash');
                       setProofError('');
                     }}
                     className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                      paymentMethod === 'upi_qr'
+                      paymentMethod === 'cash'
                         ? 'border-[#22c55e] bg-[#006b2c]/30 text-[#4ade80] ring-2 ring-[#006b2c]/40 shadow-xs'
                         : 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
                     }`}
                   >
-                    <QrCode className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
-                    <span>{t('payUpiQr')}</span>
+                    <Banknote className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
+                    <span>{t('payCod')}</span>
                   </button>
-                )}
 
-                {/* 3. Direct UPI App Payment */}
-                {paymentSettings.directUpiAppEnabled !== false && (
-                  <button
-                    type="button"
-                    id="checkout-pay-direct-upi-btn"
-                    onClick={() => {
-                      setPaymentMethod('upi_app');
-                      setProofError('');
-                    }}
-                    className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                      paymentMethod === 'upi_app'
-                        ? 'border-[#22c55e] bg-[#006b2c]/30 text-[#4ade80] ring-2 ring-[#006b2c]/40 shadow-xs'
-                        : 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
-                    <span>{t('payDirectUpi')}</span>
-                  </button>
-                )}
+                  {/* 2. UPI / QR Payment */}
+                  {paymentSettings.upiPaymentEnabled !== false && (
+                    <button
+                      type="button"
+                      id="checkout-pay-upi-qr-btn"
+                      data-testid="checkout-pay-upi-qr-btn"
+                      onClick={() => {
+                        setPaymentMethod('upi_qr');
+                        setProofError('');
+                      }}
+                      className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
+                        paymentMethod === 'upi_qr'
+                          ? 'border-[#22c55e] bg-[#006b2c]/30 text-[#4ade80] ring-2 ring-[#006b2c]/40 shadow-xs'
+                          : 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
+                      <span>{t('payUpiQr')}</span>
+                    </button>
+                  )}
+
+                  {/* 3. Direct UPI App Payment */}
+                  {paymentSettings.directUpiAppEnabled !== false && (
+                    <button
+                      type="button"
+                      id="checkout-pay-direct-upi-btn"
+                      data-testid="checkout-pay-direct-upi-btn"
+                      onClick={() => {
+                        setPaymentMethod('upi_app');
+                        setProofError('');
+                      }}
+                      className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
+                        paymentMethod === 'upi_app'
+                          ? 'border-[#22c55e] bg-[#006b2c]/30 text-[#4ade80] ring-2 ring-[#006b2c]/40 shadow-xs'
+                          : 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
+                      }`}
+                    >
+                      <Smartphone className="w-4 h-4 mx-auto mb-1 text-[#4ade80]" />
+                      <span>{t('payDirectUpi')}</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
             {/* Option 2 Details: UPI / QR Payment Container */}
             {paymentMethod === 'upi_qr' && (
@@ -769,6 +833,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <button
                         type="button"
                         id="checkout-copy-upi-btn"
+                        data-testid="checkout-copy-upi-btn"
                         onClick={handleCopyUpi}
                         className="px-2 py-0.5 text-[11px] font-semibold rounded bg-[#006b2c]/30 text-[#4ade80] hover:bg-[#006b2c]/50 transition-colors cursor-pointer flex items-center gap-1 border border-[#006b2c]/40"
                       >
@@ -793,6 +858,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <div className="p-2.5 bg-white rounded-xl border border-white/30 shadow-md">
                     <img
                       id="checkout-qr-code-img"
+                      data-testid="checkout-qr-code-img"
                       src={activeQrCodeUrl}
                       alt="UPI Payment QR Code"
                       className="w-44 h-44 sm:w-48 sm:h-48 object-contain rounded-lg"
@@ -811,6 +877,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <button
                       type="button"
                       id="checkout-pay-with-upi-app-btn"
+                      data-testid="checkout-pay-with-upi-app-btn"
                       onClick={handleOpenUpiDeepLink}
                       className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
@@ -879,6 +946,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <button
                     type="button"
                     id="checkout-direct-pay-now-btn"
+                    data-testid="checkout-direct-pay-now-btn"
                     onClick={handleDirectUpiPayNow}
                     className="w-full py-3 rounded-xl bg-[#006b2c] text-white font-bold text-[14px] hover:bg-[#00873a] hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
@@ -943,6 +1011,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <button
                         type="button"
                         id="checkout-remove-coupon-btn"
+                        data-testid="checkout-remove-coupon-btn"
                         onClick={onRemoveCoupon}
                         className="text-[11px] underline hover:text-white font-semibold cursor-pointer text-red-400"
                       >
@@ -955,6 +1024,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <div className="flex gap-1.5">
                       <input
                         id="checkout-coupon-input"
+                        data-testid="checkout-coupon-input"
                         type="text"
                         value={checkoutCouponInput}
                         onChange={(e) => {
@@ -967,6 +1037,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <button
                         type="button"
                         id="checkout-apply-coupon-btn"
+                        data-testid="checkout-apply-coupon-btn"
                         onClick={handleApplyCheckoutCoupon}
                         className="px-3 py-1 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
                       >
@@ -1010,6 +1081,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               type="submit"
               disabled={isSubmitting}
               id="checkout-submit-order-btn"
+              data-testid="checkout-submit-order-btn"
               className="w-full py-3.5 rounded-xl bg-[#006b2c] text-white font-bold text-[14px] hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-950/60 hover:brightness-105 active:translate-y-0 active:scale-98 shadow-md transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {isSubmitting ? (
@@ -1026,7 +1098,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </form>
         ) : step === 'pending_verification' ? (
           /* Step: Online Payment Pending Verification Screen */
-          <div className="p-5 sm:p-6 text-center space-y-4 max-h-[75vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 text-center space-y-4 max-h-[75vh] overflow-y-auto overscroll-contain">
             <div className="w-16 h-16 rounded-full bg-amber-950/60 text-amber-400 flex items-center justify-center mx-auto shadow-inner border border-amber-500/40">
               <Clock className="w-8 h-8 text-amber-400" />
             </div>
@@ -1086,6 +1158,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <button
                   type="button"
                   id="checkout-goto-dashboard-btn"
+                  data-testid="checkout-goto-dashboard-btn"
                   onClick={() => {
                     handleDone();
                     onNavigateToDashboard();
@@ -1098,6 +1171,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <button
                 type="button"
                 id="checkout-continue-shopping-btn"
+                data-testid="checkout-continue-shopping-btn"
                 onClick={handleDone}
                 className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] transition-all cursor-pointer shadow-xs"
               >
@@ -1107,7 +1181,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </div>
         ) : (
           /* Step: Cash On Delivery Success Screen with Handover OTP */
-          <div className="p-5 sm:p-6 text-center space-y-4 max-h-[75vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 text-center space-y-4 max-h-[75vh] overflow-y-auto overscroll-contain">
             <div className="w-16 h-16 rounded-full bg-emerald-950/70 text-[#4ade80] flex items-center justify-center mx-auto shadow-inner border border-emerald-500/40">
               <CheckCircle className="w-8 h-8 text-[#4ade80]" />
             </div>
@@ -1255,6 +1329,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <button
                   type="button"
                   id="checkout-goto-dashboard-btn"
+                  data-testid="checkout-goto-dashboard-btn"
                   onClick={() => {
                     handleDone();
                     onNavigateToDashboard();
@@ -1267,6 +1342,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <button
                 type="button"
                 id="checkout-continue-shopping-btn"
+                data-testid="checkout-continue-shopping-btn"
                 onClick={handleDone}
                 className="flex-1 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-semibold hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 active:translate-y-0 active:scale-98 transition-all duration-200 cursor-pointer"
               >
@@ -1275,6 +1351,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
