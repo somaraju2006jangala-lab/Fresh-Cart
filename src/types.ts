@@ -66,14 +66,7 @@ export interface Order {
   otpVerifiedAt?: string;
   handoverReleased?: boolean;
   paymentMethod?: string;
-  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'Pending Verification' | 'Rejected' | string;
-  paymentProofStatus?: 'Not Uploaded' | 'Uploaded' | 'Under Verification' | 'Verified' | 'Rejected' | string;
-  paymentProofUrl?: string;
-  paymentProofName?: string;
-  paymentProofSize?: number;
-  paymentProofType?: string;
-  paymentProofUploadedAt?: string;
-  paymentProofRejectionReason?: string;
+  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | string;
 }
 
 export interface CustomerAddress {
@@ -120,7 +113,7 @@ export interface Coupon {
   createdAt?: string;
 }
 
-export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category' | 'cart';
+export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category';
 
 export interface DeliveryChargeRule {
   id: string;
@@ -129,6 +122,10 @@ export interface DeliveryChargeRule {
 }
 
 export interface PaymentSettings {
+  upiId: string;
+  payeeName: string;
+  qrCodeUrl?: string;
+  upiPaymentEnabled: boolean;
   directUpiAppEnabled: boolean;
   updatedAt?: string;
 }

@@ -44,12 +44,8 @@ import {
   saveSettingsToDb,
   getPaymentSettingsFromDb,
   savePaymentSettingsToDb,
-  saveOrderPaymentProofInDb,
-  verifyOrRejectPaymentInDb,
 } from './db.ts';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
 
 ensureEnvLoaded();
 
@@ -1176,7 +1172,7 @@ apiRouter.post('/api/settings', async (req: Request, res: Response) => {
 
 /**
  * GET /api/payment-settings
- * Returns active payment settings (direct UPI app toggle).
+ * Returns active payment settings (UPI ID, merchant name, QR code, enable/disable toggles).
  */
 apiRouter.get('/api/payment-settings', async (_req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1200,9 +1196,24 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
   res.setHeader('Expires', '0');
   try {
     const current = await getPaymentSettingsFromDb();
+    const upiId = req.body?.upiId !== undefined && typeof req.body.upiId === 'string' && req.body.upiId.trim()
+      ? req.body.upiId.trim()
+      : current.upiId;
+    const payeeName = req.body?.payeeName !== undefined && typeof req.body.payeeName === 'string' && req.body.payeeName.trim()
+      ? req.body.payeeName.trim()
+      : current.payeeName;
+    let qrCodeUrl = req.body?.qrCodeUrl !== undefined ? req.body.qrCodeUrl : current.qrCodeUrl;
+    if (!qrCodeUrl && upiId) {
+      qrCodeUrl = generateQrDataUrl(`upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName || '')}&cu=INR`);
+    }
+    const upiPaymentEnabled = req.body?.upiPaymentEnabled !== undefined ? !!req.body.upiPaymentEnabled : current.upiPaymentEnabled;
     const directUpiAppEnabled = req.body?.directUpiAppEnabled !== undefined ? !!req.body.directUpiAppEnabled : current.directUpiAppEnabled;
 
     const settings = {
+      upiId,
+      payeeName,
+      qrCodeUrl,
+      upiPaymentEnabled,
       directUpiAppEnabled,
       updatedAt: new Date().toISOString(),
     };
@@ -1214,347 +1225,8 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/orders/:id/payment-proof
- * Customer uploads payment proof (JPG, PNG, PDF up to 10MB) for an online payment.
- */
-apiRouter.post('/api/orders/:id/payment-proof', async (req: Request, res: Response) => {
-  try {
-    const orderId = decodeURIComponent(req.params.id);
-    const auth = extractAuthCustomer(req);
-
-    const { proofDataUrl, fileName, fileType, fileSize } = req.body || {};
-
-    if (!proofDataUrl || !fileName) {
-      sendJson(res, 400, { success: false, error: 'Payment proof file is required.' });
-      return;
-    }
-
-    // Validate format: JPG, PNG, PDF
-    const allowedMime = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-    const normalizedType = (fileType || '').toLowerCase();
-    const extension = fileName.split('.').pop()?.toLowerCase() || '';
-    const isAllowedExt = ['jpg', 'jpeg', 'png', 'pdf'].includes(extension);
-    const isAllowedMime = allowedMime.includes(normalizedType);
-
-    if (!isAllowedExt && !isAllowedMime) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Unsupported file format. Please upload JPG, PNG, or PDF.',
-      });
-      return;
-    }
-
-    // Validate size: max 10 MB = 10,485,760 bytes
-    const MAX_BYTES = 10 * 1024 * 1024;
-    const parsedSize = Number(fileSize) || 0;
-    if (parsedSize > MAX_BYTES) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'File size exceeds maximum allowed limit of 10 MB.',
-      });
-      return;
-    }
-
-    let order = await findOrderInDb(orderId);
-
-    // Customer isolation check (Requirement 14): cannot upload proof for another customer's order
-    if (order && auth.authenticated && !auth.isAdmin && order.customerId) {
-      if (
-        order.customerId !== auth.customerId &&
-        order.customerId !== 'guest' &&
-        order.customerId !== 'guest_user'
-      ) {
-        sendJson(res, 403, {
-          success: false,
-          error: "Access denied: You cannot upload payment proof for another customer's order.",
-        });
-        return;
-      }
-    }
-
-    // Secure private proofs directory (Requirement 14: not publicly exposed)
-    const proofsDir = path.join(process.cwd(), '.data', 'proofs');
-    if (!fs.existsSync(proofsDir)) {
-      try {
-        fs.mkdirSync(proofsDir, { recursive: true });
-      } catch {}
-    }
-
-    // Clean up any older proof files for this order before writing new one (supports replacing proof)
-    const safeOrderKey = orderId.replace(/[^a-zA-Z0-9]/g, '');
-    const safePrefix = `proof_${safeOrderKey}_`;
-    if (fs.existsSync(proofsDir)) {
-      try {
-        const existingFiles = fs.readdirSync(proofsDir);
-        for (const f of existingFiles) {
-          if (f.startsWith(safePrefix)) {
-            try {
-              fs.unlinkSync(path.join(proofsDir, f));
-            } catch {}
-          }
-        }
-      } catch {}
-    }
-
-    const safeExt = extension || (normalizedType.includes('pdf') ? 'pdf' : 'png');
-    const safeFileName = `proof_${safeOrderKey}_${Date.now()}.${safeExt}`;
-    const filePath = path.join(proofsDir, safeFileName);
-
-    let savedUrl = proofDataUrl;
-    if (typeof proofDataUrl === 'string' && proofDataUrl.includes('base64,')) {
-      const base64Data = proofDataUrl.split('base64,')[1];
-      try {
-        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-        savedUrl = `/api/orders/${encodeURIComponent(orderId)}/payment-proof/file`;
-      } catch {
-        // fallback to keeping proofDataUrl
-      }
-    }
-
-    const proofPayload = {
-      url: savedUrl,
-      name: fileName,
-      size: parsedSize,
-      type: normalizedType || (safeExt === 'pdf' ? 'application/pdf' : 'image/png'),
-      uploadedAt: new Date().toISOString(),
-    };
-
-    await saveOrderPaymentProofInDb(orderId, proofPayload);
-    const updatedOrder = await findOrderInDb(orderId);
-
-    sendJson(res, 200, {
-      success: true,
-      message: 'Payment proof uploaded successfully and is under verification.',
-      order: updatedOrder || {
-        id: orderId,
-        paymentStatus: 'Pending Verification',
-        paymentProofStatus: 'Under Verification',
-        paymentProofName: fileName,
-        paymentProofSize: parsedSize,
-        paymentProofType: normalizedType,
-        status: 'Pending',
-      },
-    });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to upload payment proof.' });
-  }
-});
-
-/**
- * GET /api/orders/:id/payment-proof
- * Retrieves payment proof metadata. Enforces customer isolation.
- */
-apiRouter.get('/api/orders/:id/payment-proof', async (req: Request, res: Response) => {
-  try {
-    const orderId = decodeURIComponent(req.params.id);
-    const auth = extractAuthCustomer(req);
-    const order = await findOrderInDb(orderId);
-
-    if (!order) {
-      sendJson(res, 404, { success: false, error: 'Order not found.' });
-      return;
-    }
-
-    // Customer isolation check (Requirement 14): cannot view another customer's proof
-    if (!auth.isAdmin && auth.authenticated && order.customerId && order.customerId !== auth.customerId) {
-      sendJson(res, 403, {
-        success: false,
-        error: "Access denied: You cannot view another customer's payment proof.",
-      });
-      return;
-    }
-
-    const proofObj = {
-      status: order.paymentProofStatus || 'Not Uploaded',
-      url: order.paymentProofUrl || null,
-      fileName: order.paymentProofName || null,
-      fileSize: order.paymentProofSize || null,
-      fileType: order.paymentProofType || null,
-      uploadedAt: order.paymentProofUploadedAt || null,
-      rejectionReason: order.paymentProofRejectionReason || null,
-    };
-
-    sendJson(res, 200, {
-      success: true,
-      paymentProof: proofObj,
-      proof: proofObj,
-    });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve payment proof.' });
-  }
-});
-
-/**
- * GET /api/orders/:id/payment-proof/file
- * Secure file stream for uploaded payment proof with authorization.
- */
-apiRouter.get('/api/orders/:id/payment-proof/file', async (req: Request, res: Response) => {
-  try {
-    const orderId = decodeURIComponent(req.params.id);
-    const auth = extractAuthCustomer(req);
-    const order = await findOrderInDb(orderId);
-
-    if (!order) {
-      sendJson(res, 404, { success: false, error: 'Order not found.' });
-      return;
-    }
-
-    if (!auth.isAdmin && auth.authenticated && order.customerId && order.customerId !== auth.customerId) {
-      sendJson(res, 403, {
-        success: false,
-        error: "Access denied: You cannot access another customer's payment proof.",
-      });
-      return;
-    }
-
-    const proofsDir = path.join(process.cwd(), '.data', 'proofs');
-    const safePrefix = `proof_${orderId.replace(/[^a-zA-Z0-9]/g, '')}_`;
-    if (fs.existsSync(proofsDir)) {
-      const files = fs.readdirSync(proofsDir).filter((f) => f.startsWith(safePrefix)).sort().reverse();
-      const matched = files[0];
-      if (matched) {
-        const fullPath = path.join(proofsDir, matched);
-        const ext = matched.split('.').pop()?.toLowerCase();
-        let mime = 'image/png';
-        if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
-        else if (ext === 'pdf') mime = 'application/pdf';
-
-        res.setHeader('Content-Type', mime);
-        const data = fs.readFileSync(fullPath);
-        res.end(data);
-        return;
-      }
-    }
-
-    // If order has data URL
-    if (order.paymentProofUrl && order.paymentProofUrl.startsWith('data:')) {
-      const parts = order.paymentProofUrl.split(',');
-      const mimeMatch = parts[0].match(/:(.*?);/);
-      const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-      res.setHeader('Content-Type', mime);
-      res.end(Buffer.from(parts[1], 'base64'));
-      return;
-    }
-
-    sendJson(res, 404, { success: false, error: 'Proof file not found on disk.' });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Error streaming proof file.' });
-  }
-});
-
-/**
- * PUT /api/orders/:id/verify-payment
- * Admin action to verify or reject customer's payment proof.
- */
-apiRouter.put('/api/orders/:id/verify-payment', async (req: Request, res: Response) => {
-  try {
-    const orderId = decodeURIComponent(req.params.id);
-    const auth = extractAuthCustomer(req);
-
-    if (auth.authenticated && !auth.isAdmin && !auth.customerId.includes('admin') && !req.headers['x-admin-request']) {
-      sendJson(res, 403, { success: false, error: 'Unauthorized: Admin privileges required.' });
-      return;
-    }
-
-    const { action, reason, rejectionReason } = req.body || {};
-    const normAction = (action || '').toUpperCase() as 'VERIFY' | 'REJECT';
-    if (normAction !== 'VERIFY' && normAction !== 'REJECT') {
-      sendJson(res, 400, { success: false, error: 'Action must be VERIFY or REJECT.' });
-      return;
-    }
-
-    const finalReason = rejectionReason || reason;
-    const result = await verifyOrRejectPaymentInDb(orderId, normAction, finalReason);
-    sendJson(res, 200, {
-      success: true,
-      action: normAction,
-      message: normAction === 'VERIFY' ? 'Payment verified and order confirmed.' : 'Payment proof rejected.',
-      order: result.order,
-    });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to update payment verification.' });
-  }
-});
-
-/**
- * POST /api/payments/razorpay/create-order
- * Initiates Razorpay order if credentials exist in environment.
- */
-apiRouter.post('/api/payments/razorpay/create-order', async (req: Request, res: Response) => {
-  try {
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-
-    if (!keyId || !keySecret) {
-      sendJson(res, 200, {
-        success: false,
-        gatewayConfigured: false,
-        message: 'Razorpay credentials not configured in environment.',
-      });
-      return;
-    }
-
-    const Razorpay = (await import('razorpay')).default;
-    const instance = new Razorpay({ key_id: keyId, key_secret: keySecret });
-    const { amount, orderId } = req.body;
-
-    const rzpOrder = await instance.orders.create({
-      amount: Math.round(Number(amount) * 100),
-      currency: 'INR',
-      receipt: orderId || `rcpt_${Date.now()}`,
-    });
-
-    sendJson(res, 200, { success: true, gatewayConfigured: true, razorpayOrder: rzpOrder, keyId });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to create Razorpay order.' });
-  }
-});
-
-/**
- * POST /api/payments/razorpay/verify
- * Server-side signature verification (HMAC SHA256) per Requirement 11.
- */
-apiRouter.post('/api/payments/razorpay/verify', async (req: Request, res: Response) => {
-  try {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (!keySecret) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Razorpay secret not configured. Automatic verification unavailable.',
-      });
-      return;
-    }
-
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body || {};
-    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-      sendJson(res, 400, { success: false, error: 'Missing Razorpay verification parameters.' });
-      return;
-    }
-
-    const expectedSignature = crypto
-      .createHmac('sha256', keySecret)
-      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-      .digest('hex');
-
-    if (expectedSignature !== razorpaySignature) {
-      sendJson(res, 400, { success: false, error: 'Invalid payment signature. Verification failed.' });
-      return;
-    }
-
-    if (orderId) {
-      await verifyOrRejectPaymentInDb(orderId, 'VERIFY');
-    }
-
-    sendJson(res, 200, { success: true, verified: true, message: 'Server-side payment verified successfully.' });
-  } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Server error during verification.' });
-  }
-});
-
 export const apiApp = express();
-apiApp.use(express.json({ limit: '15mb' }));
-apiApp.use(express.urlencoded({ extended: true, limit: '15mb' }));
+apiApp.use(express.json());
 apiApp.use((_req, res, next) => {
   if (!(res as any).status) {
     (res as any).status = function (code: number) {

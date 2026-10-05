@@ -37,20 +37,11 @@ function backendApiPlugin(): Plugin {
     name: 'backend-otp-api-plugin',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        // Dedicated frontend /cart page: always allow Vite to serve index.html
-        const urlPath = req.url ? req.url.split('?')[0] : '';
-        if (urlPath === '/cart' || urlPath === '/cart/') {
-          return next();
-        }
         (apiApp as any)(req, res, next);
       });
     },
     configurePreviewServer(server) {
       server.middlewares.use((req, res, next) => {
-        const urlPath = req.url ? req.url.split('?')[0] : '';
-        if (urlPath === '/cart' || urlPath === '/cart/') {
-          return next();
-        }
         (apiApp as any)(req, res, next);
       });
     },

@@ -27,13 +27,8 @@ import {
   Calendar,
   Zap,
   AlertTriangle,
-  CreditCard,
-  Upload,
-  FileText,
-  XCircle,
 } from 'lucide-react';
 import { getCustomerOrderOtp, resendOrderOtp } from '../services/otpClientService';
-import { updateOrderStatus } from '../services/authService';
 
 interface CustomerDashboardProps {
   cart: CartItem[];
@@ -102,73 +97,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     Record<string, { otp?: string; expiresAt?: number; isExpired?: boolean; loading?: boolean; error?: string }>
   >({});
   const [resendingOtp, setResendingOtp] = useState<Record<string, boolean>>({});
-
-  // Payment Proof Upload State for Customer Orders
-  const [uploadingProofOrderId, setUploadingProofOrderId] = useState<string | null>(null);
-  const [proofUploadError, setProofUploadError] = useState<Record<string, string>>({});
-
-  const handleCustomerUploadProof = (orderId: string, file: File) => {
-    setProofUploadError((prev) => ({ ...prev, [orderId]: '' }));
-
-    const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      setProofUploadError((prev) => ({
-        ...prev,
-        [orderId]: 'Unsupported file format. Please upload JPG, PNG, or PDF.',
-      }));
-      return;
-    }
-
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      setProofUploadError((prev) => ({
-        ...prev,
-        [orderId]: 'File size exceeds maximum limit of 10 MB.',
-      }));
-      return;
-    }
-
-    setUploadingProofOrderId(orderId);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string;
-      if (!dataUrl) {
-        setUploadingProofOrderId(null);
-        return;
-      }
-
-      try {
-        await fetch(`/api/orders/${encodeURIComponent(orderId)}/payment-proof`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            proofDataUrl: dataUrl,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-          }),
-        });
-      } catch (err) {
-        console.warn('Backend upload fallback to local storage', err);
-      }
-
-      const existingOrder = orders.find((o) => o.id === orderId);
-      updateOrderStatus(orderId, existingOrder ? existingOrder.status : 'Pending', {
-        paymentStatus: 'Pending Verification',
-        paymentProofStatus: 'Under Verification',
-        paymentProofUrl: dataUrl,
-        paymentProofName: file.name,
-        paymentProofSize: file.size,
-        paymentProofType: file.type,
-        paymentProofUploadedAt: new Date().toISOString(),
-        paymentProofRejectionReason: undefined,
-      });
-
-      refreshOrders();
-      setUploadingProofOrderId(null);
-    };
-    reader.readAsDataURL(file);
-  };
 
   // Fetch active OTP from backend for Picking orders
   useEffect(() => {
@@ -453,18 +381,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
               <div className="text-[11px] text-white/75">{t('totalOrdersCount')}</div>
             </div>
             <div className="w-px h-8 bg-white/20" />
-            <button
-              type="button"
-              id="dashboard-cart-stat-btn"
-              onClick={onOpenCart}
-              title={t('cart')}
-              className="text-center px-2 sm:px-3 hover:opacity-80 transition-opacity cursor-pointer"
-            >
+            <div className="text-center px-2 sm:px-3">
               <div className="text-[20px] font-bold font-display text-[#7ffc97]">
                 {cartItemCount}
               </div>
               <div className="text-[11px] text-white/75">{t('cartItemsCount')}</div>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -613,42 +535,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     {/* Order Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#e5eeff]">
                       <div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2">
                           <span className="text-[16px] font-bold text-[#0b1c30] font-display">
                             Order {order.id.startsWith('#') ? order.id : `#${order.id}`}
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
                             ● {getStatusLabel(order.status)}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
-                            {order.paymentMethod || 'Cash on Delivery'}
-                          </span>
-                          {order.paymentStatus && (
-                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                              order.paymentStatus === 'Paid'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : order.paymentStatus === 'Pending Verification'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : order.paymentStatus === 'Rejected'
-                                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}>
-                              Payment: {order.paymentStatus}
-                            </span>
-                          )}
-                          {order.paymentProofStatus && order.paymentProofStatus !== 'Not Uploaded' && (
-                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-                              order.paymentProofStatus === 'Verified'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : order.paymentProofStatus === 'Under Verification' || order.paymentProofStatus === 'Uploaded'
-                                ? 'bg-sky-50 text-sky-700 border-sky-200'
-                                : order.paymentProofStatus === 'Rejected'
-                                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                : 'bg-slate-50 text-slate-600 border-slate-200'
-                            }`}>
-                              Proof: {order.paymentProofStatus}
-                            </span>
-                          )}
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5 flex items-center gap-3">
                           <span>Placed: {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -666,67 +559,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </span>
                       </div>
                     </div>
-
-                    {/* Payment Proof / Pending Verification Card for Online Payment */}
-                    {(order.paymentStatus === 'Pending Verification' || order.paymentProofStatus === 'Rejected' || (order.paymentMethod && order.paymentMethod !== 'Cash on Delivery' && order.paymentStatus !== 'Paid')) && (
-                      <div className="p-4 rounded-xl border border-[#cbd5e1] space-y-3 bg-[#f8fafc]">
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <CreditCard className="w-4 h-4 text-[#006b2c]" />
-                              <span className="text-[13px] font-bold text-[#0b1c30]">
-                                {order.paymentProofStatus === 'Rejected'
-                                  ? 'Payment Proof Rejected'
-                                  : order.paymentStatus === 'Pending Verification'
-                                  ? 'Payment Pending Verification'
-                                  : 'Payment Proof Required'}
-                              </span>
-                            </div>
-                            <p className="text-[12px] text-[#565e74]">
-                              {order.paymentProofStatus === 'Rejected'
-                                ? order.paymentProofRejectionReason || 'Your previous payment screenshot was not verified. Please upload a clear transaction screenshot.'
-                                : 'Your payment is under verification by our team. Once verified, your order will be confirmed.'}
-                            </p>
-                            {order.paymentProofName && order.paymentProofStatus !== 'Rejected' && (
-                              <p className="text-[11px] text-[#15803d] font-medium flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-[#16a34a]" />
-                                <span>Uploaded file: {order.paymentProofName}</span>
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Upload / Replace Proof button */}
-                          <div className="shrink-0">
-                            <label className="px-3.5 py-1.5 rounded-lg bg-white border border-[#cbd5e1] hover:bg-slate-50 text-[#0b1c30] text-[12px] font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs">
-                              <Upload className="w-3.5 h-3.5 text-[#006b2c]" />
-                              <span>{order.paymentProofUrl ? 'Replace Proof' : 'Upload Proof'}</span>
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,application/pdf"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) handleCustomerUploadProof(order.id, f);
-                                  e.target.value = '';
-                                }}
-                                disabled={uploadingProofOrderId === order.id}
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                        </div>
-
-                        {uploadingProofOrderId === order.id && (
-                          <p className="text-[11px] text-[#006b2c] font-semibold animate-pulse">
-                            Uploading payment proof...
-                          </p>
-                        )}
-                        {proofUploadError[order.id] && (
-                          <p className="text-[11px] text-[#dc2626] font-semibold">
-                            {proofUploadError[order.id]}
-                          </p>
-                        )}
-                      </div>
-                    )}
 
                     {/* Order Handover OTP Section for Picking Status */}
                     {order.status === 'Picking' && (
@@ -865,7 +697,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           Payment &amp; Dispatch
                         </div>
                         <p className="text-[#565e74]">
-                          {order.paymentMethod || 'Express Checkout'} {order.paymentStatus ? `(${order.paymentStatus})` : ''} · Direct EV Runner
+                          {order.paymentMethod || 'Express Checkout'} · Direct EV Runner
                         </p>
                       </div>
                     </div>
@@ -931,18 +763,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#e5eeff]">
                       <div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2">
                           <span className="text-[16px] font-bold text-[#0b1c30] font-display">
-                            Order {order.id.startsWith('#') ? order.id : `#${order.id}`}
+                            Order #{order.id}
                           </span>
                           <span className="px-2 py-0.5 rounded-full bg-[#f1f5f9] text-[#475569] text-[11px] font-bold">
                             ✓ {getStatusLabel(order.status)}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
-                            {order.paymentMethod || 'Cash on Delivery'}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                            Payment: {order.paymentStatus || 'Paid'}
                           </span>
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5">
@@ -1016,11 +842,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 </div>
                 <button
                   type="button"
-                  id="dashboard-view-cart-btn"
                   onClick={onOpenCart}
                   className="px-3 py-1.5 bg-[#eff4ff] text-[#006b2c] rounded-xl text-[12px] font-semibold border border-[#d3e4fe] hover:bg-[#dce9ff] cursor-pointer"
                 >
-                  View Cart Page →
+                  Open Full Cart Drawer →
                 </button>
               </div>
 

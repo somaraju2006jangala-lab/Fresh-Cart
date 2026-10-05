@@ -129,20 +129,12 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_id VARCHAR(64) NULL,
   payment_method VARCHAR(32) NOT NULL DEFAULT 'COD',
   payment_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-  payment_proof_status VARCHAR(64) NOT NULL DEFAULT 'Not Uploaded',
-  payment_proof_url LONGTEXT NULL,
-  payment_proof_name VARCHAR(255) NULL,
-  payment_proof_size INT NULL,
-  payment_proof_type VARCHAR(64) NULL,
-  payment_proof_uploaded_at TIMESTAMP NULL,
-  payment_proof_rejection_reason TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_orders_order_id (order_id),
   INDEX idx_orders_customer_id (customer_id),
   INDEX idx_orders_status (status),
-  INDEX idx_orders_payment_status (payment_status),
-  INDEX idx_orders_payment_proof_status (payment_proof_status)
+  INDEX idx_orders_payment_status (payment_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -228,15 +220,8 @@ CREATE TABLE IF NOT EXISTS payments (
   payment_id VARCHAR(64) NOT NULL UNIQUE,
   order_id VARCHAR(64) NOT NULL,
   customer_id VARCHAR(64) NOT NULL,
-  payment_method VARCHAR(64) NOT NULL DEFAULT 'COD',
-  payment_status VARCHAR(64) NOT NULL DEFAULT 'PENDING',
-  payment_proof_status VARCHAR(64) NOT NULL DEFAULT 'Not Uploaded',
-  payment_proof_url LONGTEXT NULL,
-  payment_proof_name VARCHAR(255) NULL,
-  payment_proof_size INT NULL,
-  payment_proof_type VARCHAR(64) NULL,
-  payment_proof_uploaded_at TIMESTAMP NULL,
-  payment_proof_rejection_reason TEXT NULL,
+  payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
+  payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
   amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   currency VARCHAR(10) NOT NULL DEFAULT 'INR',
   razorpay_order_id VARCHAR(100) NULL,
@@ -249,7 +234,6 @@ CREATE TABLE IF NOT EXISTS payments (
   INDEX idx_payments_order_id (order_id),
   INDEX idx_payments_customer_id (customer_id),
   INDEX idx_payments_status (payment_status),
-  INDEX idx_payments_proof_status (payment_proof_status),
   CONSTRAINT fk_payments_order
     FOREIGN KEY (order_id) REFERENCES orders (order_id)
     ON DELETE CASCADE

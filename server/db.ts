@@ -1,44 +1,5 @@
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
-
-const DATA_DIR = process.env.VERCEL
-  ? path.join('/tmp', 'freshcart_data')
-  : path.resolve(process.cwd(), '.data');
-const SETTINGS_FILE = path.join(DATA_DIR, 'app_settings.json');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders_store.json');
-
-if (!fs.existsSync(DATA_DIR)) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  } catch {
-    // ignore
-  }
-}
-
-function loadOrdersFromFile(): any[] {
-  try {
-    if (fs.existsSync(ORDERS_FILE)) {
-      const data = fs.readFileSync(ORDERS_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-function saveOrdersToFile(orders: any[]): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
-  } catch {
-    // ignore
-  }
-}
 
 let pool: Pool | null = null;
 let isConnected = false;
@@ -697,33 +658,6 @@ export async function initializeDatabase(): Promise<void> {
     await currentPool.query('ALTER TABLE otp_records ADD COLUMN otp_code VARCHAR(16) NULL AFTER customer_id');
   } catch {
     // Ignore if column already exists
-  }
-
-  // Ensure orders and payments have payment proof and flexible payment status columns
-  const alterStatements = [
-    'ALTER TABLE orders ADD COLUMN payment_proof_status VARCHAR(64) NOT NULL DEFAULT "Not Uploaded"',
-    'ALTER TABLE orders ADD COLUMN payment_proof_url LONGTEXT NULL',
-    'ALTER TABLE orders ADD COLUMN payment_proof_name VARCHAR(255) NULL',
-    'ALTER TABLE orders ADD COLUMN payment_proof_size INT NULL',
-    'ALTER TABLE orders ADD COLUMN payment_proof_type VARCHAR(64) NULL',
-    'ALTER TABLE orders ADD COLUMN payment_proof_uploaded_at TIMESTAMP NULL',
-    'ALTER TABLE orders ADD COLUMN payment_proof_rejection_reason TEXT NULL',
-    'ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(64) NOT NULL DEFAULT "COD"',
-    'ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(64) NOT NULL DEFAULT "PENDING"',
-    'ALTER TABLE payments ADD COLUMN payment_proof_status VARCHAR(64) NOT NULL DEFAULT "Not Uploaded"',
-    'ALTER TABLE payments ADD COLUMN payment_proof_url LONGTEXT NULL',
-    'ALTER TABLE payments ADD COLUMN payment_proof_name VARCHAR(255) NULL',
-    'ALTER TABLE payments ADD COLUMN payment_proof_size INT NULL',
-    'ALTER TABLE payments ADD COLUMN payment_proof_type VARCHAR(64) NULL',
-    'ALTER TABLE payments ADD COLUMN payment_proof_uploaded_at TIMESTAMP NULL',
-    'ALTER TABLE payments ADD COLUMN payment_proof_rejection_reason TEXT NULL',
-  ];
-  for (const altSql of alterStatements) {
-    try {
-      await currentPool.query(altSql);
-    } catch {
-      // Ignore if column already exists or already modified
-    }
   }
 
   // Seed default data if tables are empty
@@ -1693,57 +1627,9 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
   const paymentMethod = orderData.paymentMethod || 'COD';
   const paymentStatus = orderData.paymentStatus || 'PENDING';
   const paymentId = orderData.paymentId || `PAY-${orderId.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
-  const paymentProofStatus = orderData.paymentProofStatus || 'Not Uploaded';
-  const paymentProofUrl = orderData.paymentProofUrl || null;
-  const paymentProofName = orderData.paymentProofName || null;
-  const paymentProofSize = orderData.paymentProofSize ? Number(orderData.paymentProofSize) : null;
-  const paymentProofType = orderData.paymentProofType || null;
-  const paymentProofUploadedAt = orderData.paymentProofUploadedAt ? new Date(orderData.paymentProofUploadedAt) : null;
-  const paymentProofRejectionReason = orderData.paymentProofRejectionReason || null;
 
-  // Always update file store fallback for resilience
+  const connection = await pool.getConnection();
   try {
-    const fileOrders = loadOrdersFromFile();
-    const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-    const idx = fileOrders.findIndex((o) => o.id === orderId || o.id === altId);
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      customerId,
-      customerName,
-      customerEmail: email,
-      customerPhone: mobile,
-      deliveryAddress,
-      subtotal,
-      discount,
-      total,
-      couponCode,
-      status,
-      paymentId,
-      paymentMethod,
-      paymentStatus,
-      paymentProofStatus,
-      paymentProofUrl,
-      paymentProofName,
-      paymentProofSize,
-      paymentProofType,
-      paymentProofUploadedAt: paymentProofUploadedAt ? paymentProofUploadedAt.toISOString() : undefined,
-      paymentProofRejectionReason,
-      createdAt: orderData.createdAt || new Date().toISOString(),
-    };
-    if (idx >= 0) {
-      fileOrders[idx] = normalizedOrder;
-    } else {
-      fileOrders.unshift(normalizedOrder);
-    }
-    saveOrdersToFile(fileOrders);
-  } catch (fileErr) {
-    console.warn('[FileStore] Failed to write order to file:', fileErr);
-  }
-
-  let connection: PoolConnection | null = null;
-  try {
-    connection = await pool.getConnection();
     await connection.beginTransaction();
 
     // 1. Ensure customer exists if customerId is provided
@@ -1758,72 +1644,30 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
     }
 
     // 2. Insert or update order
-    try {
-      await connection.query(
-        `INSERT INTO orders (order_id, customer_id, customer_name, email, mobile, delivery_address, subtotal, discount, total, coupon_code, status, payment_id, payment_method, payment_status, payment_proof_status, payment_proof_url, payment_proof_name, payment_proof_size, payment_proof_type, payment_proof_uploaded_at, payment_proof_rejection_reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           status = VALUES(status),
-           delivery_address = VALUES(delivery_address),
-           payment_status = VALUES(payment_status),
-           payment_proof_status = VALUES(payment_proof_status),
-           payment_proof_url = VALUES(payment_proof_url),
-           payment_proof_name = VALUES(payment_proof_name),
-           payment_proof_size = VALUES(payment_proof_size),
-           payment_proof_type = VALUES(payment_proof_type),
-           payment_proof_uploaded_at = VALUES(payment_proof_uploaded_at),
-           payment_proof_rejection_reason = VALUES(payment_proof_rejection_reason)`,
-        [
-          orderId,
-          customerId,
-          customerName,
-          email || null,
-          mobile || null,
-          deliveryAddress,
-          subtotal,
-          discount,
-          total,
-          couponCode,
-          status,
-          paymentId,
-          paymentMethod,
-          paymentStatus,
-          paymentProofStatus,
-          paymentProofUrl,
-          paymentProofName,
-          paymentProofSize,
-          paymentProofType,
-          paymentProofUploadedAt,
-          paymentProofRejectionReason,
-        ]
-      );
-    } catch {
-      // Fallback for older schema without payment_proof columns
-      await connection.query(
-        `INSERT INTO orders (order_id, customer_id, customer_name, email, mobile, delivery_address, subtotal, discount, total, coupon_code, status, payment_id, payment_method, payment_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           status = VALUES(status),
-           delivery_address = VALUES(delivery_address),
-           payment_status = VALUES(payment_status)`,
-        [
-          orderId,
-          customerId,
-          customerName,
-          email || null,
-          mobile || null,
-          deliveryAddress,
-          subtotal,
-          discount,
-          total,
-          couponCode,
-          status,
-          paymentId,
-          paymentMethod,
-          paymentStatus,
-        ]
-      );
-    }
+    await connection.query(
+      `INSERT INTO orders (order_id, customer_id, customer_name, email, mobile, delivery_address, subtotal, discount, total, coupon_code, status, payment_id, payment_method, payment_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         status = VALUES(status),
+         delivery_address = VALUES(delivery_address),
+         payment_status = VALUES(payment_status)`,
+      [
+        orderId,
+        customerId,
+        customerName,
+        email || null,
+        mobile || null,
+        deliveryAddress,
+        subtotal,
+        discount,
+        total,
+        couponCode,
+        status,
+        paymentId,
+        paymentMethod,
+        paymentStatus,
+      ]
+    );
 
     // 3. Insert order items if present
     if (Array.isArray(orderData.items) && orderData.items.length > 0) {
@@ -1846,59 +1690,30 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
       }
     }
 
-    // 4. Create/update payments record (Razorpay / UPI ready)
-    try {
-      await connection.query(
-        `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, payment_proof_status, payment_proof_url, payment_proof_name, payment_proof_size, payment_proof_type, amount, currency)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'INR')
-         ON DUPLICATE KEY UPDATE
-           payment_status = VALUES(payment_status),
-           payment_proof_status = VALUES(payment_proof_status),
-           payment_proof_url = VALUES(payment_proof_url)`,
-        [
-          paymentId,
-          orderId,
-          customerId,
-          paymentMethod,
-          paymentStatus,
-          paymentProofStatus,
-          paymentProofUrl,
-          paymentProofName,
-          paymentProofSize,
-          paymentProofType,
-          total,
-        ]
-      );
-    } catch {
-      await connection.query(
-        `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
-         VALUES (?, ?, ?, ?, ?, ?, 'INR')
-         ON DUPLICATE KEY UPDATE
-           payment_status = VALUES(payment_status)`,
-        [
-          paymentId,
-          orderId,
-          customerId,
-          paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
-          paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
-          total,
-        ]
-      );
-    }
+    // 4. Create/update payments record (Razorpay ready)
+    await connection.query(
+      `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
+       VALUES (?, ?, ?, ?, ?, ?, 'INR')
+       ON DUPLICATE KEY UPDATE
+         payment_status = VALUES(payment_status)`,
+      [
+        paymentId,
+        orderId,
+        customerId,
+        paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
+        paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
+        total,
+      ]
+    );
 
     await connection.commit();
     return true;
   } catch (err: any) {
-    if (connection) {
-      await connection.rollback().catch(() => {});
-    }
+    await connection.rollback();
     console.error('[MySQL] Error saving order:', err?.message);
-    // If MySQL failed, file fallback succeeded
-    return true;
+    return false;
   } finally {
-    if (connection) {
-      connection.release();
-    }
+    connection.release();
   }
 }
 
@@ -1917,10 +1732,6 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
               delivery_time_slot as deliveryTimeSlot, subtotal, discount, total,
               coupon_code as couponCode, status, payment_id as paymentId,
               payment_method as paymentMethod, payment_status as paymentStatus,
-              payment_proof_status as paymentProofStatus, payment_proof_url as paymentProofUrl,
-              payment_proof_name as paymentProofName, payment_proof_size as paymentProofSize,
-              payment_proof_type as paymentProofType, payment_proof_uploaded_at as paymentProofUploadedAt,
-              payment_proof_rejection_reason as paymentProofRejectionReason,
               created_at as createdAt
        FROM orders
        WHERE order_id IN (?, ?)
@@ -1928,47 +1739,36 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
       [orderId, altId]
     );
 
-    if (rows.length > 0) {
-      const order = rows[0];
+    if (rows.length === 0) return null;
+    const order = rows[0];
 
-      // Fetch order items
-      const [itemRows] = await pool.query<RowDataPacket[]>(
-        `SELECT product_id as id, product_name as title, quantity, unit, price, subtotal
-         FROM order_items
-         WHERE order_id = ?`,
-        [order.id]
-      );
+    // Fetch order items
+    const [itemRows] = await pool.query<RowDataPacket[]>(
+      `SELECT product_id as id, product_name as title, quantity, unit, price, subtotal
+       FROM order_items
+       WHERE order_id = ?`,
+      [order.id]
+    );
 
-      order.items = itemRows.map((it) => ({
-        product: {
-          id: it.id,
-          title: it.title,
-          price: Number(it.price),
-          unit: it.unit,
-        },
-        quantity: Number(it.quantity),
-      }));
+    order.items = itemRows.map((it) => ({
+      product: {
+        id: it.id,
+        title: it.title,
+        price: Number(it.price),
+        unit: it.unit,
+      },
+      quantity: Number(it.quantity),
+    }));
 
-      order.subtotal = Number(order.subtotal);
-      order.discount = Number(order.discount);
-      order.total = Number(order.total);
+    order.subtotal = Number(order.subtotal);
+    order.discount = Number(order.discount);
+    order.total = Number(order.total);
 
-      return order;
-    }
+    return order;
   } catch (err: any) {
-    console.warn('[MySQL] Error finding order in DB:', err?.message);
+    console.warn('[MySQL] Error finding order:', err?.message);
+    return null;
   }
-
-  // Fallback to file store
-  try {
-    const fileOrders = loadOrdersFromFile();
-    const match = fileOrders.find((o) => o.id === orderId || o.id === altId);
-    if (match) return match;
-  } catch {
-    // ignore
-  }
-
-  return null;
 }
 
 /**
@@ -1983,10 +1783,6 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
              delivery_time_slot as deliveryTimeSlot, subtotal, discount, total,
              coupon_code as couponCode, status, payment_id as paymentId,
              payment_method as paymentMethod, payment_status as paymentStatus,
-             payment_proof_status as paymentProofStatus, payment_proof_url as paymentProofUrl,
-             payment_proof_name as paymentProofName, payment_proof_size as paymentProofSize,
-             payment_proof_type as paymentProofType, payment_proof_uploaded_at as paymentProofUploadedAt,
-             payment_proof_rejection_reason as paymentProofRejectionReason,
              created_at as createdAt
       FROM orders
     `;
@@ -2022,21 +1818,9 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
       ord.total = Number(ord.total);
     }
 
-    if (rows.length > 0) {
-      return rows;
-    }
+    return rows;
   } catch (err: any) {
-    console.warn('[MySQL] Error querying orders from DB:', err?.message);
-  }
-
-  // Fallback to file store
-  try {
-    const fileOrders = loadOrdersFromFile();
-    if (customerId && customerId.trim()) {
-      return fileOrders.filter((o) => o.customerId === customerId.trim());
-    }
-    return fileOrders;
-  } catch {
+    console.warn('[MySQL] Error querying orders:', err?.message);
     return [];
   }
 }
@@ -2374,15 +2158,23 @@ export async function saveSettingsToDb(settings: any): Promise<boolean> {
 }
 
 // -----------------------------------------------------------------------------
-// PAYMENT SETTINGS & PROOF OPERATIONS
+// PAYMENT SETTINGS OPERATIONS
 // -----------------------------------------------------------------------------
 
 export interface PaymentSettingsRecord {
+  upiId: string;
+  payeeName: string;
+  qrCodeUrl?: string;
+  upiPaymentEnabled: boolean;
   directUpiAppEnabled: boolean;
   updatedAt?: string;
 }
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentSettingsRecord = {
+  upiId: 'freshcart@upi',
+  payeeName: 'FreshCart Grocery Store',
+  qrCodeUrl: '',
+  upiPaymentEnabled: true,
   directUpiAppEnabled: true,
   updatedAt: new Date().toISOString(),
 };
@@ -2398,31 +2190,19 @@ export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord>
       const val = typeof rows[0].setting_value === 'string'
         ? JSON.parse(rows[0].setting_value)
         : rows[0].setting_value;
-      if (val) {
+      if (val && typeof val.upiId === 'string' && val.upiId.trim().length > 0) {
         return {
+          upiId: val.upiId.trim(),
+          payeeName: val.payeeName?.trim() || 'FreshCart Grocery Store',
+          qrCodeUrl: val.qrCodeUrl || '',
+          upiPaymentEnabled: val.upiPaymentEnabled !== false,
           directUpiAppEnabled: val.directUpiAppEnabled !== false,
           updatedAt: val.updatedAt || new Date().toISOString(),
         };
       }
     }
   } catch (err: any) {
-    // MySQL read failed / offline, fallback to file
-  }
-
-  // File fallback
-  try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const fileData = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-      if (fileData?.paymentSettings) {
-        const p = fileData.paymentSettings;
-        return {
-          directUpiAppEnabled: p.directUpiAppEnabled !== false,
-          updatedAt: p.updatedAt || new Date().toISOString(),
-        };
-      }
-    }
-  } catch {
-    // fallback
+    console.warn('[MySQL] Error reading payment settings from DB:', err?.message);
   }
 
   return DEFAULT_PAYMENT_CONFIG;
@@ -2437,211 +2217,10 @@ export async function savePaymentSettingsToDb(settings: PaymentSettingsRecord): 
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
       ['payment_settings', JSON.stringify(settings)]
     );
+    return true;
   } catch (err: any) {
     console.warn('[MySQL] Could not save payment settings to DB:', err?.message);
+    return false;
   }
-
-  // Always sync to file fallback as well
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    let existingSettings: any = {};
-    if (fs.existsSync(SETTINGS_FILE)) {
-      try {
-        existingSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-      } catch {}
-    }
-    existingSettings.paymentSettings = settings;
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(existingSettings, null, 2), 'utf-8');
-  } catch (err: any) {
-    console.warn('[FileStore] Failed to write settings to file:', err?.message);
-  }
-
-  return true;
 }
 
-export async function saveOrderPaymentProofInDb(
-  orderId: string,
-  proof: {
-    url: string;
-    name: string;
-    size: number;
-    type: string;
-    uploadedAt?: string;
-  }
-): Promise<boolean> {
-  const uploadedAt = proof.uploadedAt || new Date().toISOString();
-  let updatedInDb = false;
-
-  try {
-    const pool = getPool();
-    const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-    const [res] = await pool.query<ResultSetHeader>(
-      `UPDATE orders
-       SET payment_proof_status = 'Under Verification',
-           payment_status = 'Pending Verification',
-           payment_proof_url = ?,
-           payment_proof_name = ?,
-           payment_proof_size = ?,
-           payment_proof_type = ?,
-           payment_proof_uploaded_at = NOW()
-       WHERE order_id IN (?, ?)`,
-      [proof.url, proof.name, proof.size, proof.type, orderId, altId]
-    );
-
-    await pool.query(
-      `UPDATE payments
-       SET payment_proof_status = 'Under Verification',
-           payment_status = 'Pending Verification',
-           payment_proof_url = ?,
-           payment_proof_name = ?,
-           payment_proof_size = ?,
-           payment_proof_type = ?,
-           payment_proof_uploaded_at = NOW()
-       WHERE order_id IN (?, ?)`,
-      [proof.url, proof.name, proof.size, proof.type, orderId, altId]
-    );
-
-    if (res.affectedRows > 0) {
-      updatedInDb = true;
-    }
-  } catch (err: any) {
-    console.warn('[MySQL] Error updating payment proof in DB:', err?.message);
-  }
-
-  // Also update file-based orders store
-  try {
-    const orders = loadOrdersFromFile();
-    const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-    let found = false;
-    for (const o of orders) {
-      if (o.id === orderId || o.id === altId || o.order_id === orderId || o.order_id === altId) {
-        o.paymentProofStatus = 'Under Verification';
-        o.paymentStatus = 'Pending Verification';
-        o.paymentProofUrl = proof.url;
-        o.paymentProofName = proof.name;
-        o.paymentProofSize = proof.size;
-        o.paymentProofType = proof.type;
-        o.paymentProofUploadedAt = uploadedAt;
-        found = true;
-      }
-    }
-    if (!found) {
-      orders.push({
-        id: orderId,
-        customerId: 'customer',
-        customerName: 'Customer',
-        total: 0,
-        status: 'Pending',
-        paymentStatus: 'Pending Verification',
-        paymentProofStatus: 'Under Verification',
-        paymentProofUrl: proof.url,
-        paymentProofName: proof.name,
-        paymentProofSize: proof.size,
-        paymentProofType: proof.type,
-        paymentProofUploadedAt: uploadedAt,
-      });
-    }
-    saveOrdersToFile(orders);
-    return true;
-  } catch {
-    // ignore
-  }
-
-  return updatedInDb;
-}
-
-export async function verifyOrRejectPaymentInDb(
-  orderId: string,
-  action: 'VERIFY' | 'REJECT',
-  rejectionReason?: string
-): Promise<{ success: boolean; order?: any; error?: string }> {
-  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  let updatedOrder: any = null;
-
-  try {
-    const pool = getPool();
-    if (action === 'VERIFY') {
-      await pool.query(
-        `UPDATE orders
-         SET payment_status = 'Paid',
-             payment_proof_status = 'Verified',
-             status = 'Confirmed'
-         WHERE order_id IN (?, ?)`,
-        [orderId, altId]
-      );
-      await pool.query(
-        `UPDATE payments
-         SET payment_status = 'PAID',
-             payment_proof_status = 'Verified',
-             paid_at = NOW()
-         WHERE order_id IN (?, ?)`,
-        [orderId, altId]
-      );
-    } else {
-      await pool.query(
-        `UPDATE orders
-         SET payment_status = 'Rejected',
-             payment_proof_status = 'Rejected',
-             payment_proof_rejection_reason = ?
-         WHERE order_id IN (?, ?)`,
-        [rejectionReason || 'Proof could not be verified', orderId, altId]
-      );
-      await pool.query(
-        `UPDATE payments
-         SET payment_status = 'FAILED',
-             payment_proof_status = 'Rejected',
-             payment_proof_rejection_reason = ?
-         WHERE order_id IN (?, ?)`,
-        [rejectionReason || 'Proof could not be verified', orderId, altId]
-      );
-    }
-    updatedOrder = await findOrderInDb(orderId);
-  } catch (err: any) {
-    console.warn('[MySQL] Error verifying/rejecting payment in DB:', err?.message);
-  }
-
-  // Also update file-based orders store
-  try {
-    const orders = loadOrdersFromFile();
-    let found = false;
-    for (const o of orders) {
-      if (o.id === orderId || o.id === altId || o.order_id === orderId || o.order_id === altId) {
-        if (action === 'VERIFY') {
-          o.paymentStatus = 'Paid';
-          o.paymentProofStatus = 'Verified';
-          o.status = 'Confirmed';
-        } else {
-          o.paymentStatus = 'Rejected';
-          o.paymentProofStatus = 'Rejected';
-          o.status = 'Pending';
-          o.paymentProofRejectionReason = rejectionReason || 'Proof could not be verified';
-        }
-        updatedOrder = o;
-        found = true;
-      }
-    }
-    if (!found) {
-      updatedOrder = {
-        id: orderId,
-        customerId: 'customer',
-        customerName: 'Customer',
-        total: 0,
-        status: action === 'VERIFY' ? 'Confirmed' : 'Pending',
-        paymentStatus: action === 'VERIFY' ? 'Paid' : 'Rejected',
-        paymentProofStatus: action === 'VERIFY' ? 'Verified' : 'Rejected',
-        paymentProofRejectionReason: action === 'REJECT' ? (rejectionReason || 'Proof could not be verified') : undefined,
-      };
-      orders.push(updatedOrder);
-    }
-    saveOrdersToFile(orders);
-  } catch {
-    // ignore
-  }
-
-  if (updatedOrder) {
-    return { success: true, order: updatedOrder };
-  }
-  return { success: true };
-}
