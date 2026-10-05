@@ -249,391 +249,397 @@ export const CartPage: React.FC<CartPageProps> = ({
   };
 
   return (
-    <div className="flex flex-col w-full min-h-[calc(100vh-6rem)]">
+    <div id="customer-cart-page" className="flex flex-col w-full min-h-[calc(100vh-6rem)] relative z-10">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto flex-1">
-        {/* Navigation & Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/60">
-          <div>
-            <button
-              type="button"
-              id="cart-back-btn"
-              onClick={onBackToStorefront}
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#006b2c] hover:text-[#00873a] transition-colors mb-2 cursor-pointer group"
-            >
-              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-              <span>{t('backToStorefrontBtn') || 'Back to Storefront'}</span>
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/45 backdrop-blur-md flex items-center justify-center text-[#006b2c] shadow-2xs border border-white/60">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-[26px] sm:text-[32px] font-bold text-[#0b1c30] font-display flex items-center gap-2.5">
-                  <span>{t('yourLiveCart') || 'Your Shopping Cart'}</span>
-                  <span
-                    id="cart-count-title"
-                    className="text-[14px] sm:text-[16px] font-semibold px-2.5 py-0.5 rounded-full bg-white/60 backdrop-blur-xs text-[#006b2c] border border-white/70 shadow-2xs"
-                  >
-                    {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
-                  </span>
-                </h1>
-                <p className="text-[13px] text-[#565e74] mt-0.5">
-                  Fresh organic produce and daily essentials delivered cold-chain in 30 minutes.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {items.length > 0 && onClearCart && (
+        {/* Main Cart Surface Container */}
+        <div id="customer-cart-container" className="cart-glass-main-container rounded-3xl p-5 sm:p-7 lg:p-8 space-y-6">
+          {/* Navigation & Header Bar */}
+          <div className="cart-glass-header rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
               <button
                 type="button"
-                onClick={onClearCart}
-                className="px-3.5 py-2 bg-white/40 hover:bg-red-50/80 text-[#ba1a1a] border border-white/60 hover:border-red-200 text-[12px] font-semibold rounded-xl transition-all duration-200 shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
-                title={t('clearCart')}
+                id="cart-back-btn"
+                onClick={onBackToStorefront}
+                className="cart-glass-back-btn inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl mb-3 cursor-pointer group"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{t('clearCart')}</span>
+                <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+                <span>{t('backToStorefrontBtn') || 'Back to Storefront'}</span>
               </button>
-            )}
-            <button
-              type="button"
-              id="return-to-storefront-top-btn"
-              onClick={onBackToStorefront}
-              className="px-4 py-2 bg-white/60 hover:bg-white/80 backdrop-blur-md text-[#006b2c] border border-white/70 text-[12px] font-semibold rounded-xl hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Continue Shopping</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Free Delivery Goal Progress Meter */}
-        <div className="bg-white/35 backdrop-blur-md p-4 sm:p-5 rounded-2xl mb-8 border border-white/50 shadow-2xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[13px] font-medium mb-2">
-            <span className="text-[#3e4a3d] font-semibold flex items-center gap-1.5">
-              <Truck className="w-4 h-4 text-[#006b2c]" />
-              <span>{t('deliveryProgress', { percent: deliveryProgressPct })}</span>
-            </span>
-            <span
-              id="progress-text"
-              className={`font-bold ${
-                deliveryDiff <= 0 ? 'text-[#006b2c]' : 'text-[#825100]'
-              }`}
-            >
-              {deliveryDiff <= 0
-                ? t('freeDeliveryMeterUnlocked')
-                : t('freeDeliveryMeterNeed', { amount: formatINR(deliveryDiff) })}
-            </span>
-          </div>
-          <div className="w-full h-2.5 bg-white/50 rounded-full overflow-hidden p-0.5 border border-white/40">
-            <div
-              id="cart-delivery-progress"
-              className="h-full bg-[#006b2c] rounded-full transition-all duration-500 shadow-xs"
-              style={{ width: `${deliveryProgressPct}%` }}
-            />
-          </div>
-          <p className="text-[12px] text-[#565e74] flex items-center gap-1.5 pt-2">
-            <Zap className="w-3.5 h-3.5 text-[#006b2c]" />
-            <span>Dedicated delivery runner dispatched in under 7 mins · Cold-Chain Temperature Controlled</span>
-          </p>
-        </div>
-
-        {/* Main Content: Empty State OR Items + Summary */}
-        {items.length === 0 ? (
-          <div
-            id="empty-cart-state"
-            className="text-center py-16 sm:py-20 bg-white/40 backdrop-blur-xl rounded-3xl border border-white/60 p-8 sm:p-12 max-w-xl mx-auto shadow-md my-8"
-          >
-            <div className="w-20 h-20 rounded-3xl bg-white/60 backdrop-blur-md flex items-center justify-center mx-auto mb-4 text-[#006b2c] shadow-inner border border-white/70">
-              <ShoppingCart className="w-10 h-10 text-[#006b2c]/60" />
-            </div>
-            <h2 id="empty-cart-title" className="text-[22px] sm:text-[24px] font-bold text-[#0b1c30] font-display">
-              {t('emptyCartTitle')}
-            </h2>
-            <p className="text-[14px] text-[#565e74] mt-2 mb-6 max-w-md mx-auto">
-              {t('emptyCartDesc')}
-            </p>
-            <button
-              type="button"
-              id="return-to-storefront-empty-btn"
-              onClick={onBackToStorefront}
-              className="px-6 py-3 bg-[#006b2c] text-white text-[13px] font-bold rounded-xl hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 cursor-pointer shadow-xs inline-flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>{t('startShopping') || 'Start Shopping'}</span>
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-12">
-            {/* Left Column: Cart Items List */}
-            <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
-              <div className="flex items-center justify-between px-2">
-                <span className="text-[13px] font-bold uppercase tracking-wider text-[#565e74]">
-                  Items in your cart ({totalItemCount})
-                </span>
-                <span className="text-[12px] text-[#565e74]">
-                  Prices include applicable taxes
-                </span>
-              </div>
-
-              <div
-                id="cart-items-container"
-                className="flex flex-col gap-3"
-              >
-                {items.map((item) => {
-                  const isAtMaxStock = item.quantity >= item.product.stock;
-
-                  return (
-                    <div
-                      key={item.product.id}
-                      id={`cart-item-${item.product.id}`}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/35 backdrop-blur-md p-4 sm:p-5 rounded-2xl gap-4 border border-white/50 hover:bg-white/50 transition-all duration-200 shadow-2xs hover:shadow-xs group"
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl cart-glass-icon-badge flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="text-[26px] sm:text-[32px] font-bold text-white font-display flex items-center gap-2.5 flex-wrap">
+                    <span>{t('yourLiveCart') || 'Your Shopping Cart'}</span>
+                    <span
+                      id="cart-count-title"
+                      className="cart-glass-count-badge text-[13px] sm:text-[14px] font-semibold px-3 py-0.5 rounded-full"
                     >
-                      {/* Product Thumbnail & Details */}
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        <img
-                          src={item.product.image}
-                          alt={item.product.title}
-                          className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover bg-white/20 shrink-0 border border-white/40 shadow-2xs"
-                        />
-                        <div className="flex-1 min-w-0">
-                          {item.product.categoryLabel && (
-                            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#006b2c] block mb-0.5">
-                              {item.product.categoryLabel}
-                            </span>
-                          )}
-                          <h3 className="text-[15px] sm:text-[16px] font-bold text-[#0b1c30] truncate group-hover:text-[#006b2c] transition-colors">
-                            {item.product.title}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#565e74] mt-1">
-                            <span className="font-semibold text-[#0b1c30]">
-                              {formatINR(item.product.price)}
-                            </span>
-                            <span>/</span>
-                            <span>{item.product.unit}</span>
-                            {item.product.isOrganic && (
-                              <span className="px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                                Organic
+                      {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
+                    </span>
+                  </h1>
+                  <p className="text-[13px] text-slate-400 mt-0.5">
+                    Fresh organic produce and daily essentials delivered cold-chain in 30 minutes.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+              {items.length > 0 && onClearCart && (
+                <button
+                  type="button"
+                  onClick={onClearCart}
+                  className="cart-glass-clear-btn px-3.5 py-2 text-[12px] font-semibold rounded-xl cursor-pointer inline-flex items-center gap-1.5"
+                  title={t('clearCart')}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{t('clearCart')}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                id="return-to-storefront-top-btn"
+                onClick={onBackToStorefront}
+                className="cart-glass-continue-btn px-4 py-2 text-[12px] font-semibold rounded-xl cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Continue Shopping</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Free Delivery Goal Progress Meter */}
+          <div className="cart-glass-meter p-4 sm:p-5 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[13px] font-medium mb-2.5">
+              <span className="text-slate-200 font-semibold flex items-center gap-2">
+                <Truck className="w-4 h-4 text-[#10b981]" />
+                <span>{t('deliveryProgress', { percent: deliveryProgressPct })}</span>
+              </span>
+              <span
+                id="progress-text"
+                className={`font-bold ${
+                  deliveryDiff <= 0 ? 'text-[#34d399]' : 'text-[#fbbf24]'
+                }`}
+              >
+                {deliveryDiff <= 0
+                  ? t('freeDeliveryMeterUnlocked')
+                  : t('freeDeliveryMeterNeed', { amount: formatINR(deliveryDiff) })}
+              </span>
+            </div>
+            <div className="w-full h-2.5 cart-glass-meter-track rounded-full overflow-hidden p-0.5">
+              <div
+                id="cart-delivery-progress"
+                className="h-full bg-gradient-to-r from-[#00873a] to-[#10b981] rounded-full transition-all duration-500 shadow-sm"
+                style={{ width: `${deliveryProgressPct}%` }}
+              />
+            </div>
+            <p className="text-[12px] text-slate-400 flex items-center gap-1.5 pt-2">
+              <Zap className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
+              <span>Dedicated delivery runner dispatched in under 7 mins · Cold-Chain Temperature Controlled</span>
+            </p>
+          </div>
+
+          {/* Main Content: Empty State OR Items + Summary */}
+          {items.length === 0 ? (
+            <div
+              id="empty-cart-state"
+              className="cart-glass-empty-card text-center py-16 sm:py-20 rounded-3xl p-8 sm:p-12 max-w-xl mx-auto my-6"
+            >
+              <div className="w-20 h-20 rounded-3xl cart-glass-icon-badge flex items-center justify-center mx-auto mb-4">
+                <ShoppingCart className="w-10 h-10 text-[#34d399]" />
+              </div>
+              <h2 id="empty-cart-title" className="text-[22px] sm:text-[24px] font-bold text-white font-display">
+                {t('emptyCartTitle')}
+              </h2>
+              <p className="text-[14px] text-slate-300 mt-2 mb-6 max-w-md mx-auto">
+                {t('emptyCartDesc')}
+              </p>
+              <button
+                type="button"
+                id="return-to-storefront-empty-btn"
+                onClick={onBackToStorefront}
+                className="cart-glass-checkout-btn px-6 py-3 text-white text-[13px] font-bold rounded-xl cursor-pointer shadow-md inline-flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>{t('startShopping') || 'Start Shopping'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Left Column: Cart Items List */}
+              <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
+                <div className="cart-glass-items-header rounded-xl px-4 py-2.5 flex items-center justify-between">
+                  <span className="text-[13px] font-bold uppercase tracking-wider text-slate-300">
+                    Items in your cart ({totalItemCount})
+                  </span>
+                  <span className="text-[12px] text-slate-400">
+                    Prices include applicable taxes
+                  </span>
+                </div>
+
+                <div
+                  id="cart-items-container"
+                  className="flex flex-col gap-3.5"
+                >
+                  {items.map((item) => {
+                    const isAtMaxStock = item.quantity >= item.product.stock;
+
+                    return (
+                      <div
+                        key={item.product.id}
+                        id={`cart-item-${item.product.id}`}
+                        className="cart-glass-item flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl gap-4 group"
+                      >
+                        {/* Product Thumbnail & Details */}
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          <div className="cart-glass-image-frame w-16 h-16 sm:w-20 sm:h-20 rounded-xl shrink-0 p-1 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={item.product.image}
+                              alt={item.product.title}
+                              className="w-full h-full rounded-lg object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {item.product.categoryLabel && (
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#34d399] block mb-0.5">
+                                {item.product.categoryLabel}
+                              </span>
+                            )}
+                            <h3 className="text-[15px] sm:text-[16px] font-bold text-white truncate group-hover:text-[#34d399] transition-colors">
+                              {item.product.title}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-300 mt-1">
+                              <span className="font-semibold text-white">
+                                {formatINR(item.product.price)}
+                              </span>
+                              <span className="text-slate-500">/</span>
+                              <span>{item.product.unit}</span>
+                              {item.product.isOrganic && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#6ee7b7] border border-emerald-500/30 text-[10px] font-bold">
+                                  Organic
+                                </span>
+                              )}
+                            </div>
+                            {item.product.stock <= 5 && (
+                              <span className="text-[11px] text-[#fca5a5] font-semibold mt-1 block">
+                                Only {item.product.stock} left in stock
                               </span>
                             )}
                           </div>
-                          {item.product.stock <= 5 && (
-                            <span className="text-[11px] text-[#ba1a1a] font-semibold mt-1 block">
-                              Only {item.product.stock} left in stock
+                        </div>
+
+                        {/* Quantity Controls & Line Price */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/10">
+                          {/* Quantity Counter */}
+                          <div className="cart-glass-qty flex items-center rounded-xl overflow-hidden">
+                            <button
+                              type="button"
+                              title="Decrease or remove item"
+                              onClick={() => onUpdateQty(item.product.id, -1)}
+                              className="w-8 h-8 flex items-center justify-center cursor-pointer"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="w-8 text-center text-[13px] font-bold tabular-nums text-white">
+                              {item.quantity}
                             </span>
-                          )}
+                            <button
+                              type="button"
+                              title="Increase quantity"
+                              disabled={isAtMaxStock}
+                              onClick={() => onUpdateQty(item.product.id, 1)}
+                              className="w-8 h-8 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Item Total Price */}
+                          <div className="cart-glass-price-box px-3 py-1.5 rounded-xl text-right min-w-[80px]">
+                            <span className="text-[15px] sm:text-[16px] font-bold text-white tabular-nums block font-display">
+                              {formatINR(item.product.price * item.quantity)}
+                            </span>
+                          </div>
+
+                          {/* Remove Trash Button */}
+                          <button
+                            type="button"
+                            title="Remove item"
+                            onClick={() => onRemoveItem(item.product.id)}
+                            className="cart-glass-delete-btn w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
 
-                      {/* Quantity Controls & Line Price */}
-                      <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/40">
-                        {/* Quantity Counter */}
-                        <div className="flex items-center bg-white/60 backdrop-blur-xs rounded-xl border border-white/70 shadow-2xs">
-                          <button
-                            type="button"
-                            title="Decrease or remove item"
-                            onClick={() => onUpdateQty(item.product.id, -1)}
-                            className="w-8 h-8 flex items-center justify-center text-[#0b1c30] hover:bg-white/80 rounded-l-xl transition-colors cursor-pointer"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="w-8 text-center text-[13px] font-bold tabular-nums text-[#0b1c30]">
-                            {item.quantity}
+                {/* Add More Items Button */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={onBackToStorefront}
+                    className="cart-glass-add-more w-full py-3.5 rounded-2xl text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add more fresh harvest items</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Sticky Order Summary & Checkout Card */}
+              <div className="lg:col-span-5 xl:col-span-4 sticky top-24">
+                <div className="cart-glass-summary rounded-3xl p-6 sm:p-7 flex flex-col gap-5">
+                  <div className="border-b border-white/10 pb-3">
+                    <h2 className="text-[20px] font-bold text-white font-display">
+                      Order Summary
+                    </h2>
+                    <p className="text-[12px] text-slate-400">
+                      Review prices, applied discounts, and delivery charges
+                    </p>
+                  </div>
+
+                  {/* Coupon Code Section */}
+                  <div className="cart-glass-coupon-box rounded-2xl p-3.5 space-y-2.5">
+                    <span className="text-[12px] font-semibold text-slate-300 block">
+                      {t('promoCodeLabel') || 'Coupon & Promo Codes'}
+                    </span>
+
+                    {appliedCoupon && isQualified && activeCoupon ? (
+                      <div className="flex items-center justify-between bg-emerald-500/15 p-3 rounded-xl text-[12px] text-[#86efac] border border-emerald-500/30">
+                        <div className="flex items-center gap-2 font-bold min-w-0">
+                          <Check className="w-4 h-4 text-[#34d399] shrink-0" />
+                          <span className="truncate">
+                            {activeCoupon.code} ({activeCoupon.discountPercentage}% OFF)
                           </span>
-                          <button
-                            type="button"
-                            title="Increase quantity"
-                            disabled={isAtMaxStock}
-                            onClick={() => onUpdateQty(item.product.id, 1)}
-                            className="w-8 h-8 flex items-center justify-center text-[#0b1c30] hover:bg-white/80 rounded-r-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
                         </div>
-
-                        {/* Item Total Price */}
-                        <div className="text-right min-w-[75px]">
-                          <span className="text-[16px] font-bold text-[#0b1c30] tabular-nums block font-display">
-                            {formatINR(item.product.price * item.quantity)}
-                          </span>
-                        </div>
-
-                        {/* Remove Trash Button */}
                         <button
                           type="button"
-                          title="Remove item"
-                          onClick={() => onRemoveItem(item.product.id)}
-                          className="w-8 h-8 rounded-xl hover:bg-[#ffdad6] text-[#6e7b6c] hover:text-[#ba1a1a] transition-all flex items-center justify-center cursor-pointer shadow-2xs border border-white/40"
+                          id="remove-coupon-btn"
+                          onClick={() => {
+                            onRemoveCoupon();
+                            setCouponFeedback('Coupon removed. Original cart total restored.');
+                            setCouponError('');
+                            setTimeout(() => setCouponFeedback(''), 3000);
+                          }}
+                          className="text-[12px] underline hover:text-white font-bold ml-2 cursor-pointer text-[#f87171] shrink-0"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {t('removeCoupon') || 'Remove'}
                         </button>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    ) : (
+                      <form onSubmit={handleApplyCouponSubmit} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value)}
+                          placeholder={t('couponPlaceholder') || 'Enter code (e.g. SAVE10)'}
+                          className="cart-glass-coupon-input flex-1 px-3.5 py-2 rounded-xl text-[13px] text-white placeholder-slate-500 focus:outline-hidden font-medium uppercase"
+                        />
+                        <button
+                          id="apply-coupon-btn"
+                          type="submit"
+                          className="cart-glass-apply-btn px-4 py-2 text-white text-[12px] font-bold rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5"
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                          <span>{t('apply') || 'Apply Coupon'}</span>
+                        </button>
+                      </form>
+                    )}
 
-              {/* Add More Items Button */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={onBackToStorefront}
-                  className="w-full py-3 rounded-2xl border border-dashed border-white/70 bg-white/25 backdrop-blur-xs text-[#006b2c] hover:bg-white/45 text-[13px] font-semibold flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-2xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add more fresh harvest items</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Right Column: Sticky Order Summary & Checkout Card */}
-            <div className="lg:col-span-5 xl:col-span-4 sticky top-24">
-              <div className="bg-white/45 backdrop-blur-xl rounded-3xl shadow-xl p-6 sm:p-7 border border-white/60 flex flex-col gap-5">
-                <div className="border-b border-white/50 pb-3">
-                  <h2 className="text-[20px] font-bold text-[#0b1c30] font-display">
-                    Order Summary
-                  </h2>
-                  <p className="text-[12px] text-[#565e74]">
-                    Review prices, applied discounts, and delivery charges
-                  </p>
-                </div>
-
-                {/* Coupon Code Section */}
-                <div className="space-y-2">
-                  <span className="text-[12px] font-semibold text-[#3e4a3d] block">
-                    {t('promoCodeLabel') || 'Coupon & Promo Codes'}
-                  </span>
-
-                  {appliedCoupon && isQualified && activeCoupon ? (
-                    <div className="flex items-center justify-between bg-[#dcfce7]/90 backdrop-blur-xs p-3 rounded-xl text-[12px] text-[#15803d] border border-[#86efac]/80 shadow-2xs">
-                      <div className="flex items-center gap-2 font-bold min-w-0">
-                        <Check className="w-4 h-4 text-[#15803d] shrink-0" />
-                        <span className="truncate">
-                          {activeCoupon.code} ({activeCoupon.discountPercentage}% OFF)
-                        </span>
+                    {couponError && (
+                      <div
+                        id="cart-coupon-error"
+                        className="text-[12px] text-[#fca5a5] bg-red-500/15 p-2.5 rounded-xl border border-red-500/30 font-semibold text-center"
+                      >
+                        {couponError}
                       </div>
-                      <button
-                        type="button"
-                        id="remove-coupon-btn"
-                        onClick={() => {
-                          onRemoveCoupon();
-                          setCouponFeedback('Coupon removed. Original cart total restored.');
-                          setCouponError('');
-                          setTimeout(() => setCouponFeedback(''), 3000);
-                        }}
-                        className="text-[12px] underline hover:text-[#0b1c30] font-bold ml-2 cursor-pointer text-[#dc2626] shrink-0"
+                    )}
+
+                    {couponFeedback && (
+                      <div
+                        id="cart-coupon-feedback"
+                        className="text-[12px] text-[#86efac] bg-emerald-500/15 p-2.5 rounded-xl border border-emerald-500/30 font-semibold text-center"
                       >
-                        {t('removeCoupon') || 'Remove'}
-                      </button>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleApplyCouponSubmit} className="flex gap-2">
-                      <input
-                        type="text"
-                        value={couponInput}
-                        onChange={(e) => setCouponInput(e.target.value)}
-                        placeholder={t('couponPlaceholder') || 'Enter code (e.g. SAVE10)'}
-                        className="flex-1 px-3.5 py-2 bg-white/60 backdrop-blur-xs border border-white/70 rounded-xl text-[13px] text-[#0b1c30] placeholder-[#94a3b8] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c]/40 font-medium uppercase"
-                      />
-                      <button
-                        id="apply-coupon-btn"
-                        type="submit"
-                        className="px-4 py-2 bg-[#006b2c] hover:bg-[#00873a] text-white text-[12px] font-bold rounded-xl transition-all duration-200 cursor-pointer shadow-xs shrink-0 flex items-center gap-1.5"
-                      >
-                        <Tag className="w-3.5 h-3.5" />
-                        <span>{t('apply') || 'Apply Coupon'}</span>
-                      </button>
-                    </form>
-                  )}
-
-                  {couponError && (
-                    <div
-                      id="cart-coupon-error"
-                      className="text-[12px] text-[#ba1a1a] bg-[#fee2e2]/80 backdrop-blur-xs p-2.5 rounded-xl border border-[#fecaca] font-semibold text-center"
-                    >
-                      {couponError}
-                    </div>
-                  )}
-
-                  {couponFeedback && (
-                    <div
-                      id="cart-coupon-feedback"
-                      className="text-[12px] text-[#15803d] bg-[#dcfce7]/90 backdrop-blur-xs p-2.5 rounded-xl border border-[#bbf7d0] font-semibold text-center"
-                    >
-                      {couponFeedback}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pricing Financials Breakdown */}
-                <div className="pt-3 border-t border-white/50 space-y-2 text-[14px]">
-                  <div className="flex justify-between text-[#565e74]">
-                    <span>{t('subtotal')}</span>
-                    <span id="cart-drawer-subtotal" className="font-semibold text-[#0b1c30] tabular-nums">
-                      {formatINR(subtotal)}
-                    </span>
+                        {couponFeedback}
+                      </div>
+                    )}
                   </div>
 
-                  {discount > 0 && isQualified && activeCoupon && (
-                    <div className="flex justify-between text-[#006b2c] font-semibold">
-                      <span>{t('discountCoupon')} ({activeCoupon.discountPercentage}% OFF)</span>
-                      <span id="cart-drawer-discount" className="tabular-nums font-bold">
-                        -{formatINR(discount)}
+                  {/* Pricing Financials Breakdown */}
+                  <div className="cart-glass-financials rounded-2xl p-4 space-y-2.5 text-[14px]">
+                    <div className="flex justify-between text-slate-300">
+                      <span>{t('subtotal')}</span>
+                      <span id="cart-drawer-subtotal" className="font-semibold text-white tabular-nums">
+                        {formatINR(subtotal)}
                       </span>
                     </div>
-                  )}
 
-                  <div className="flex justify-between text-[#565e74]">
-                    <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
-                    <span
-                      id="cart-drawer-taxes"
-                      data-testid="cart-drawer-delivery-charges"
-                      className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-[#0b1c30]' : 'text-[#006b2c] font-bold'}`}
+                    {discount > 0 && isQualified && activeCoupon && (
+                      <div className="flex justify-between text-[#34d399] font-semibold">
+                        <span>{t('discountCoupon')} ({activeCoupon.discountPercentage}% OFF)</span>
+                        <span id="cart-drawer-discount" className="tabular-nums font-bold">
+                          -{formatINR(discount)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between text-slate-300">
+                      <span>{t('deliveryCharges') || 'Delivery Charges'}</span>
+                      <span
+                        id="cart-drawer-taxes"
+                        data-testid="cart-drawer-delivery-charges"
+                        className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-white' : 'text-[#34d399] font-bold'}`}
+                      >
+                        {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
+                      </span>
+                    </div>
+
+                    {/* Total Section Highlight Box */}
+                    <div className="cart-glass-total-box rounded-xl p-3.5 flex justify-between items-center mt-2">
+                      <span className="font-display font-bold text-white text-[16px] sm:text-[18px]">{t('total')}</span>
+                      <span id="cart-drawer-total" className="text-[#34d399] tabular-nums font-display text-[24px] sm:text-[26px] font-extrabold">
+                        {formatINR(total)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Checkout CTA Area & Button */}
+                  <div className="cart-glass-checkout-area rounded-2xl p-2.5">
+                    <button
+                      id="proceed-checkout-btn"
+                      type="button"
+                      disabled={items.length === 0}
+                      onClick={onOpenCheckout}
+                      className={`cart-glass-checkout-btn w-full py-3.5 rounded-xl text-[14px] font-bold shadow-md flex items-center justify-center gap-2 ${
+                        items.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
                     >
-                      {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
-                    </span>
+                      <span>{t('proceedToCheckout')}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  <div className="flex justify-between items-center text-[18px] sm:text-[20px] font-bold text-[#0b1c30] pt-3 border-t border-white/50">
-                    <span className="font-display">{t('total')}</span>
-                    <span id="cart-drawer-total" className="text-[#006b2c] tabular-nums font-display text-[24px]">
-                      {formatINR(total)}
+                  {/* Trust Badges Bar */}
+                  <div className="cart-glass-trust rounded-xl p-2.5 flex items-center justify-around text-[11px] text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
+                      <span>Secure Checkout</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#10b981]" />
+                      <span>Cold-Chain Handover</span>
                     </span>
                   </div>
-                </div>
-
-                {/* Checkout CTA Button */}
-                <button
-                  id="proceed-checkout-btn"
-                  type="button"
-                  disabled={items.length === 0}
-                  onClick={onOpenCheckout}
-                  className={`w-full py-3.5 rounded-xl text-[14px] font-bold shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
-                    items.length === 0
-                      ? 'bg-[#cbd5e1] text-[#64748b] cursor-not-allowed'
-                      : 'bg-[#006b2c] text-white hover:bg-[#00873a] hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105 active:translate-y-0 active:scale-98 cursor-pointer'
-                  }`}
-                >
-                  <span>{t('proceedToCheckout')}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                {/* Trust Badges */}
-                <div className="pt-2 border-t border-white/40 flex items-center justify-center gap-4 text-[11px] text-[#565e74]">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#006b2c]" />
-                    <span>Secure Checkout</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-[#006b2c]" />
-                    <span>Cold-Chain Handover</span>
-                  </span>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Trust & Guarantee Banner */}
