@@ -62,6 +62,8 @@ export const Header: React.FC<HeaderProps> = ({
         return 'Search Results';
       case 'category':
         return 'Category Catalog';
+      case 'cart':
+        return t('cart') || 'Cart';
       default:
         return t('navRetailStorefront');
     }
@@ -196,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Cart Button (Only on storefront and customer dashboard; completely removed from Admin Portal) */}
+            {/* Cart Button (Only on customer storefront, cart, search, category, and dashboard; completely removed from Admin Portal) */}
             {currentView !== 'login' && currentView !== 'register' && currentView !== 'admin' && (
               <button
                 id="header-cart-btn"
@@ -204,9 +206,17 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onOpenCart}
                 aria-label={t('cart')}
                 title={t('cart')}
-                className="relative flex items-center justify-center px-3 py-1.5 rounded-xl bg-[#006b2c] text-white hover:bg-[#00873a] shadow-xs cursor-pointer cart-icon-glow"
+                className={`relative flex items-center justify-center px-3 py-1.5 rounded-xl bg-[#006b2c] text-white hover:bg-[#00873a] shadow-xs cursor-pointer cart-icon-glow ${currentView === 'cart' ? 'ring-2 ring-white/80' : ''}`}
               >
                 <ShoppingCart className="w-4 h-4" />
+                {cartCount > 0 && (
+                  <span
+                    id="header-cart-badge"
+                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[#ba1a1a] text-white rounded-full text-[10px] font-bold ring-2 ring-white shadow-xs"
+                  >
+                    {cartCount}
+                  </span>
+                )}
               </button>
             )}
 

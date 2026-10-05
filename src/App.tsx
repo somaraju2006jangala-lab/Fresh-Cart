@@ -10,7 +10,8 @@ import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
 import { ProductCard } from './components/ProductCard';
-import { CartDrawer } from './components/CartDrawer';
+import { CartPage } from './components/CartPage';
+import { FloatingCart } from './components/FloatingCart';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ProductModal } from './components/ProductModal';
 import { AdminPortal } from './components/AdminPortal';
@@ -121,7 +122,6 @@ function FreshCartStore() {
     );
   }, [products]);
 
-  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeModalProduct, setActiveModalProduct] = useState<Product | null>(null);
 
@@ -265,17 +265,19 @@ function FreshCartStore() {
     await updateServerSettings({ deliveryCharges: newCharge });
   };
 
-  // Synchronize URL Hash routing with currentView and enforce route protection
+  // Synchronize URL routing (hash and path) with currentView and enforce route protection
   useEffect(() => {
     if (isLoading) return;
 
-    const handleHashChange = () => {
+    const handleRouteChange = () => {
       const hash = window.location.hash.toLowerCase();
+      const pathname = window.location.pathname.toLowerCase();
+      const isCart = pathname === '/cart' || pathname === '/cart/' || hash === '#/cart' || hash === '#cart';
 
       if (!currentUser) {
         // UNAUTHENTICATED USERS:
         // Only 'login', 'register', and 'admin' are permitted.
-        // The main storefront and customer dashboard are strictly protected.
+        // The main storefront, cart, and customer dashboard are strictly protected.
         if (hash === '#/admin' || hash === '#admin') {
           setCurrentView('admin');
         } else if (hash === '#/register' || hash === '#register') {
@@ -293,6 +295,8 @@ function FreshCartStore() {
           setCurrentView('admin');
         } else if (hash === '#/dashboard' || hash === '#dashboard') {
           setCurrentView('dashboard');
+        } else if (isCart) {
+          setCurrentView('cart');
         } else if (hash.startsWith('#/search') || hash.startsWith('#search')) {
           setCurrentView('search');
           const rawHash = window.location.hash;
@@ -332,14 +336,18 @@ function FreshCartStore() {
       }
     };
 
-    handleHashChange();
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    handleRouteChange();
+    window.addEventListener('hashchange', handleRouteChange);
+    window.addEventListener('popstate', handleRouteChange);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteChange);
+      window.removeEventListener('popstate', handleRouteChange);
+    };
   }, [currentUser, isLoading]);
 
   const navigateToView = (view: ViewType, param?: string) => {
-    // Route guard: if trying to open storefront, dashboard, search, or category without auth, redirect to login
-    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search' || view === 'category')) {
+    // Route guard: if trying to open storefront, dashboard, search, category, or cart without auth, redirect to login
+    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search' || view === 'category' || view === 'cart')) {
       setCurrentView('login');
       window.location.hash = '#/login';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -348,11 +356,19 @@ function FreshCartStore() {
 
     setCurrentView(view);
     if (view === 'admin') {
-      setIsCartOpen(false);
       setIsCheckoutOpen(false);
+    }
+    if (window.location.pathname.toLowerCase() === '/cart' && view !== 'cart') {
+      try {
+        window.history.replaceState(null, '', '/' + (window.location.search || ''));
+      } catch {
+        // ignore
+      }
     }
     if (view === 'storefront') {
       window.location.hash = '#/storefront';
+    } else if (view === 'cart') {
+      window.location.hash = '#/cart';
     } else if (view === 'search') {
       const q = param !== undefined ? param : (submittedSearchQuery || searchQuery);
       window.location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
@@ -767,7 +783,7 @@ function FreshCartStore() {
         currentView={currentView}
         onToggleView={(view) => navigateToView(view)}
         cartCount={cartCount}
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => navigateToView('cart')}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
@@ -822,7 +838,7 @@ function FreshCartStore() {
           currentUser ? (
             <CustomerDashboard
               cart={cart}
-              onOpenCart={() => setIsCartOpen(true)}
+              onOpenCart={() => navigateToView('cart')}
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onAddToCart={handleAddToCart}
               onUpdateQty={handleUpdateCartQty}
@@ -837,6 +853,33 @@ function FreshCartStore() {
             <LoginPage
               onNavigateToRegister={() => navigateToView('register')}
               onLoginSuccess={() => navigateToView('storefront')}
+              onNavigateToAdmin={() => navigateToView('admin')}
+            />
+          )
+        ) : currentView === 'cart' ? (
+          currentUser ? (
+            <CartPage
+              items={cart}
+              onUpdateQty={handleUpdateCartQty}
+              onRemoveItem={handleRemoveCartItem}
+              onClearCart={handleClearCart}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              appliedCoupon={appliedCoupon}
+              onApplyCoupon={(code) => setAppliedCoupon(code)}
+              onRemoveCoupon={() => setAppliedCoupon(null)}
+              coupons={coupons}
+              deliveryCharges={deliveryCharges}
+              deliveryRules={deliveryRules}
+              onBackToStorefront={() => navigateToView('storefront')}
+              onOpenAdmin={() => navigateToView('admin')}
+              onSelectCategory={handleCategorySelect}
+              onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
+              onOpenDashboard={() => navigateToView('dashboard')}
+            />
+          ) : (
+            <LoginPage
+              onNavigateToRegister={() => navigateToView('register')}
+              onLoginSuccess={() => navigateToView('cart')}
               onNavigateToAdmin={() => navigateToView('admin')}
             />
           )
@@ -1007,24 +1050,11 @@ function FreshCartStore() {
         )}
       </main>
 
-      {/* Floating Cart Drawer Toggle & Panel (Only available in Customer Portal; completely removed from Admin Portal) */}
-      {currentView !== 'admin' && (
-        <CartDrawer
-          items={cart}
-          isOpen={isCartOpen}
-          onToggle={() => setIsCartOpen(!isCartOpen)}
-          onUpdateQty={handleUpdateCartQty}
-          onRemoveItem={handleRemoveCartItem}
-          onOpenCheckout={() => {
-            setIsCartOpen(false);
-            setIsCheckoutOpen(true);
-          }}
-          appliedCoupon={appliedCoupon}
-          onApplyCoupon={(code) => setAppliedCoupon(code)}
-          onRemoveCoupon={() => setAppliedCoupon(null)}
-          coupons={coupons}
-          deliveryCharges={deliveryCharges}
-          deliveryRules={deliveryRules}
+      {/* Floating Cart Button (Only available in Customer Portal except on dedicated /cart, login, register, and admin views) */}
+      {currentView !== 'admin' && currentView !== 'cart' && currentView !== 'login' && currentView !== 'register' && (
+        <FloatingCart
+          cartCount={cartCount}
+          onNavigateToCart={() => navigateToView('cart')}
         />
       )}
 

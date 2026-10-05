@@ -120,7 +120,7 @@ export interface Coupon {
   createdAt?: string;
 }
 
-export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category';
+export type ViewType = 'storefront' | 'admin' | 'login' | 'register' | 'dashboard' | 'search' | 'category' | 'cart';
 
 export interface DeliveryChargeRule {
   id: string;
