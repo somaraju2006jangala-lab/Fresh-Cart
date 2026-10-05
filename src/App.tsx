@@ -348,8 +348,8 @@ function FreshCartStore() {
   }, [currentUser, isLoading]);
 
   const navigateToView = (view: ViewType, param?: string) => {
-    // Route guard: if trying to open storefront, dashboard, search, category, or cart without auth, redirect to login
-    if (!currentUser && (view === 'storefront' || view === 'dashboard' || view === 'search' || view === 'category' || view === 'cart')) {
+    // Route guard: if trying to open dashboard, search, or category without auth, redirect to login (cart is publicly accessible)
+    if (!currentUser && (view === 'dashboard' || view === 'search' || view === 'category')) {
       setCurrentView('login');
       window.location.hash = '#/login';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -357,7 +357,7 @@ function FreshCartStore() {
     }
 
     setCurrentView(view);
-    if (view === 'admin') {
+    if (view === 'admin' || view === 'cart' || view === 'storefront') {
       setIsCheckoutOpen(false);
     }
 
@@ -870,32 +870,24 @@ function FreshCartStore() {
             />
           )
         ) : currentView === 'cart' ? (
-          currentUser ? (
-            <CartPage
-              items={cart}
-              onUpdateQty={handleUpdateCartQty}
-              onRemoveItem={handleRemoveCartItem}
-              onClearCart={handleClearCart}
-              onOpenCheckout={() => setIsCheckoutOpen(true)}
-              appliedCoupon={appliedCoupon}
-              onApplyCoupon={(code) => setAppliedCoupon(code)}
-              onRemoveCoupon={() => setAppliedCoupon(null)}
-              coupons={coupons}
-              deliveryCharges={deliveryCharges}
-              deliveryRules={deliveryRules}
-              onBackToStorefront={() => navigateToView('storefront')}
-              onOpenAdmin={() => navigateToView('admin')}
-              onSelectCategory={handleCategorySelect}
-              onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
-              onOpenDashboard={() => navigateToView('dashboard')}
-            />
-          ) : (
-            <LoginPage
-              onNavigateToRegister={() => navigateToView('register')}
-              onLoginSuccess={() => navigateToView('cart')}
-              onNavigateToAdmin={() => navigateToView('admin')}
-            />
-          )
+          <CartPage
+            items={cart}
+            onUpdateQty={handleUpdateCartQty}
+            onRemoveItem={handleRemoveCartItem}
+            onClearCart={handleClearCart}
+            onOpenCheckout={() => setIsCheckoutOpen(true)}
+            appliedCoupon={appliedCoupon}
+            onApplyCoupon={(code) => setAppliedCoupon(code)}
+            onRemoveCoupon={() => setAppliedCoupon(null)}
+            coupons={coupons}
+            deliveryCharges={deliveryCharges}
+            deliveryRules={deliveryRules}
+            onBackToStorefront={() => navigateToView(currentUser ? 'storefront' : 'login')}
+            onOpenAdmin={() => navigateToView('admin')}
+            onSelectCategory={handleCategorySelect}
+            onOpenLogin={() => navigateToView(currentUser ? 'dashboard' : 'login')}
+            onOpenDashboard={() => navigateToView('dashboard')}
+          />
         ) : currentView === 'search' ? (
           currentUser ? (
             <SearchResultsPage

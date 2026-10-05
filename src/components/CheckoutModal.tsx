@@ -626,7 +626,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         id="checkout-modal-backdrop"
         data-testid="checkout-backdrop"
         onClick={step === 'details' ? onClose : handleDone}
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 pointer-events-auto z-0"
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-200 pointer-events-auto z-0"
         aria-hidden="true"
       />
 
@@ -1090,7 +1090,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   {paymentMethod === 'cash' ? t('processingOrder') : 'Submitting Order & Proof...'}
                 </span>
               ) : paymentMethod === 'cash' ? (
-                <span>{t('placeOrder', { total: formatINR(total) })}</span>
+                <span>Place Order (COD)</span>
               ) : (
                 <span>Submit Order &amp; Payment Proof ({formatINR(total)})</span>
               )}
@@ -1190,8 +1190,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <h3 className="text-[20px] font-bold text-white font-display">
                 {t('orderConfirmed')}
               </h3>
-              <p className="text-[13px] text-slate-300 mt-1">
-                {t('orderPlacedSuccess')}
+              <p className="text-[14px] text-[#4ade80] font-bold mt-1">
+                Order Placed Successfully!
+              </p>
+              <p className="text-[12px] text-slate-300 mt-1">
+                Order ID: <strong className="text-white">#{orderNumber}</strong>
               </p>
             </div>
 
