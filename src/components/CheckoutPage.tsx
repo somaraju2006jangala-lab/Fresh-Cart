@@ -25,7 +25,6 @@ import {
   CreditCard,
   QrCode,
   Smartphone,
-  Copy,
   Check,
   ArrowLeft,
   ArrowRight,
@@ -83,9 +82,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showItemsList, setShowItemsList] = useState(false);
 
-  // Payment Settings state
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getStoredPaymentSettings());
-  const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Order Handover OTP States
   const [orderHandoverOtp, setOrderHandoverOtp] = useState<string | null>(null);
@@ -125,14 +122,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return () => clearInterval(interval);
   }, [otpExpiresAt, orderHandoverOtp]);
 
-  const handleCopyUpi = () => {
-    const upi = paymentSettings.upiId || 'freshcart@upi';
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(upi);
-      setCopiedUpi(true);
-      setTimeout(() => setCopiedUpi(false), 2000);
-    }
-  };
+
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
@@ -564,40 +554,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           Scan this QR to pay {formatINR(total)}
                         </p>
 
-                        {/* Verified UPI Payload Parameters Breakdown */}
-                        {upiValidation.decoded && (
-                          <div
-                            id="checkout-qr-decoded-payload-details"
-                            className="text-[11px] font-mono text-left bg-[#030d1a]/80 p-3 rounded-xl border border-white/10 space-y-1.5 text-slate-300 w-full max-w-sm"
-                          >
-                            <div className="flex items-center justify-between pb-1 border-b border-white/10">
-                              <span className="text-[10px] uppercase font-bold text-emerald-400 font-sans tracking-wider">
-                                Verified UPI Payload
-                              </span>
-                              <span className="text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full font-sans font-semibold">
-                                ISO 18004 QR
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">pa (Payee UPI):</span>
-                              <span className="text-emerald-400 font-bold">{upiValidation.decoded.pa}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">pn (Merchant):</span>
-                              <span className="text-slate-200 font-semibold">{upiValidation.decoded.pn}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">am (Amount):</span>
-                              <span className="text-emerald-400 font-bold">₹{upiValidation.decoded.am}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">cu (Currency):</span>
-                              <span className="text-slate-200">{upiValidation.decoded.cu}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">tr (Txn Ref):</span>
-                              <span className="text-slate-300 font-semibold">{upiValidation.decoded.tr}</span>
-                            </div>
+                        {/* Pay via UPI App button */}
+                        {paymentSettings.directUpiAppEnabled !== false && (
+                          <div className="pt-1">
+                            <a
+                              id="checkout-direct-upi-app-link"
+                              data-testid="checkout-direct-upi-app-link"
+                              href={checkoutUpiUri}
+                              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/30 text-xs sm:text-sm font-bold transition-all shadow-xs"
+                            >
+                              <Smartphone className="w-4 h-4" />
+                              <span>Pay {formatINR(total)} via UPI App</span>
+                            </a>
                           </div>
                         )}
                       </>
@@ -607,59 +575,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <p className="mt-0.5">{upiValidation.error || 'Invalid payment parameters'}</p>
                       </div>
                     )}
-
-                    {/* Merchant Details & Controls */}
-                    <div className="space-y-3 w-full max-w-sm mx-auto text-center">
-                      <div>
-                        <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                          MERCHANT NAME
-                        </p>
-                        <p className="text-sm sm:text-base font-bold text-white mt-0.5">
-                          {paymentSettings.payeeName || 'FreshCart Grocery Store'}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                          MERCHANT UPI ID
-                        </p>
-                        <div className="inline-flex items-center justify-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
-                          <span id="checkout-qr-merchant-upi" className="font-mono text-xs sm:text-sm text-cyan-300 font-semibold">
-                            {paymentSettings.upiId || 'freshcart@upi'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleCopyUpi}
-                            className="p-1 rounded text-slate-300 hover:text-white transition-colors cursor-pointer"
-                            title="Copy UPI ID"
-                          >
-                            {copiedUpi ? (
-                              <Check className="w-3.5 h-3.5 text-cyan-400" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-400 pt-1 leading-relaxed">
-                        Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
-                      </p>
-
-                      {paymentSettings.directUpiAppEnabled !== false && upiValidation.isValid && (
-                        <div className="pt-1">
-                          <a
-                            id="checkout-direct-upi-app-link"
-                            data-testid="checkout-direct-upi-app-link"
-                            href={checkoutUpiUri}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all shadow-xs"
-                          >
-                            <Smartphone className="w-4 h-4" />
-                            <span>Pay {formatINR(total)} via UPI App</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 );
               })()}
