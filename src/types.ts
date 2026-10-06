@@ -66,8 +66,42 @@ export interface Order {
   otpVerifiedAt?: string;
   handoverReleased?: boolean;
   paymentMethod?: string;
-  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | string;
+  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'PENDING VERIFICATION' | 'PAID' | 'REJECTED' | string;
+  paymentVerificationStatus?: PaymentVerificationStatus;
+  paymentProof?: PaymentProofData;
 }
+
+export type PaymentVerificationStatus =
+  | 'NOT_UPLOADED'
+  | 'UPLOADED'
+  | 'PENDING_VERIFICATION'
+  | 'VERIFIED'
+  | 'REJECTED';
+
+export interface PaymentProofData {
+  id: string;
+  orderId: string;
+  customerId: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  paymentId?: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  filePath?: string;
+  fileUrl?: string;
+  fileData?: string;
+  verificationStatus: PaymentVerificationStatus;
+  uploadedAt: string;
+  verifiedRejectedAt?: string;
+  verifiedRejectedBy?: string;
+  adminNotes?: string;
+  orderAmount?: number;
+  paymentMethod?: string;
+  orderDate?: string;
+}
+
 
 export interface CustomerAddress {
   id: string;

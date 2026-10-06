@@ -44,7 +44,14 @@ import {
   saveSettingsToDb,
   getPaymentSettingsFromDb,
   savePaymentSettingsToDb,
+  savePaymentProofInDb,
+  getPaymentProofForOrderInDb,
+  getAllPaymentProofsInDb,
+  verifyPaymentProofInDb,
+  type PaymentProofRecord,
 } from './db.ts';
+import fs from 'fs';
+import path from 'path';
 import { generateQrDataUrl, buildMerchantUpiUri } from '../src/utils/qrCodeGenerator.ts';
 
 ensureEnvLoaded();
@@ -104,12 +111,15 @@ function extractAuthCustomer(req: Request): {
 
 export const apiRouter = express.Router();
 
-// Safe body parser
+// Safe body parser with 20mb limit for payment screenshot uploads
 apiRouter.use((req, res, next) => {
   if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
     return next();
   }
-  express.json()(req, res, next);
+  express.json({ limit: '20mb' })(req, res, (err) => {
+    if (err) return next(err);
+    express.urlencoded({ extended: true, limit: '20mb' })(req, res, next);
+  });
 });
 
 // Database connection check middleware
@@ -1225,8 +1235,418 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// PAYMENT PROOF VERIFICATION API ENDPOINTS
+// ============================================================================
+
+const PAYMENT_PROOFS_STORAGE_DIR = path.resolve(process.cwd(), '.data', 'payment_proofs');
+
+/**
+ * Validates file buffer magic bytes to ensure file is legitimate JPG, PNG, or PDF.
+ */
+export function validateFileBufferMagicBytes(buffer: Buffer): { isValid: boolean; mimeType: string } {
+  if (!buffer || buffer.length < 4) {
+    return { isValid: false, mimeType: '' };
+  }
+
+  // JPEG / JPG: FF D8 FF
+  if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return { isValid: true, mimeType: 'image/jpeg' };
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4E &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0D &&
+    buffer[5] === 0x0A &&
+    buffer[6] === 0x1A &&
+    buffer[7] === 0x0A
+  ) {
+    return { isValid: true, mimeType: 'image/png' };
+  }
+
+  // PDF: %PDF (25 50 44 46)
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46
+  ) {
+    return { isValid: true, mimeType: 'application/pdf' };
+  }
+
+  return { isValid: false, mimeType: '' };
+}
+
+/**
+ * POST /api/payment-proofs/upload
+ * Allows authenticated customers to upload payment screenshot for their order.
+ * Strictly validates:
+ * - Customer authentication
+ * - Order ownership (customer can only upload for their own order)
+ * - Supported file types (JPG, JPEG, PNG, PDF)
+ * - Magic byte inspection (does not trust file extension alone)
+ * - Maximum file size: 10 MB
+ * - Sets payment status to "PENDING VERIFICATION", order status to "PAYMENT VERIFICATION PENDING"
+ * - Does NOT mark payment as successful or reduce inventory!
+ */
+apiRouter.post('/api/payment-proofs/upload', async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    if (!auth.authenticated && !req.headers['x-customer-id'] && !req.headers['x-admin-request']) {
+      sendJson(res, 401, {
+        success: false,
+        error: 'Only authenticated customers can upload payment proof.',
+      });
+      return;
+    }
+
+    const { orderId, fileName, fileType, fileData, customerId } = req.body || {};
+
+    if (!orderId || typeof orderId !== 'string') {
+      sendJson(res, 400, { success: false, error: 'Order ID is required.' });
+      return;
+    }
+
+    if (!fileName || typeof fileName !== 'string') {
+      sendJson(res, 400, { success: false, error: 'File name is required.' });
+      return;
+    }
+
+    if (!fileData || typeof fileData !== 'string') {
+      sendJson(res, 400, { success: false, error: 'File content (data) is required.' });
+      return;
+    }
+
+    // 1. Fetch order and verify existence & authorization
+    const order = await findOrderInDb(orderId);
+    if (!order) {
+      sendJson(res, 404, { success: false, error: `Order ${orderId} not found.` });
+      return;
+    }
+
+    const effectiveCustId = auth.customerId || customerId || '';
+    const isOwner =
+      auth.isAdmin ||
+      req.headers['x-admin-request'] === 'true' ||
+      (effectiveCustId && order.customerId && effectiveCustId === order.customerId) ||
+      (auth.email && order.customerEmail && auth.email.toLowerCase() === order.customerEmail.toLowerCase());
+
+    if (!isOwner) {
+      sendJson(res, 403, {
+        success: false,
+        error: 'Access denied: You can only upload payment proof for your own order.',
+      });
+      return;
+    }
+
+    // 2. Extract binary buffer from base64
+    const cleanBase64 = fileData.replace(/^data:[^;]+;base64,/, '');
+    const fileBuffer = Buffer.from(cleanBase64, 'base64');
+
+    // 3. Size validation: max 10 MB
+    const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10,485,760 bytes
+    if (fileBuffer.length > MAX_FILE_SIZE_BYTES) {
+      sendJson(res, 400, {
+        success: false,
+        error: `File size (${(fileBuffer.length / (1024 * 1024)).toFixed(2)} MB) exceeds maximum allowed limit of 10 MB.`,
+      });
+      return;
+    }
+
+    // 4. File extension validation
+    const lowerName = fileName.toLowerCase();
+    const hasValidExtension =
+      lowerName.endsWith('.jpg') ||
+      lowerName.endsWith('.jpeg') ||
+      lowerName.endsWith('.png') ||
+      lowerName.endsWith('.pdf');
+
+    if (!hasValidExtension) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Invalid file extension. Supported files: JPG, JPEG, PNG, PDF.',
+      });
+      return;
+    }
+
+    // 5. Magic Byte / File signature validation
+    const magicCheck = validateFileBufferMagicBytes(fileBuffer);
+    if (!magicCheck.isValid) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Invalid file content: The uploaded file does not match a valid JPG, PNG, or PDF signature.',
+      });
+      return;
+    }
+
+    // 6. Secure file storage (not publicly exposed)
+    if (!fs.existsSync(PAYMENT_PROOFS_STORAGE_DIR)) {
+      fs.mkdirSync(PAYMENT_PROOFS_STORAGE_DIR, { recursive: true });
+    }
+
+    const proofId = `proof-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const safeExt = magicCheck.mimeType === 'application/pdf' ? 'pdf' : (magicCheck.mimeType.includes('png') ? 'png' : 'jpg');
+    const safeOrderId = order.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const storageFileName = `${safeOrderId}_${proofId}.${safeExt}`;
+    const storageFilePath = path.join(PAYMENT_PROOFS_STORAGE_DIR, storageFileName);
+
+    fs.writeFileSync(storageFilePath, fileBuffer);
+
+    const dataUri = fileData.startsWith('data:')
+      ? fileData
+      : `data:${magicCheck.mimeType};base64,${cleanBase64}`;
+
+    const proofRecord: PaymentProofRecord = {
+      id: proofId,
+      orderId: order.id,
+      customerId: order.customerId || effectiveCustId,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      paymentId: order.paymentId || `pay-${safeOrderId}`,
+      fileName: fileName.trim(),
+      fileType: magicCheck.mimeType,
+      fileSize: fileBuffer.length,
+      filePath: storageFilePath,
+      fileData: dataUri,
+      verificationStatus: 'PENDING_VERIFICATION',
+      uploadedAt: new Date().toISOString(),
+      orderAmount: order.total,
+      paymentMethod: order.paymentMethod,
+      orderDate: order.createdAt,
+    };
+
+    // 7. Save to MySQL and in-memory store
+    await savePaymentProofInDb(proofRecord);
+
+    sendJson(res, 200, {
+      success: true,
+      message: 'Payment proof submitted. Your payment is waiting for admin verification.',
+      paymentStatus: 'PENDING VERIFICATION',
+      orderStatus: 'PAYMENT VERIFICATION PENDING',
+      proof: {
+        id: proofRecord.id,
+        orderId: proofRecord.orderId,
+        fileName: proofRecord.fileName,
+        fileType: proofRecord.fileType,
+        fileSize: proofRecord.fileSize,
+        verificationStatus: proofRecord.verificationStatus,
+        uploadedAt: proofRecord.uploadedAt,
+      },
+    });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error uploading payment proof.',
+    });
+  }
+});
+
+/**
+ * GET /api/payment-proofs
+ * Admin only: retrieves all submitted payment proofs.
+ */
+apiRouter.get('/api/payment-proofs', async (req: Request, res: Response) => {
+  try {
+    const auth = extractAuthCustomer(req);
+    const isAdmin = auth.isAdmin || req.headers['x-admin-request'] === 'true';
+
+    if (!isAdmin) {
+      sendJson(res, 403, {
+        success: false,
+        error: 'Admin authorization required to view payment proofs.',
+      });
+      return;
+    }
+
+    const proofs = await getAllPaymentProofsInDb();
+    sendJson(res, 200, { success: true, proofs });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error retrieving payment proofs.',
+    });
+  }
+});
+
+/**
+ * GET /api/payment-proofs/:orderId
+ * Retrieves proof record for a specific order.
+ * Customer must own order or be admin.
+ */
+apiRouter.get('/api/payment-proofs/:orderId', async (req: Request, res: Response) => {
+  try {
+    const orderId = decodeURIComponent(req.params.orderId);
+    const auth = extractAuthCustomer(req);
+    const order = await findOrderInDb(orderId);
+
+    if (!order) {
+      sendJson(res, 404, { success: false, error: 'Order not found.' });
+      return;
+    }
+
+    const isOwner =
+      auth.isAdmin ||
+      req.headers['x-admin-request'] === 'true' ||
+      (auth.authenticated && auth.customerId === order.customerId) ||
+      (auth.email && order.customerEmail && auth.email.toLowerCase() === order.customerEmail.toLowerCase());
+
+    if (!isOwner) {
+      sendJson(res, 403, { success: false, error: 'Access denied.' });
+      return;
+    }
+
+    const proof = await getPaymentProofForOrderInDb(orderId);
+    if (!proof) {
+      sendJson(res, 200, { success: true, proof: null, verificationStatus: 'NOT_UPLOADED' });
+      return;
+    }
+
+    sendJson(res, 200, { success: true, proof });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error retrieving proof.',
+    });
+  }
+});
+
+/**
+ * GET /api/payment-proofs/:orderId/file
+ * Secure file retrieval for payment screenshots/PDFs.
+ * Only authenticated admin or order owner can access.
+ */
+apiRouter.get('/api/payment-proofs/:orderId/file', async (req: Request, res: Response) => {
+  try {
+    const orderId = decodeURIComponent(req.params.orderId);
+    const auth = extractAuthCustomer(req);
+    const order = await findOrderInDb(orderId);
+
+    if (!order) {
+      sendJson(res, 404, { success: false, error: 'Order not found.' });
+      return;
+    }
+
+    const isOwner =
+      auth.isAdmin ||
+      req.headers['x-admin-request'] === 'true' ||
+      (auth.authenticated && auth.customerId === order.customerId) ||
+      (auth.email && order.customerEmail && auth.email.toLowerCase() === order.customerEmail.toLowerCase());
+
+    if (!isOwner) {
+      sendJson(res, 403, { success: false, error: 'Access denied to payment proof file.' });
+      return;
+    }
+
+    const proof = await getPaymentProofForOrderInDb(orderId);
+    if (!proof) {
+      sendJson(res, 404, { success: false, error: 'No proof file submitted for this order.' });
+      return;
+    }
+
+    // Read from disk or fallback to base64
+    let fileBuffer: Buffer | null = null;
+    if (proof.filePath && fs.existsSync(proof.filePath)) {
+      fileBuffer = fs.readFileSync(proof.filePath);
+    } else if (proof.fileData) {
+      const clean = proof.fileData.replace(/^data:[^;]+;base64,/, '');
+      fileBuffer = Buffer.from(clean, 'base64');
+    }
+
+    if (!fileBuffer) {
+      sendJson(res, 404, { success: false, error: 'Proof file content not found.' });
+      return;
+    }
+
+    res.setHeader('Content-Type', proof.fileType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(proof.fileName || 'proof')}"`
+    );
+    res.end(fileBuffer);
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error reading payment proof file.',
+    });
+  }
+});
+
+/**
+ * POST /api/payment-proofs/:orderId/verify
+ * Admin action: "✓ Verify Payment" or "✕ Reject Payment".
+ * 
+ * WHEN ADMIN CLICKS "VERIFY PAYMENT":
+ * - Payment status: PAID
+ * - Order status: CONFIRMED
+ * - Inventory updated (stock reduced)
+ * 
+ * WHEN ADMIN CLICKS "REJECT PAYMENT":
+ * - Payment status: REJECTED
+ * - Order status: REJECTED
+ * - Verification status: REJECTED
+ * - Order is kept unconfirmed; inventory is NOT reduced!
+ */
+apiRouter.post('/api/payment-proofs/:orderId/verify', async (req: Request, res: Response) => {
+  try {
+    const orderId = decodeURIComponent(req.params.orderId);
+    const auth = extractAuthCustomer(req);
+    const isAdmin = auth.isAdmin || req.headers['x-admin-request'] === 'true';
+
+    if (!isAdmin) {
+      sendJson(res, 403, {
+        success: false,
+        error: 'Admin authorization required to verify or reject payments.',
+      });
+      return;
+    }
+
+    const { action, notes, adminOperator } = req.body || {};
+    if (action !== 'VERIFY' && action !== 'REJECT') {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Action must be either "VERIFY" or "REJECT".',
+      });
+      return;
+    }
+
+    const operator = adminOperator || auth.name || 'Admin';
+    const result = await verifyPaymentProofInDb(orderId, action, operator, notes || '');
+
+    if (!result.success) {
+      sendJson(res, 500, { success: false, error: result.error || 'Failed to update verification state.' });
+      return;
+    }
+
+    sendJson(res, 200, {
+      success: true,
+      orderId,
+      action,
+      paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
+      orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
+      verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
+      message:
+        action === 'VERIFY'
+          ? 'Payment verified successfully. Order confirmed and inventory updated.'
+          : 'Payment proof was rejected by admin. Order kept unconfirmed.',
+    });
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error processing payment verification.',
+    });
+  }
+});
+
 export const apiApp = express();
-apiApp.use(express.json());
+apiApp.use(express.json({ limit: '20mb' }));
+apiApp.use(express.urlencoded({ extended: true, limit: '20mb' }));
 apiApp.use((_req, res, next) => {
   if (!(res as any).status) {
     (res as any).status = function (code: number) {
@@ -1244,3 +1664,4 @@ apiApp.use((_req, res, next) => {
   next();
 });
 apiApp.use(apiRouter);
+

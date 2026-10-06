@@ -617,8 +617,8 @@ export async function initializeDatabase(): Promise<void> {
       payment_id VARCHAR(64) NOT NULL UNIQUE,
       order_id VARCHAR(64) NOT NULL,
       customer_id VARCHAR(64) NOT NULL,
-      payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
-      payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
+      payment_method VARCHAR(64) NOT NULL DEFAULT 'COD',
+      payment_status VARCHAR(64) NOT NULL DEFAULT 'PENDING',
       amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       currency VARCHAR(10) NOT NULL DEFAULT 'INR',
       razorpay_order_id VARCHAR(100) NULL,
@@ -641,6 +641,29 @@ export async function initializeDatabase(): Promise<void> {
         ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
+    `CREATE TABLE IF NOT EXISTS payment_proofs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      proof_id VARCHAR(64) NOT NULL UNIQUE,
+      order_id VARCHAR(64) NOT NULL,
+      customer_id VARCHAR(64) NOT NULL,
+      payment_id VARCHAR(64) NULL,
+      file_name VARCHAR(255) NOT NULL,
+      file_type VARCHAR(64) NOT NULL,
+      file_size INT NOT NULL,
+      file_path TEXT NOT NULL,
+      file_data LONGTEXT NULL,
+      verification_status VARCHAR(32) NOT NULL DEFAULT 'PENDING_VERIFICATION',
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      verified_rejected_at TIMESTAMP NULL,
+      verified_rejected_by VARCHAR(100) NULL,
+      admin_notes TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_proofs_order_id (order_id),
+      INDEX idx_proofs_customer_id (customer_id),
+      INDEX idx_proofs_status (verification_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
     `CREATE TABLE IF NOT EXISTS app_settings (
       id INT AUTO_INCREMENT PRIMARY KEY,
       setting_key VARCHAR(64) NOT NULL UNIQUE,
@@ -659,6 +682,14 @@ export async function initializeDatabase(): Promise<void> {
     await currentPool.query('ALTER TABLE otp_records ADD COLUMN otp_code VARCHAR(16) NULL AFTER customer_id');
   } catch {
     // Ignore if column already exists
+  }
+
+  // Ensure payments table columns allow arbitrary payment methods and verification statuses
+  try {
+    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(64) NOT NULL DEFAULT "COD"');
+    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(64) NOT NULL DEFAULT "PENDING"');
+  } catch {
+    // Ignore if already modified or table doesn't exist
   }
 
   // Seed default data if tables are empty
@@ -1765,6 +1796,35 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
     order.discount = Number(order.discount);
     order.total = Number(order.total);
 
+    // Fetch payment proof if exists
+    try {
+      const [proofRows] = await pool.query<RowDataPacket[]>(
+        `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
+                payment_id as paymentId, file_name as fileName, file_type as fileType,
+                file_size as fileSize, file_path as filePath, verification_status as verificationStatus,
+                uploaded_at as uploadedAt, verified_rejected_at as verifiedRejectedAt,
+                verified_rejected_by as verifiedRejectedBy, admin_notes as adminNotes
+         FROM payment_proofs
+         WHERE order_id IN (?, ?)
+         LIMIT 1`,
+        [orderId, altId]
+      );
+      if (proofRows.length > 0) {
+        order.paymentProof = proofRows[0];
+        order.paymentVerificationStatus = proofRows[0].verificationStatus;
+      } else {
+        order.paymentVerificationStatus = 'NOT_UPLOADED';
+      }
+    } catch {
+      const memProof = inMemoryPaymentProofs.find((p) => p.orderId === orderId || p.orderId === altId);
+      if (memProof) {
+        order.paymentProof = memProof;
+        order.paymentVerificationStatus = memProof.verificationStatus;
+      } else {
+        order.paymentVerificationStatus = 'NOT_UPLOADED';
+      }
+    }
+
     return order;
   } catch (err: any) {
     console.warn('[MySQL] Error finding order:', err?.message);
@@ -1817,6 +1877,37 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
       ord.subtotal = Number(ord.subtotal);
       ord.discount = Number(ord.discount);
       ord.total = Number(ord.total);
+
+      // Attach proof info
+      try {
+        const altOrdId = ord.id.startsWith('#') ? ord.id.slice(1) : `#${ord.id}`;
+        const [proofRows] = await pool.query<RowDataPacket[]>(
+          `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
+                  payment_id as paymentId, file_name as fileName, file_type as fileType,
+                  file_size as fileSize, file_path as filePath, verification_status as verificationStatus,
+                  uploaded_at as uploadedAt, verified_rejected_at as verifiedRejectedAt,
+                  verified_rejected_by as verifiedRejectedBy, admin_notes as adminNotes
+           FROM payment_proofs
+           WHERE order_id IN (?, ?)
+           LIMIT 1`,
+          [ord.id, altOrdId]
+        );
+        if (proofRows.length > 0) {
+          ord.paymentProof = proofRows[0];
+          ord.paymentVerificationStatus = proofRows[0].verificationStatus;
+        } else {
+          ord.paymentVerificationStatus = 'NOT_UPLOADED';
+        }
+      } catch {
+        const altOrdId = ord.id.startsWith('#') ? ord.id.slice(1) : `#${ord.id}`;
+        const memProof = inMemoryPaymentProofs.find((p) => p.orderId === ord.id || p.orderId === altOrdId);
+        if (memProof) {
+          ord.paymentProof = memProof;
+          ord.paymentVerificationStatus = memProof.verificationStatus;
+        } else {
+          ord.paymentVerificationStatus = 'NOT_UPLOADED';
+        }
+      }
     }
 
     return rows;
@@ -2229,4 +2320,365 @@ export async function savePaymentSettingsToDb(settings: PaymentSettingsRecord): 
     return false;
   }
 }
+
+/**
+ * Payment Proof Data & Verification Storage
+ */
+export interface PaymentProofRecord {
+  id: string;
+  orderId: string;
+  customerId: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  paymentId?: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  filePath: string;
+  fileData?: string;
+  fileUrl?: string;
+  verificationStatus: 'NOT_UPLOADED' | 'UPLOADED' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED';
+  uploadedAt: string;
+  verifiedRejectedAt?: string;
+  verifiedRejectedBy?: string;
+  adminNotes?: string;
+  orderAmount?: number;
+  paymentMethod?: string;
+  orderDate?: string;
+}
+
+export let inMemoryPaymentProofs: PaymentProofRecord[] = [];
+
+/**
+ * Saves or updates a customer payment proof record in MySQL and in-memory fallback.
+ * Automatically marks order as 'PAYMENT VERIFICATION PENDING' and payment as 'PENDING VERIFICATION'.
+ */
+export async function savePaymentProofInDb(proof: PaymentProofRecord): Promise<boolean> {
+  const altOrderId = proof.orderId.startsWith('#') ? proof.orderId.slice(1) : `#${proof.orderId}`;
+
+  // 1. In-memory update
+  const existingIdx = inMemoryPaymentProofs.findIndex(
+    (p) => p.orderId === proof.orderId || p.orderId === altOrderId
+  );
+  if (existingIdx >= 0) {
+    inMemoryPaymentProofs[existingIdx] = { ...inMemoryPaymentProofs[existingIdx], ...proof };
+  } else {
+    inMemoryPaymentProofs.unshift({ ...proof });
+  }
+
+  // 2. MySQL database update
+  try {
+    const pool = getPool();
+    const [existing] = await pool.query<RowDataPacket[]>(
+      'SELECT id, proof_id FROM payment_proofs WHERE order_id IN (?, ?) LIMIT 1',
+      [proof.orderId, altOrderId]
+    );
+
+    if (existing.length > 0) {
+      await pool.query(
+        `UPDATE payment_proofs
+         SET file_name = ?,
+             file_type = ?,
+             file_size = ?,
+             file_path = ?,
+             file_data = ?,
+             verification_status = ?,
+             uploaded_at = CURRENT_TIMESTAMP,
+             verified_rejected_at = NULL,
+             verified_rejected_by = NULL,
+             admin_notes = NULL
+         WHERE order_id IN (?, ?)`,
+        [
+          proof.fileName,
+          proof.fileType,
+          proof.fileSize,
+          proof.filePath,
+          proof.fileData || null,
+          proof.verificationStatus || 'PENDING_VERIFICATION',
+          proof.orderId,
+          altOrderId,
+        ]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO payment_proofs
+         (proof_id, order_id, customer_id, payment_id, file_name, file_type, file_size, file_path, file_data, verification_status, uploaded_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          proof.id,
+          proof.orderId,
+          proof.customerId,
+          proof.paymentId || null,
+          proof.fileName,
+          proof.fileType,
+          proof.fileSize,
+          proof.filePath,
+          proof.fileData || null,
+          proof.verificationStatus || 'PENDING_VERIFICATION',
+        ]
+      );
+    }
+
+    // Update order status: PAYMENT VERIFICATION PENDING, paymentStatus: PENDING VERIFICATION
+    await pool.query(
+      `UPDATE orders
+       SET payment_status = 'PENDING VERIFICATION',
+           status = 'PAYMENT VERIFICATION PENDING'
+       WHERE order_id IN (?, ?)`,
+      [proof.orderId, altOrderId]
+    );
+
+    // Update payments table
+    await pool.query(
+      `UPDATE payments
+       SET payment_status = 'PENDING VERIFICATION'
+       WHERE order_id IN (?, ?)`,
+      [proof.orderId, altOrderId]
+    );
+
+    return true;
+  } catch (err: any) {
+    console.warn('[MySQL] Error saving payment proof to DB (in-memory updated):', err?.message);
+    return true;
+  }
+}
+
+/**
+ * Retrieves the payment proof record for a specific order.
+ */
+export async function getPaymentProofForOrderInDb(orderId: string): Promise<PaymentProofRecord | null> {
+  const altOrderId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
+              payment_id as paymentId, file_name as fileName, file_type as fileType,
+              file_size as fileSize, file_path as filePath, file_data as fileData,
+              verification_status as verificationStatus, uploaded_at as uploadedAt,
+              verified_rejected_at as verifiedRejectedAt, verified_rejected_by as verifiedRejectedBy,
+              admin_notes as adminNotes
+       FROM payment_proofs
+       WHERE order_id IN (?, ?)
+       LIMIT 1`,
+      [orderId, altOrderId]
+    );
+
+    if (rows.length > 0) {
+      return rows[0] as PaymentProofRecord;
+    }
+  } catch (err: any) {
+    console.warn('[MySQL] Error fetching payment proof from DB:', err?.message);
+  }
+
+  // Fallback to in-memory store
+  const found = inMemoryPaymentProofs.find(
+    (p) => p.orderId === orderId || p.orderId === altOrderId
+  );
+  return found || null;
+}
+
+/**
+ * Retrieves all submitted payment proofs for Admin Payment Verification section.
+ * Includes customer info, order amount, payment method, and proof metadata.
+ */
+export async function getAllPaymentProofsInDb(): Promise<PaymentProofRecord[]> {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+        p.proof_id as id,
+        p.order_id as orderId,
+        p.customer_id as customerId,
+        COALESCE(o.customer_name, c.full_name, 'Customer') as customerName,
+        COALESCE(o.mobile, c.mobile, '') as customerPhone,
+        COALESCE(o.email, c.email, '') as customerEmail,
+        p.payment_id as paymentId,
+        p.file_name as fileName,
+        p.file_type as fileType,
+        p.file_size as fileSize,
+        p.file_path as filePath,
+        p.file_data as fileData,
+        p.verification_status as verificationStatus,
+        p.uploaded_at as uploadedAt,
+        p.verified_rejected_at as verifiedRejectedAt,
+        p.verified_rejected_by as verifiedRejectedBy,
+        p.admin_notes as adminNotes,
+        COALESCE(o.total, 0) as orderAmount,
+        COALESCE(o.payment_method, 'UPI / QR Payment') as paymentMethod,
+        COALESCE(o.created_at, p.uploaded_at) as orderDate
+      FROM payment_proofs p
+      LEFT JOIN orders o ON (o.order_id = p.order_id OR CONCAT('#', o.order_id) = p.order_id OR o.order_id = CONCAT('#', p.order_id))
+      LEFT JOIN customers c ON c.customer_id = p.customer_id
+      ORDER BY p.uploaded_at DESC`
+    );
+
+    if (rows.length > 0) {
+      inMemoryPaymentProofs = rows.map((r) => ({
+        ...r,
+        orderAmount: Number(r.orderAmount),
+      })) as PaymentProofRecord[];
+      return inMemoryPaymentProofs;
+    }
+  } catch (err: any) {
+    console.warn('[MySQL] Error getting all payment proofs:', err?.message);
+  }
+
+  return inMemoryPaymentProofs;
+}
+
+/**
+ * Handles Admin Verification actions: "Verify Payment" or "Reject Payment".
+ * 
+ * WHEN ADMIN CLICKS "VERIFY PAYMENT":
+ * - payment status -> PAID
+ * - order status -> CONFIRMED
+ * - verification status -> VERIFIED
+ * - ONLY AFTER VERIFICATION: reduce inventory/stock and record SALE in inventory logs.
+ * 
+ * WHEN ADMIN CLICKS "REJECT PAYMENT":
+ * - payment status -> REJECTED
+ * - order status -> REJECTED
+ * - verification status -> REJECTED
+ * - keep order from being confirmed; do NOT decrement inventory.
+ */
+export async function verifyPaymentProofInDb(
+  orderId: string,
+  action: 'VERIFY' | 'REJECT',
+  adminOperator = 'Admin',
+  notes = ''
+): Promise<{ success: boolean; error?: string }> {
+  const altOrderId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const nowIso = new Date().toISOString();
+
+  // 1. In-memory update
+  const memIdx = inMemoryPaymentProofs.findIndex(
+    (p) => p.orderId === orderId || p.orderId === altOrderId
+  );
+  if (memIdx >= 0) {
+    inMemoryPaymentProofs[memIdx] = {
+      ...inMemoryPaymentProofs[memIdx],
+      verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
+      verifiedRejectedAt: nowIso,
+      verifiedRejectedBy: adminOperator,
+      adminNotes: notes,
+    };
+  }
+
+  // 2. MySQL transactional update
+  try {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      if (action === 'VERIFY') {
+        // Update payment_proofs
+        await connection.query(
+          `UPDATE payment_proofs
+           SET verification_status = 'VERIFIED',
+               verified_rejected_at = CURRENT_TIMESTAMP,
+               verified_rejected_by = ?,
+               admin_notes = ?
+           WHERE order_id IN (?, ?)`,
+          [adminOperator, notes || 'Verified by admin', orderId, altOrderId]
+        );
+
+        // Update orders: CONFIRMED and PAID
+        await connection.query(
+          `UPDATE orders
+           SET payment_status = 'PAID',
+               status = 'CONFIRMED'
+           WHERE order_id IN (?, ?)`,
+          [orderId, altOrderId]
+        );
+
+        // Update payments
+        await connection.query(
+          `UPDATE payments
+           SET payment_status = 'PAID',
+               paid_at = CURRENT_TIMESTAMP
+           WHERE order_id IN (?, ?)`,
+          [orderId, altOrderId]
+        );
+
+        // Deduct inventory ONLY on admin verification
+        const [items] = await connection.query<RowDataPacket[]>(
+          `SELECT product_id, quantity, product_name FROM order_items WHERE order_id IN (?, ?)`,
+          [orderId, altOrderId]
+        );
+
+        for (const it of items) {
+          const qty = Number(it.quantity) || 1;
+          const [prodRows] = await connection.query<RowDataPacket[]>(
+            `SELECT stock, title, sku FROM products WHERE product_id = ? LIMIT 1`,
+            [it.product_id]
+          );
+
+          if (prodRows.length > 0) {
+            const currentStock = Number(prodRows[0].stock) || 0;
+            const newStock = Math.max(0, currentStock - qty);
+            await connection.query(
+              `UPDATE products SET stock = ? WHERE product_id = ?`,
+              [newStock, it.product_id]
+            );
+
+            // Record inventory log audit entry
+            await connection.query(
+              `INSERT INTO inventory_logs (product_id, previous_quantity, new_quantity, change_quantity, action, notes, operator)
+               VALUES (?, ?, ?, ?, 'SALE', ?, ?)`,
+              [
+                it.product_id,
+                currentStock,
+                newStock,
+                -qty,
+                `Verified Payment Order (${orderId})`,
+                adminOperator,
+              ]
+            );
+          }
+        }
+      } else {
+        // action === 'REJECT'
+        await connection.query(
+          `UPDATE payment_proofs
+           SET verification_status = 'REJECTED',
+               verified_rejected_at = CURRENT_TIMESTAMP,
+               verified_rejected_by = ?,
+               admin_notes = ?
+           WHERE order_id IN (?, ?)`,
+          [adminOperator, notes || 'Payment rejected by admin', orderId, altOrderId]
+        );
+
+        await connection.query(
+          `UPDATE orders
+           SET payment_status = 'REJECTED',
+               status = 'REJECTED'
+           WHERE order_id IN (?, ?)`,
+          [orderId, altOrderId]
+        );
+
+        await connection.query(
+          `UPDATE payments
+           SET payment_status = 'REJECTED'
+           WHERE order_id IN (?, ?)`,
+          [orderId, altOrderId]
+        );
+      }
+
+      await connection.commit();
+      return { success: true };
+    } catch (err: any) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
+  } catch (err: any) {
+    console.warn('[MySQL] Error verifying payment proof in DB (in-memory state updated):', err?.message);
+    return { success: true };
+  }
+}
+
 

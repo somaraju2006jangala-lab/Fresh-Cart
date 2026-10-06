@@ -34,6 +34,8 @@ import {
 } from 'lucide-react';
 import { generateOrderOtp, resendOrderOtp } from '../services/otpClientService';
 import { Footer } from './Footer';
+import { PaymentProofUpload } from './PaymentProofUpload';
+import { PaymentProofData } from '../types';
 
 interface CheckoutPageProps {
   items: CartItem[];
@@ -78,6 +80,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>('upi_qr');
+  const [draftOrderId] = useState(() => `#FC-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [submittedProof, setSubmittedProof] = useState<PaymentProofData | null>(null);
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showItemsList, setShowItemsList] = useState(false);
@@ -164,9 +168,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsSubmitting(true);
     setTimeout(async () => {
       setIsSubmitting(false);
-      const orderNum = Math.floor(1000 + Math.random() * 9000);
-      const generatedOrder = `#FC-${orderNum}`;
-      setOrderNumber(String(orderNum));
+      const isUpi = paymentMethod === 'upi_qr' || paymentMethod === 'upi_app';
+      const generatedOrder = placedOrderId || draftOrderId;
+      const orderNum = generatedOrder.replace('#FC-', '');
+      setOrderNumber(orderNum);
 
       const customerPhone = currentUser?.phone?.trim() || '';
 
@@ -186,16 +191,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
-        estimatedDeliveryTime: 'Picking in progress',
+        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : 'Picking in progress',
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: 'Picking',
+        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : 'Picking',
         createdAt: new Date().toISOString(),
         paymentMethod: paymentMethodLabel,
-        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Pending Verification',
+        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'Pending',
+        paymentVerificationStatus: isUpi ? (submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED') : undefined,
+        paymentProof: submittedProof || undefined,
       };
       addOrder(newCustomerOrder);
 
@@ -324,6 +331,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </p>
             </div>
 
+            {/* Payment Screenshot Verification for UPI Orders */}
+            {paymentMethod !== 'cash' && (
+              <div className="pt-2">
+                <PaymentProofUpload
+                  orderId={placedOrderId || draftOrderId}
+                  customerId={currentUser?.id || 'guest_user'}
+                  customerToken={currentUser?.token}
+                  initialProof={submittedProof}
+                  currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
+                  onProofSubmitted={(proof) => {
+                    setSubmittedProof(proof);
+                  }}
+                />
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
@@ -425,8 +448,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </span>
               </div>
 
-              {/* Payment Methods Selection: Cash on Delivery & UPI / QR Payment */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+              {/* Payment Methods Selection: 3 Separate Options */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
                 {/* Option 1: Cash on Delivery */}
                 <button
                   type="button"
@@ -495,10 +518,59 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <QrCode className="w-5 h-5 text-cyan-400 shrink-0" />
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs text-slate-400">Instant UPI payment with verified order amount QR</p>
+                    <p className="text-xs text-slate-400">Scan QR code using any UPI banking app</p>
+                  </div>
+                </button>
+
+                {/* Option 3: 📱 Pay Directly via UPI App */}
+                <button
+                  type="button"
+                  id="checkout-payment-upi-app-opt"
+                  data-testid="checkout-payment-upi-app-opt"
+                  onClick={() => setPaymentMethod('upi_app')}
+                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
+                    paymentMethod === 'upi_app'
+                      ? 'checkout-card-selected'
+                      : 'checkout-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                          paymentMethod === 'upi_app'
+                            ? 'bg-[#00d2aa] text-[#030d1a]'
+                            : 'border-2 border-slate-500 bg-transparent'
+                        }`}
+                      >
+                        {paymentMethod === 'upi_app' ? (
+                          <div className="w-2 h-2 rounded-full bg-[#030d1a]" />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-transparent" />
+                        )}
+                      </div>
+                      <span className="text-sm sm:text-base font-bold text-white">📱 Pay Directly via UPI App</span>
+                    </div>
+                    <Smartphone className="w-5 h-5 text-cyan-400 shrink-0" />
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-400">Pay directly with installed UPI apps (GPay, PhonePe, Paytm)</p>
                   </div>
                 </button>
               </div>
+
+              {/* Cash on Delivery Details */}
+              {paymentMethod === 'cash' && (
+                <div
+                  id="checkout-cash-details-panel"
+                  className="checkout-subpanel rounded-xl sm:rounded-2xl p-5 mt-4 sm:mt-5 text-xs text-slate-300 space-y-1 text-center"
+                >
+                  <p className="font-semibold text-white">Doorstep Payment Selected</p>
+                  <p className="text-slate-400">
+                    You can pay via Cash or ask the delivery runner for their on-the-spot UPI QR code upon handover.
+                  </p>
+                </div>
+              )}
 
               {/* UPI / QR Details Area - Single Working QR Code inside Payment Methods */}
               {paymentMethod === 'upi_qr' && (() => {
@@ -553,21 +625,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <p id="checkout-qr-scan-instruction" data-testid="checkout-qr-scan-instruction" className="text-xs sm:text-sm font-semibold text-white">
                           Scan this QR to pay {formatINR(total)}
                         </p>
-
-                        {/* Pay via UPI App button */}
-                        {paymentSettings.directUpiAppEnabled !== false && (
-                          <div className="pt-1">
-                            <a
-                              id="checkout-direct-upi-app-link"
-                              data-testid="checkout-direct-upi-app-link"
-                              href={checkoutUpiUri}
-                              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/30 text-xs sm:text-sm font-bold transition-all shadow-xs"
-                            >
-                              <Smartphone className="w-4 h-4" />
-                              <span>Pay {formatINR(total)} via UPI App</span>
-                            </a>
-                          </div>
-                        )}
                       </>
                     ) : (
                       <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
@@ -575,19 +632,80 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <p className="mt-0.5">{upiValidation.error || 'Invalid payment parameters'}</p>
                       </div>
                     )}
+
+                    {/* Clear option: Upload Payment Screenshot after completing payment */}
+                    <div className="w-full pt-2">
+                      <PaymentProofUpload
+                        orderId={draftOrderId}
+                        customerId={currentUser?.id || 'guest_user'}
+                        customerToken={currentUser?.token}
+                        initialProof={submittedProof}
+                        currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
+                        onProofSubmitted={(proof) => {
+                          setSubmittedProof(proof);
+                        }}
+                      />
+                    </div>
                   </div>
                 );
               })()}
 
-              {/* Cash on Delivery Details */}
-              {paymentMethod === 'cash' && (
-                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-4 mt-4 text-xs text-slate-300 space-y-1 text-center">
-                  <p className="font-semibold text-white">Doorstep Payment Selected</p>
-                  <p className="text-slate-400">
-                    You can pay via Cash or ask the delivery runner for their on-the-spot UPI QR code upon handover.
-                  </p>
-                </div>
-              )}
+              {/* 📱 Pay Directly via UPI App Details Area */}
+              {paymentMethod === 'upi_app' && (() => {
+                const checkoutUpiUri = buildCustomerPaymentUpiUri(
+                  paymentSettings.upiId || 'freshcart@upi',
+                  paymentSettings.payeeName || 'FreshCart Grocery Store',
+                  total,
+                  checkoutTxnRef
+                );
+
+                return (
+                  <div
+                    id="checkout-upi-app-details-panel"
+                    className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4"
+                  >
+                    {/* Amount to Pay */}
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        Amount to Pay
+                      </p>
+                      <p id="checkout-upi-app-amount-display" className="text-xl sm:text-2xl font-extrabold text-[#00e699] font-display tabular-nums">
+                        {formatINR(total)}
+                      </p>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+                      Tap the button below to launch your installed UPI payment app (Google Pay, PhonePe, Paytm, BHIM) and complete the payment directly.
+                    </p>
+
+                    <div className="pt-1">
+                      <a
+                        id="checkout-direct-upi-app-link"
+                        data-testid="checkout-direct-upi-app-link"
+                        href={checkoutUpiUri}
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-sm font-bold shadow-lg shadow-cyan-900/30 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Smartphone className="w-4 h-4" />
+                        <span>Pay {formatINR(total)} via UPI App</span>
+                      </a>
+                    </div>
+
+                    {/* Clear option: Upload Payment Screenshot after completing payment */}
+                    <div className="w-full pt-2">
+                      <PaymentProofUpload
+                        orderId={draftOrderId}
+                        customerId={currentUser?.id || 'guest_user'}
+                        customerToken={currentUser?.token}
+                        initialProof={submittedProof}
+                        currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
+                        onProofSubmitted={(proof) => {
+                          setSubmittedProof(proof);
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 4. ORDER SUMMARY & PLACE ORDER (Full-Width Section BELOW Payment - Centered Alignment) */}

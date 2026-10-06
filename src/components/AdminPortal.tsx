@@ -38,7 +38,23 @@ import {
   CreditCard,
   QrCode,
   CheckCircle2,
+  FileCheck2,
+  Eye,
+  ExternalLink,
+  Download,
+  FileText,
+  Image as ImageIcon,
+  ShieldAlert,
+  User,
+  Phone,
+  Clock,
 } from 'lucide-react';
+import { PaymentProofData, PaymentVerificationStatus } from '../types';
+import {
+  fetchAllPaymentProofs,
+  adminVerifyPaymentProof,
+  formatFileSize,
+} from '../services/paymentProofService';
 import {
   getPaymentSettings,
   updatePaymentSettings,
@@ -191,6 +207,7 @@ interface AdminPortalProps {
   onUpdateDeliveryRules?: (rules: DeliveryChargeRule[]) => Promise<void> | void;
   taxAndPackingPercentage?: number;
   onUpdateTaxAndPacking?: (percentage: number) => Promise<void> | void;
+  onVerifyPaymentOrder?: (orderId: string, action: 'VERIFY' | 'REJECT', notes?: string) => Promise<void> | void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -219,12 +236,46 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onUpdateDeliveryRules,
   taxAndPackingPercentage,
   onUpdateTaxAndPacking,
+  onVerifyPaymentOrder,
 }) => {
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings' | 'payment-verification'>('inventory');
+
+  // Payment Verification state
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProofData[]>([]);
+  const [isLoadingProofs, setIsLoadingProofs] = useState(false);
+  const [proofViewerItem, setProofViewerItem] = useState<PaymentProofData | null>(null);
+  const [proofFilter, setProofFilter] = useState<'ALL' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED'>('ALL');
+  const [proofSearch, setProofSearch] = useState('');
+  const [verificationProcessing, setVerificationProcessing] = useState<Record<string, boolean>>({});
+  const [verificationFeedback, setVerificationFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [rejectionPromptOrderId, setRejectionPromptOrderId] = useState<string | null>(null);
+  const [rejectionNote, setRejectionNote] = useState('');
+
+  const loadPaymentProofs = async () => {
+    setIsLoadingProofs(true);
+    try {
+      const res = await fetchAllPaymentProofs();
+      if (res.success && Array.isArray(res.proofs)) {
+        setPaymentProofs(res.proofs);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingProofs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPaymentProofs();
+  }, []);
+
+  const pendingProofsCount = paymentProofs.filter(
+    (p) => p.verificationStatus === 'PENDING_VERIFICATION' || p.verificationStatus === 'UPLOADED'
+  ).length;
 
   // Payment Settings state
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getPaymentSettings);
@@ -347,6 +398,85 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setSavePaymentError(err?.message || 'Failed to save payment settings.');
     } finally {
       setIsSavingPaymentSettings(false);
+    }
+  };
+
+  // Payment Verification Handlers
+  const handleVerifyPayment = async (orderId: string, notes?: string) => {
+    setVerificationProcessing((prev) => ({ ...prev, [orderId]: true }));
+    setVerificationFeedback(null);
+    try {
+      const res = await adminVerifyPaymentProof({
+        orderId,
+        action: 'VERIFY',
+        adminOperator: 'Admin Portal',
+        notes: notes || 'Verified by admin',
+      });
+
+      if (res.success) {
+        setVerificationFeedback({
+          type: 'success',
+          message: `Payment for order ${orderId} verified successfully! Order confirmed and inventory stock updated.`,
+        });
+        await onVerifyPaymentOrder?.(orderId, 'VERIFY', notes);
+        onUpdateOrderStatus?.(orderId, 'CONFIRMED', { paymentStatus: 'PAID' });
+        await loadPaymentProofs();
+      } else {
+        setVerificationFeedback({
+          type: 'error',
+          message: res.error || 'Failed to verify payment.',
+        });
+      }
+    } catch (err: any) {
+      setVerificationFeedback({
+        type: 'error',
+        message: err?.message || 'Error verifying payment.',
+      });
+    } finally {
+      setVerificationProcessing((prev) => ({ ...prev, [orderId]: false }));
+      if (proofViewerItem?.orderId === orderId) {
+        setProofViewerItem(null);
+      }
+    }
+  };
+
+  const handleRejectPayment = async (orderId: string, notes?: string) => {
+    setVerificationProcessing((prev) => ({ ...prev, [orderId]: true }));
+    setVerificationFeedback(null);
+    try {
+      const res = await adminVerifyPaymentProof({
+        orderId,
+        action: 'REJECT',
+        adminOperator: 'Admin Portal',
+        notes: notes || 'Payment rejected by admin',
+      });
+
+      if (res.success) {
+        setVerificationFeedback({
+          type: 'success',
+          message: `Payment proof for order ${orderId} was rejected. Order kept unconfirmed.`,
+        });
+        await onVerifyPaymentOrder?.(orderId, 'REJECT', notes);
+        onUpdateOrderStatus?.(orderId, 'REJECTED', { paymentStatus: 'REJECTED' });
+        await loadPaymentProofs();
+      } else {
+        setVerificationFeedback({
+          type: 'error',
+          message: res.error || 'Failed to reject payment proof.',
+        });
+      }
+    } catch (err: any) {
+      setVerificationFeedback({
+        type: 'error',
+        message: err?.message || 'Error rejecting payment proof.',
+      });
+    } finally {
+      setVerificationProcessing((prev) => ({ ...prev, [orderId]: false }));
+      setRejectionPromptOrderId(null);
+      setRejectionNote('');
+      if (proofViewerItem?.orderId === orderId) {
+        setProofViewerItem(null);
+      }
     }
   };
 
@@ -1010,6 +1140,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <CreditCard className="w-4 h-4" />
             <span>{t('adminPaymentSettings') || 'Payment Settings'}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-payment-verification"
+            data-testid="admin-tab-payment-verification"
+            onClick={() => {
+              setActiveTab('payment-verification');
+              loadPaymentProofs();
+            }}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'payment-verification'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <FileCheck2 className="w-4 h-4" />
+            <span>Payment Verification</span>
+            {pendingProofsCount > 0 && (
+              <span
+                id="admin-pending-proofs-count-badge"
+                data-testid="admin-pending-proofs-count-badge"
+                className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-xs"
+              >
+                {pendingProofsCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -3018,6 +3174,429 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </form>
           </div>
         )}
+
+        {/* Tab 7: Payment Screenshot Verification */}
+        {activeTab === 'payment-verification' && (() => {
+          // Consolidate payment proofs with customer orders
+          const orderMap = new Map<string, CustomerOrder>();
+          customerOrders.forEach((o) => {
+            orderMap.set(o.id, o);
+            if (o.id.startsWith('#')) {
+              orderMap.set(o.id.slice(1), o);
+            } else {
+              orderMap.set(`#${o.id}`, o);
+            }
+          });
+
+          // Combine server payment proofs and any active order proofs
+          const proofList: PaymentProofData[] = [...paymentProofs];
+
+          customerOrders.forEach((ord) => {
+            if (ord.paymentProof) {
+              const alreadyExists = proofList.some(
+                (p) => p.orderId === ord.id || p.orderId === ord.id.replace(/^#/, '') || `#${p.orderId}` === ord.id
+              );
+              if (!alreadyExists) {
+                proofList.push({
+                  ...ord.paymentProof,
+                  orderId: ord.id,
+                  customerId: ord.customerId || ord.paymentProof.customerId || 'cust_anonymous',
+                  customerName: ord.customerName || ord.paymentProof.customerName,
+                  customerPhone: ord.customerPhone || ord.paymentProof.customerPhone,
+                  orderAmount: ord.total,
+                  paymentMethod: ord.paymentMethod,
+                  orderDate: ord.createdAt,
+                  verificationStatus: (ord.paymentVerificationStatus || ord.paymentProof.verificationStatus || 'PENDING_VERIFICATION') as PaymentVerificationStatus,
+                });
+              }
+            }
+          });
+
+          const enrichedList = proofList.map((proof) => {
+            const ord = orderMap.get(proof.orderId) || orderMap.get(`#${proof.orderId}`) || orderMap.get(proof.orderId.replace(/^#/, ''));
+            const status: PaymentVerificationStatus = (ord?.paymentVerificationStatus || proof.verificationStatus || 'PENDING_VERIFICATION') as PaymentVerificationStatus;
+            return {
+              ...proof,
+              customerName: proof.customerName || ord?.customerName || 'Customer',
+              customerPhone: proof.customerPhone || ord?.customerPhone || 'Not provided',
+              orderAmount: proof.orderAmount ?? ord?.total ?? 0,
+              paymentMethod: proof.paymentMethod || ord?.paymentMethod || 'UPI / QR Payment',
+              orderDate: proof.orderDate || ord?.createdAt || proof.uploadedAt,
+              verificationStatus: status,
+              paymentStatus:
+                status === 'VERIFIED'
+                  ? 'PAID'
+                  : status === 'REJECTED'
+                  ? 'REJECTED'
+                  : ord?.paymentStatus || 'PENDING VERIFICATION',
+            };
+          });
+
+          const totalSubmissions = enrichedList.length;
+          const pendingCount = enrichedList.filter(
+            (p) => p.verificationStatus === 'PENDING_VERIFICATION' || p.verificationStatus === 'UPLOADED'
+          ).length;
+          const verifiedCount = enrichedList.filter((p) => p.verificationStatus === 'VERIFIED').length;
+          const rejectedCount = enrichedList.filter((p) => p.verificationStatus === 'REJECTED').length;
+
+          const displayList = enrichedList.filter((p) => {
+            if (proofFilter !== 'ALL') {
+              if (proofFilter === 'PENDING_VERIFICATION') {
+                if (p.verificationStatus !== 'PENDING_VERIFICATION' && p.verificationStatus !== 'UPLOADED') {
+                  return false;
+                }
+              } else if (p.verificationStatus !== proofFilter) {
+                return false;
+              }
+            }
+
+            if (proofSearch.trim()) {
+              const q = proofSearch.toLowerCase();
+              const orderMatch = (p.orderId || '').toLowerCase().includes(q);
+              const nameMatch = (p.customerName || '').toLowerCase().includes(q);
+              const phoneMatch = (p.customerPhone || '').toLowerCase().includes(q);
+              const fileMatch = (p.fileName || '').toLowerCase().includes(q);
+              return orderMatch || nameMatch || phoneMatch || fileMatch;
+            }
+
+            return true;
+          });
+
+          return (
+            <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl p-5 sm:p-6 space-y-6">
+              {/* Header */}
+              <div className="pb-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-[18px] font-bold text-white font-display flex items-center gap-2">
+                    <FileCheck2 className="w-5 h-5 text-amber-400" />
+                    <span>PAYMENT SCREENSHOT VERIFICATION</span>
+                    {pendingCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        {pendingCount} Pending
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[12px] text-[#94a3b8] mt-0.5">
+                    Review and verify customer payment proof submissions for UPI / QR Payment and Direct UPI App orders before confirming orders and dispatching stock.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadPaymentProofs()}
+                    disabled={isLoadingProofs}
+                    className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-[12px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${isLoadingProofs ? 'animate-spin' : ''}`} />
+                    <span>{isLoadingProofs ? 'Refreshing...' : 'Refresh'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback Alert */}
+              {verificationFeedback && (
+                <div
+                  className={`p-3.5 rounded-xl border text-[13px] flex items-center justify-between gap-3 animate-in fade-in ${
+                    verificationFeedback.type === 'success'
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {verificationFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span>{verificationFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVerificationFeedback(null)}
+                    className="text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Metrics / KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="p-4 rounded-xl bg-black/25 border border-white/10">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Proofs</div>
+                  <div className="text-[22px] font-bold text-white mt-1 font-mono">{totalSubmissions}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">Submitted by customers</div>
+                </div>
+
+                <div className={`p-4 rounded-xl border ${
+                  pendingCount > 0
+                    ? 'bg-amber-500/10 border-amber-500/40 shadow-sm'
+                    : 'bg-black/25 border-white/10'
+                }`}>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    Pending Verification
+                  </div>
+                  <div className="text-[22px] font-bold text-amber-300 mt-1 font-mono">{pendingCount}</div>
+                  <div className="text-[11px] text-amber-300/70 mt-0.5">Awaiting admin review</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-black/25 border border-white/10">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Verified & Paid</div>
+                  <div className="text-[22px] font-bold text-emerald-300 mt-1 font-mono">{verifiedCount}</div>
+                  <div className="text-[11px] text-emerald-300/70 mt-0.5">Orders confirmed & stock deducted</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-black/25 border border-white/10">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-400">Rejected</div>
+                  <div className="text-[22px] font-bold text-rose-300 mt-1 font-mono">{rejectedCount}</div>
+                  <div className="text-[11px] text-rose-300/70 mt-0.5">Invalid proofs rejected</div>
+                </div>
+              </div>
+
+              {/* Search & Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    id="admin-proof-search-input"
+                    value={proofSearch}
+                    onChange={(e) => setProofSearch(e.target.value)}
+                    placeholder="Search by order ID, customer name, mobile, file..."
+                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-black/30 border border-white/15 text-white text-[13px] focus:outline-hidden focus:ring-2 focus:ring-[#10b981] placeholder:text-[#64748b]"
+                  />
+                  {proofSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setProofSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(
+                    [
+                      { key: 'ALL', label: 'All', count: totalSubmissions },
+                      { key: 'PENDING_VERIFICATION', label: 'Pending', count: pendingCount },
+                      { key: 'VERIFIED', label: 'Verified', count: verifiedCount },
+                      { key: 'REJECTED', label: 'Rejected', count: rejectedCount },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      id={`proof-filter-btn-${f.key.toLowerCase()}`}
+                      onClick={() => setProofFilter(f.key)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        proofFilter === f.key
+                          ? 'bg-[#006b2c] text-white shadow-xs'
+                          : 'bg-black/30 text-slate-300 border border-white/10 hover:bg-black/45'
+                      }`}
+                    >
+                      <span>{f.label}</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                        {f.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Submissions List */}
+              {displayList.length === 0 ? (
+                <div className="py-14 text-center border border-dashed border-white/15 rounded-xl bg-black/15 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-slate-400">
+                    <FileCheck2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-[15px] font-bold text-white">No payment proofs found</h4>
+                    <p className="text-[12px] text-slate-400 max-w-sm mx-auto mt-1">
+                      {proofSearch || proofFilter !== 'ALL'
+                        ? 'Try clearing your search query or switching filters.'
+                        : 'When customers choose UPI / QR Payment or Direct UPI App and submit payment screenshots, they will appear here for review.'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {displayList.map((proof) => {
+                    const isProcessing = !!verificationProcessing[proof.orderId];
+                    const isPending =
+                      proof.verificationStatus === 'PENDING_VERIFICATION' ||
+                      proof.verificationStatus === 'UPLOADED';
+                    const isVerified = proof.verificationStatus === 'VERIFIED';
+                    const isRejected = proof.verificationStatus === 'REJECTED';
+
+                    return (
+                      <div
+                        key={proof.id || proof.orderId}
+                        id={`payment-proof-card-${proof.orderId}`}
+                        data-testid={`payment-proof-card-${proof.orderId}`}
+                        className={`p-4 sm:p-5 rounded-xl border transition-all ${
+                          isPending
+                            ? 'bg-amber-950/20 border-amber-500/40 shadow-sm'
+                            : isVerified
+                            ? 'bg-emerald-950/15 border-emerald-500/30'
+                            : 'bg-rose-950/15 border-rose-500/30'
+                        }`}
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          {/* Left Column: Order, Customer & Amount Details */}
+                          <div className="space-y-2.5 flex-1 min-w-0">
+                            {/* Order & Status Badges */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-[14px] font-bold text-white bg-white/10 px-2.5 py-1 rounded-md border border-white/15">
+                                #{proof.orderId.replace(/^#/, '')}
+                              </span>
+
+                              {/* Verification Status Badge */}
+                              {isPending && (
+                                <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                  PENDING VERIFICATION
+                                </span>
+                              )}
+                              {isVerified && (
+                                <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5">
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                  VERIFIED / PAID
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5">
+                                  <X className="w-3.5 h-3.5 text-rose-400" />
+                                  REJECTED
+                                </span>
+                              )}
+
+                              {/* Payment Method Badge */}
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-black/40 text-slate-300 border border-white/10">
+                                {proof.paymentMethod || 'UPI / QR Payment'}
+                              </span>
+
+                              {/* Order Amount */}
+                              <span className="text-[14px] font-bold text-emerald-400 font-mono ml-auto lg:ml-0">
+                                {formatINR(proof.orderAmount || 0)}
+                              </span>
+                            </div>
+
+                            {/* Customer & Timestamp Info */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[12px] text-slate-300">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-white truncate">{proof.customerName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="font-mono text-slate-300">{proof.customerPhone || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="text-slate-400 truncate">
+                                  {formatOrderDateTime(proof.orderDate || proof.uploadedAt)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Proof File Metadata */}
+                            <div className="flex items-center gap-3 text-[11px] text-slate-400 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5 w-fit">
+                              <span className="flex items-center gap-1 text-slate-300 font-medium truncate max-w-xs">
+                                {proof.fileType?.includes('pdf') ? (
+                                  <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                ) : (
+                                  <ImageIcon className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                )}
+                                <span className="truncate">{proof.fileName}</span>
+                              </span>
+                              <span>•</span>
+                              <span>{formatFileSize(proof.fileSize)}</span>
+                              <span>•</span>
+                              <span>Uploaded: {formatOrderDateTime(proof.uploadedAt)}</span>
+                            </div>
+
+                            {/* Audit Notes if Verified/Rejected */}
+                            {(proof.verifiedRejectedAt || proof.adminNotes) && (
+                              <div className="text-[11px] text-slate-300 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                                <span className="font-semibold">
+                                  {isVerified ? 'Verification Audit:' : 'Rejection Reason:'}
+                                </span>{' '}
+                                {proof.verifiedRejectedBy ? `By ${proof.verifiedRejectedBy} on ` : ''}
+                                {proof.verifiedRejectedAt ? formatOrderDateTime(proof.verifiedRejectedAt) : ''}
+                                {proof.adminNotes ? ` — "${proof.adminNotes}"` : ''}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right Column: Screenshot Preview & Admin Actions */}
+                          <div className="flex sm:flex-row lg:flex-col items-center lg:items-end justify-between sm:justify-end gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/10">
+                            {/* View Screenshot / PDF Button */}
+                            <button
+                              type="button"
+                              id={`admin-view-proof-btn-${proof.orderId}`}
+                              data-testid={`admin-view-proof-btn-${proof.orderId}`}
+                              onClick={() => setProofViewerItem(proof)}
+                              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[12px] font-semibold flex items-center gap-2 transition-all cursor-pointer border border-white/15 hover:border-white/30"
+                            >
+                              <Eye className="w-4 h-4 text-emerald-400" />
+                              <span>View Proof</span>
+                            </button>
+
+                            {/* Actions Group: Verify & Reject */}
+                            <div className="flex items-center gap-2">
+                              {/* Verify Payment Button */}
+                              <button
+                                type="button"
+                                id={`admin-verify-btn-${proof.orderId}`}
+                                data-testid={`admin-verify-btn-${proof.orderId}`}
+                                onClick={() => handleVerifyPayment(proof.orderId)}
+                                disabled={isProcessing || isVerified}
+                                className={`px-3.5 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                                  isVerified
+                                    ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/40 cursor-default'
+                                    : 'bg-[#006b2c] hover:bg-[#00873a] text-white disabled:opacity-50'
+                                }`}
+                              >
+                                <Check className="w-4 h-4" />
+                                <span>{isVerified ? '✓ Verified' : isProcessing ? 'Verifying...' : '✓ Verify Payment'}</span>
+                              </button>
+
+                              {/* Reject Payment Button */}
+                              <button
+                                type="button"
+                                id={`admin-reject-btn-${proof.orderId}`}
+                                data-testid={`admin-reject-btn-${proof.orderId}`}
+                                onClick={() => {
+                                  setRejectionPromptOrderId(proof.orderId);
+                                  setRejectionNote('');
+                                }}
+                                disabled={isProcessing || isRejected}
+                                className={`px-3.5 py-2 rounded-xl text-[12px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                                  isRejected
+                                    ? 'bg-rose-900/40 text-rose-300 border border-rose-500/40 cursor-default'
+                                    : 'bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50'
+                                }`}
+                              >
+                                <X className="w-4 h-4" />
+                                <span>{isRejected ? '✕ Rejected' : '✕ Reject Payment'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Add New Product Modal */}
@@ -3265,6 +3844,217 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           setTimeout(() => setPulseToast(null), 3500);
         }}
       />
+
+      {/* Payment Proof Viewer Modal */}
+      {proofViewerItem && (
+        <div
+          id="admin-proof-viewer-modal"
+          data-testid="admin-proof-viewer-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
+        >
+          <div className="bg-[#0f172a] rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-white/20">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-black/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                  <FileCheck2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-[17px] font-bold text-white font-display flex items-center gap-2">
+                    <span>Payment Proof — #{proofViewerItem.orderId.replace(/^#/, '')}</span>
+                  </h3>
+                  <p className="text-[12px] text-slate-400">
+                    Uploaded by {proofViewerItem.customerName || 'Customer'} ({proofViewerItem.customerPhone || 'No phone'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="admin-close-proof-viewer-btn"
+                data-testid="admin-close-proof-viewer-btn"
+                onClick={() => setProofViewerItem(null)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Meta info bar */}
+            <div className="px-5 py-3 bg-black/25 border-b border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px]">
+              <div>
+                <span className="text-slate-400 block text-[11px]">Order Amount</span>
+                <span className="font-bold text-emerald-400 font-mono text-[14px]">
+                  {formatINR(proofViewerItem.orderAmount || 0)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Payment Method</span>
+                <span className="font-semibold text-white">{proofViewerItem.paymentMethod || 'UPI / QR Payment'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">File Details</span>
+                <span className="font-mono text-slate-300 truncate block">
+                  {proofViewerItem.fileName} ({formatFileSize(proofViewerItem.fileSize)})
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Uploaded At</span>
+                <span className="text-slate-300 font-mono">{formatOrderDateTime(proofViewerItem.uploadedAt)}</span>
+              </div>
+            </div>
+
+            {/* Proof Display Area */}
+            <div className="flex-1 p-5 overflow-auto bg-black/60 flex items-center justify-center min-h-[350px]">
+              {proofViewerItem.fileType?.includes('pdf') ? (
+                <div className="w-full h-full min-h-[480px] flex flex-col items-center justify-center space-y-4">
+                  <iframe
+                    src={proofViewerItem.fileData || `/api/payment-proofs/${proofViewerItem.orderId}/file`}
+                    className="w-full h-[460px] rounded-xl border border-white/15 bg-white"
+                    title="PDF Payment Proof"
+                  />
+                  <a
+                    href={proofViewerItem.fileData || `/api/payment-proofs/${proofViewerItem.orderId}/file`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold flex items-center gap-2 transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open PDF in New Tab</span>
+                  </a>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center space-y-3">
+                  <img
+                    src={proofViewerItem.fileData || `/api/payment-proofs/${proofViewerItem.orderId}/file`}
+                    alt="Customer Payment Screenshot"
+                    className="max-h-[520px] max-w-full rounded-xl object-contain shadow-2xl border border-white/15"
+                  />
+                  <a
+                    href={proofViewerItem.fileData || `/api/payment-proofs/${proofViewerItem.orderId}/file`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[12px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open Full Image in New Tab</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Footer with Actions */}
+            <div className="p-4 sm:p-5 bg-black/40 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[12px] text-slate-400">
+                Verification status:{' '}
+                <span className="font-bold text-white font-mono">{proofViewerItem.verificationStatus}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProofViewerItem(null)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-[13px] font-semibold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+
+                <button
+                  type="button"
+                  id={`modal-reject-btn-${proofViewerItem.orderId}`}
+                  data-testid={`modal-reject-btn-${proofViewerItem.orderId}`}
+                  onClick={() => {
+                    setRejectionPromptOrderId(proofViewerItem.orderId);
+                    setRejectionNote('');
+                  }}
+                  disabled={proofViewerItem.verificationStatus === 'REJECTED'}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[13px] font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" />
+                  <span>✕ Reject Payment</span>
+                </button>
+
+                <button
+                  type="button"
+                  id={`modal-verify-btn-${proofViewerItem.orderId}`}
+                  data-testid={`modal-verify-btn-${proofViewerItem.orderId}`}
+                  onClick={() => handleVerifyPayment(proofViewerItem.orderId)}
+                  disabled={proofViewerItem.verificationStatus === 'VERIFIED'}
+                  className="px-5 py-2 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>✓ Verify Payment</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Prompt Modal */}
+      {rejectionPromptOrderId && (
+        <div
+          id="admin-rejection-prompt-modal"
+          data-testid="admin-rejection-prompt-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
+        >
+          <div className="bg-[#0f172a] rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-500/40 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-white font-display">
+                  Reject Payment Proof
+                </h3>
+                <p className="text-[12px] text-slate-400">
+                  Order #{rejectionPromptOrderId.replace(/^#/, '')}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[12px] leading-relaxed">
+              <strong>Order will NOT be confirmed</strong> and inventory will NOT be reduced. The customer will be prompted to re-upload a valid proof.
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="admin-rejection-note-input" className="block text-[12px] font-semibold text-slate-300">
+                Rejection Reason / Note to Customer (Optional)
+              </label>
+              <textarea
+                id="admin-rejection-note-input"
+                data-testid="admin-rejection-note-input"
+                value={rejectionNote}
+                onChange={(e) => setRejectionNote(e.target.value)}
+                placeholder="e.g. UTR / Transaction reference number not found in bank statement, or amount mismatch."
+                rows={3}
+                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-white text-[13px] focus:outline-hidden focus:ring-2 focus:ring-rose-500 placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectionPromptOrderId(null);
+                  setRejectionNote('');
+                }}
+                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-[13px] font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-reject-payment-btn"
+                data-testid="confirm-reject-payment-btn"
+                onClick={() => handleRejectPayment(rejectionPromptOrderId, rejectionNote)}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[13px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

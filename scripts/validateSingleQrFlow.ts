@@ -43,10 +43,11 @@ async function runValidation() {
   assert(cartImgMatches.length === 0, `CartPage has exactly 0 QR images (found: ${cartImgMatches.length})`);
 
   // STEP 2: Confirm CheckoutPage contains EXACTLY ONE QR Code inside Payment Methods
-  console.log('\nSTEP 2: Verify CheckoutPage Payment Methods has EXACTLY ONE QR Code');
+  console.log('\nSTEP 2: Verify CheckoutPage Payment Methods has EXACTLY ONE QR Code and 3 separate options');
   assert(checkoutPageContent.includes('checkout-payment-qr-img'), 'CheckoutPage contains checkout-payment-qr-img');
   assert(checkoutPageContent.includes('checkout-payment-cash-opt'), 'CheckoutPage has Cash on Delivery option');
   assert(checkoutPageContent.includes('checkout-payment-upi-qr-opt'), 'CheckoutPage has UPI / QR Payment option');
+  assert(checkoutPageContent.includes('checkout-payment-upi-app-opt'), 'CheckoutPage has 📱 Pay Directly via UPI App option');
   assert(checkoutPageContent.includes('checkout-qr-amount-display'), 'CheckoutPage has Amount to Pay display');
   assert(checkoutPageContent.includes('checkout-qr-scan-instruction'), 'CheckoutPage has Scan instruction');
   assert(checkoutPageContent.includes('checkout-direct-upi-app-link'), 'CheckoutPage has Pay via UPI App button');
@@ -56,7 +57,7 @@ async function runValidation() {
   assert(checkoutQrMatches === 1, `CheckoutPage contains exactly 1 QR element definition (found: ${checkoutQrMatches})`);
 
   // STEP 3: Validate Payment Methods structure
-  console.log('\nSTEP 3: Verify Payment Methods conditional rendering');
+  console.log('\nSTEP 3: Verify Payment Methods conditional rendering & separation');
   assert(
     checkoutPageContent.includes("paymentMethod === 'upi_qr'"),
     'QR code is rendered conditionally ONLY when UPI / QR Payment is selected'
@@ -64,6 +65,20 @@ async function runValidation() {
   assert(
     checkoutPageContent.includes("paymentMethod === 'cash'"),
     'Cash on Delivery has distinct handling without any QR code'
+  );
+  assert(
+    checkoutPageContent.includes("paymentMethod === 'upi_app'"),
+    '📱 Pay Directly via UPI App has its own distinct handling'
+  );
+
+  // Verify direct UPI button is in upi_app section and NOT inside upi_qr section
+  const upiQrSection = checkoutPageContent.substring(
+    checkoutPageContent.indexOf("paymentMethod === 'upi_qr'"),
+    checkoutPageContent.indexOf("paymentMethod === 'upi_app'")
+  );
+  assert(
+    !upiQrSection.includes('checkout-direct-upi-app-link'),
+    'Direct UPI app button is NOT inside UPI / QR Payment section'
   );
 
   // STEP 4: Test Dynamic QR Generation & Payload with Cart Amount changes
