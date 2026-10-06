@@ -62,6 +62,10 @@ export const Header: React.FC<HeaderProps> = ({
         return 'Search Results';
       case 'category':
         return 'Category Catalog';
+      case 'cart':
+        return t('cart') || 'Shopping Cart';
+      case 'checkout':
+        return 'Checkout & Payment';
       default:
         return t('navRetailStorefront');
     }
@@ -196,7 +200,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Cart Button (Only on storefront and customer dashboard; completely removed from Admin Portal) */}
+            {/* Cart Button (Navigates to dedicated Cart page; completely removed from Admin Portal) */}
             {currentView !== 'login' && currentView !== 'register' && currentView !== 'admin' && (
               <button
                 id="header-cart-btn"
@@ -204,9 +208,21 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onOpenCart}
                 aria-label={t('cart')}
                 title={t('cart')}
-                className="relative flex items-center justify-center px-3 py-1.5 rounded-xl bg-[#006b2c] text-white hover:bg-[#00873a] shadow-xs cursor-pointer cart-icon-glow"
+                className={`relative flex items-center justify-center px-3 py-1.5 rounded-xl text-white shadow-xs cursor-pointer cart-icon-glow transition-all ${
+                  currentView === 'cart'
+                    ? 'bg-[#00873a] ring-2 ring-white/50'
+                    : 'bg-[#006b2c] hover:bg-[#00873a]'
+                }`}
               >
                 <ShoppingCart className="w-4 h-4" />
+                {cartCount > 0 && (
+                  <span
+                    id="header-cart-count-badge"
+                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-[#ba1a1a] text-white rounded-full text-[10px] font-bold ring-2 ring-[#030305]"
+                  >
+                    {cartCount}
+                  </span>
+                )}
               </button>
             )}
 

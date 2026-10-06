@@ -594,3 +594,49 @@ div[id$="-modal-panel"] {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.32);
 }
+
+/* ==========================================================================
+   SEMI-SOLID OPAQUE DEDICATED CART PAGE STYLES
+   - Dark semi-solid opaque surface (88%-92% opacity)
+   - Underlying liquid canvas background is only slightly visible
+   - Moderate transparency with a strong, highly readable surface
+   - Subtle backdrop blur and subtle borders around panels
+   - Crisp high-contrast text, clear controls, and no excessive glow
+   ========================================================================== */
+
+.cart-semi-opaque-main,
+.cart-semi-opaque-main *,
+.cart-semi-opaque-panel,
+.cart-semi-opaque-card,
+.cart-semi-opaque-control {
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.cart-semi-opaque-main {
+  background-color: rgba(13, 18, 28, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65) !important;
+}
+
+.cart-semi-opaque-panel {
+  background-color: rgba(17, 24, 39, 0.90) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.5) !important;
+}
+
+.cart-semi-opaque-card {
+  background-color: rgba(24, 33, 49, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.35) !important;
+}
+
+.cart-semi-opaque-control {
+  background-color: rgba(30, 41, 59, 0.90) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.cart-semi-opaque-card:hover {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
