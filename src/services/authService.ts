@@ -935,7 +935,7 @@ export function saveOrderForCustomer(order: CustomerOrder): void {
 export function updateOrderStatus(
   orderId: string,
   newStatus: string,
-  extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }
+  extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean; paymentStatus?: string }
 ): void {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
@@ -952,6 +952,30 @@ export function updateOrderStatus(
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to update order status:', err);
+  }
+}
+
+/**
+ * Updates the payment status of an existing customer order (Admin Payment Verification).
+ */
+export function updateOrderPaymentStatus(
+  orderId: string,
+  paymentStatus: 'Pending' | 'Pending Verification' | 'Paid' | 'Failed' | string
+): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
+    const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+    const updated = orders.map((o) =>
+      o.id === orderId
+        ? {
+            ...o,
+            paymentStatus,
+          }
+        : o
+    );
+    localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Failed to update order payment status:', err);
   }
 }
 

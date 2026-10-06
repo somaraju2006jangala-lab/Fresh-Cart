@@ -1,332 +1,264 @@
+import QRCode from 'qrcode';
+import jsQR from 'jsqr';
+
 /**
- * Self-contained pure TypeScript QR Code SVG Generator (Model 2, Byte Mode)
- * Generates standards-compliant QR Code SVGs without external dependencies.
+ * Standard UPI ID Validator
+ * Ensures UPI ID follows standard user@handle format (e.g., testupi@upi, freshcart@icici).
  */
-
-// Galois Field (256) tables for Reed-Solomon Error Correction
-const GF256_EXP = new Uint8Array(512);
-const GF256_LOG = new Uint8Array(256);
-
-(function initGaloisField() {
-  let x = 1;
-  for (let i = 0; i < 255; i++) {
-    GF256_EXP[i] = x;
-    GF256_EXP[i + 255] = x;
-    GF256_LOG[x] = i;
-    x <<= 1;
-    if (x & 256) x ^= 0x11d; // polynomial x^8 + x^4 + x^3 + x^2 + 1
-  }
-  GF256_LOG[0] = 0;
-})();
-
-function gfMultiply(x: number, y: number): number {
-  if (x === 0 || y === 0) return 0;
-  return GF256_EXP[GF256_LOG[x] + GF256_LOG[y]];
-}
-
-function rsGeneratorPoly(degree: number): Uint8Array {
-  let poly = new Uint8Array([1]);
-  for (let i = 0; i < degree; i++) {
-    const nextPoly = new Uint8Array(poly.length + 1);
-    for (let j = 0; j < poly.length; j++) {
-      nextPoly[j] ^= gfMultiply(poly[j], GF256_EXP[i]);
-      nextPoly[j + 1] ^= poly[j];
-    }
-    poly = nextPoly;
-  }
-  return poly;
-}
-
-function rsCalculateEC(msg: Uint8Array, numEcBytes: number): Uint8Array {
-  const gen = rsGeneratorPoly(numEcBytes);
-  const remainder = new Uint8Array(numEcBytes);
-  for (let i = 0; i < msg.length; i++) {
-    const factor = msg[i] ^ remainder[0];
-    for (let j = 0; j < numEcBytes - 1; j++) {
-      remainder[j] = remainder[j + 1] ^ gfMultiply(gen[j + 1], factor);
-    }
-    remainder[numEcBytes - 1] = gfMultiply(gen[numEcBytes], factor);
-  }
-  return remainder;
-}
-
-// Version specifications for versions 1 to 10 with EC Level M
-interface VersionSpec {
-  version: number;
-  totalCodewords: number;
-  ecCodewords: number;
-  blocks: { numBlocks: number; dataCodewords: number }[];
-  alignmentPatterns: number[];
-}
-
-const VERSION_SPECS: VersionSpec[] = [
-  { version: 1, totalCodewords: 26, ecCodewords: 10, blocks: [{ numBlocks: 1, dataCodewords: 16 }], alignmentPatterns: [] },
-  { version: 2, totalCodewords: 44, ecCodewords: 16, blocks: [{ numBlocks: 1, dataCodewords: 28 }], alignmentPatterns: [6, 18] },
-  { version: 3, totalCodewords: 70, ecCodewords: 26, blocks: [{ numBlocks: 1, dataCodewords: 44 }], alignmentPatterns: [6, 22] },
-  { version: 4, totalCodewords: 100, ecCodewords: 36, blocks: [{ numBlocks: 2, dataCodewords: 32 }], alignmentPatterns: [6, 26] },
-  { version: 5, totalCodewords: 134, ecCodewords: 48, blocks: [{ numBlocks: 2, dataCodewords: 43 }], alignmentPatterns: [6, 30] },
-  { version: 6, totalCodewords: 172, ecCodewords: 64, blocks: [{ numBlocks: 4, dataCodewords: 27 }], alignmentPatterns: [6, 34] },
-  { version: 7, totalCodewords: 196, ecCodewords: 72, blocks: [{ numBlocks: 4, dataCodewords: 31 }], alignmentPatterns: [6, 22, 38] },
-  { version: 8, totalCodewords: 242, ecCodewords: 88, blocks: [{ numBlocks: 2, dataCodewords: 38 }, { numBlocks: 2, dataCodewords: 39 }], alignmentPatterns: [6, 24, 42] },
-  { version: 9, totalCodewords: 292, ecCodewords: 110, blocks: [{ numBlocks: 3, dataCodewords: 36 }, { numBlocks: 2, dataCodewords: 37 }], alignmentPatterns: [6, 26, 46] },
-  { version: 10, totalCodewords: 346, ecCodewords: 130, blocks: [{ numBlocks: 4, dataCodewords: 43 }, { numBlocks: 1, dataCodewords: 44 }], alignmentPatterns: [6, 28, 50] },
-];
-
-class BitBuffer {
-  private buffer: number[] = [];
-  private length: number = 0;
-
-  put(num: number, length: number) {
-    for (let i = 0; i < length; i++) {
-      this.putBit(((num >>> (length - i - 1)) & 1) === 1);
-    }
+export function validateUpiId(upiId: string): { isValid: boolean; error: string } {
+  const trimmed = (upiId || '').trim();
+  if (!trimmed) {
+    return { isValid: false, error: 'UPI ID cannot be empty.' };
   }
 
-  putBit(bit: boolean) {
-    const bufIndex = Math.floor(this.length / 8);
-    if (this.buffer.length <= bufIndex) {
-      this.buffer.push(0);
-    }
-    if (bit) {
-      this.buffer[bufIndex] |= 0x80 >>> (this.length % 8);
-    }
-    this.length++;
+  // Must contain exactly one '@'
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) {
+    return {
+      isValid: false,
+      error: 'Invalid UPI ID format. Must contain exactly one "@" symbol (e.g. testupi@upi).',
+    };
   }
 
-  getBuffer(): Uint8Array {
-    return new Uint8Array(this.buffer);
+  const [username, handle] = parts;
+  if (!username || username.length < 2 || !handle || handle.length < 2) {
+    return {
+      isValid: false,
+      error: 'Invalid UPI ID format. Username and bank handle must each have at least 2 characters.',
+    };
   }
 
-  getLengthInBits(): number {
-    return this.length;
-  }
-}
-
-export function generateQrMatrix(text: string): boolean[][] {
-  const utf8Bytes = new TextEncoder().encode(text);
-  const dataLen = utf8Bytes.length;
-
-  // Determine minimal version needed for EC Level M (8-bit Byte mode)
-  let selectedSpec: VersionSpec | null = null;
-  for (const spec of VERSION_SPECS) {
-    const totalDataCodewords = spec.totalCodewords - spec.ecCodewords;
-    const countBits = spec.version < 10 ? 8 : 16;
-    const requiredBits = 4 + countBits + dataLen * 8;
-    if (requiredBits <= totalDataCodewords * 8) {
-      selectedSpec = spec;
-      break;
-    }
+  const upiRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/;
+  if (!upiRegex.test(trimmed) || trimmed.includes(' ')) {
+    return {
+      isValid: false,
+      error: 'Invalid UPI ID characters. Only letters, numbers, dots, hyphens, and underscores are allowed.',
+    };
   }
 
-  if (!selectedSpec) {
-    selectedSpec = VERSION_SPECS[VERSION_SPECS.length - 1];
-  }
-
-  const version = selectedSpec.version;
-  const size = version * 4 + 17;
-  const totalDataCodewords = selectedSpec.totalCodewords - selectedSpec.ecCodewords;
-
-  // 1. Encode Data in Byte Mode
-  const bb = new BitBuffer();
-  bb.put(0b0100, 4); // Byte mode indicator
-  bb.put(dataLen, version < 10 ? 8 : 16);
-  for (let i = 0; i < dataLen; i++) {
-    bb.put(utf8Bytes[i], 8);
-  }
-
-  // Terminator
-  const totalBits = totalDataCodewords * 8;
-  const termLen = Math.min(4, totalBits - bb.getLengthInBits());
-  if (termLen > 0) bb.put(0, termLen);
-
-  // Align to byte
-  while (bb.getLengthInBits() % 8 !== 0) {
-    bb.putBit(false);
-  }
-
-  // Pad bytes 0xEC, 0x11
-  let padToggle = false;
-  while (bb.getLengthInBits() < totalBits) {
-    bb.put(padToggle ? 0x11 : 0xec, 8);
-    padToggle = !padToggle;
-  }
-
-  const dataBytes = bb.getBuffer();
-
-  // 2. Interleave blocks and compute EC
-  let dataOffset = 0;
-  const dataBlocks: Uint8Array[] = [];
-  const ecBlocks: Uint8Array[] = [];
-
-  for (const blk of selectedSpec.blocks) {
-    const ecPerBlock = Math.floor(selectedSpec.ecCodewords / selectedSpec.blocks.reduce((s, b) => s + b.numBlocks, 0));
-    for (let i = 0; i < blk.numBlocks; i++) {
-      const blockData = dataBytes.slice(dataOffset, dataOffset + blk.dataCodewords);
-      dataOffset += blk.dataCodewords;
-      dataBlocks.push(blockData);
-      ecBlocks.push(rsCalculateEC(blockData, ecPerBlock));
-    }
-  }
-
-  // Interleave data codewords
-  const finalCodewords: number[] = [];
-  const maxDataCodewords = Math.max(...dataBlocks.map((b) => b.length));
-  for (let i = 0; i < maxDataCodewords; i++) {
-    for (const b of dataBlocks) {
-      if (i < b.length) finalCodewords.push(b[i]);
-    }
-  }
-  // Interleave EC codewords
-  const maxEcCodewords = Math.max(...ecBlocks.map((b) => b.length));
-  for (let i = 0; i < maxEcCodewords; i++) {
-    for (const b of ecBlocks) {
-      if (i < b.length) finalCodewords.push(b[i]);
-    }
-  }
-
-  // 3. Setup Matrix
-  const matrix: (boolean | null)[][] = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => null)
-  );
-  const isFunction: boolean[][] = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => false)
-  );
-
-  function setModule(r: number, c: number, val: boolean, isFunc = true) {
-    if (r >= 0 && r < size && c >= 0 && c < size) {
-      matrix[r][c] = val;
-      if (isFunc) isFunction[r][c] = true;
-    }
-  }
-
-  // Finder Patterns
-  function placeFinder(top: number, left: number) {
-    for (let r = 0; r < 7; r++) {
-      for (let c = 0; c < 7; c++) {
-        if (
-          r === 0 ||
-          r === 6 ||
-          c === 0 ||
-          c === 6 ||
-          (r >= 2 && r <= 4 && c >= 2 && c <= 4)
-        ) {
-          setModule(top + r, left + c, true);
-        } else {
-          setModule(top + r, left + c, false);
-        }
-      }
-    }
-    // Separators
-    for (let i = -1; i <= 7; i++) {
-      setModule(top - 1, left + i, false);
-      setModule(top + 7, left + i, false);
-      setModule(top + i, left - 1, false);
-      setModule(top + i, left + 7, false);
-    }
-  }
-
-  placeFinder(0, 0);
-  placeFinder(0, size - 7);
-  placeFinder(size - 7, 0);
-
-  // Timing Patterns
-  for (let i = 8; i < size - 8; i++) {
-    const val = i % 2 === 0;
-    if (matrix[6][i] === null) setModule(6, i, val);
-    if (matrix[i][6] === null) setModule(i, 6, val);
-  }
-
-  // Alignment Patterns
-  const alignCoords = selectedSpec.alignmentPatterns;
-  if (alignCoords.length > 0) {
-    for (const r of alignCoords) {
-      for (const c of alignCoords) {
-        if (isFunction[r][c]) continue;
-        for (let dr = -2; dr <= 2; dr++) {
-          for (let dc = -2; dc <= 2; dc++) {
-            const isBorder = Math.abs(dr) === 2 || Math.abs(dc) === 2;
-            const isCenter = dr === 0 && dc === 0;
-            setModule(r + dr, c + dc, isBorder || isCenter);
-          }
-        }
-      }
-    }
-  }
-
-  // Dark module
-  setModule(size - 8, 8, true);
-
-  // Format bits space reservation
-  for (let i = 0; i < 9; i++) {
-    if (i !== 6) {
-      isFunction[8][i] = true;
-      isFunction[i][8] = true;
-    }
-  }
-  for (let i = 0; i < 8; i++) {
-    isFunction[8][size - 1 - i] = true;
-    isFunction[size - 1 - i][8] = true;
-  }
-
-  // Place Codewords into Data Areas
-  let bitIndex = 0;
-  let upwards = true;
-  for (let c = size - 1; c > 0; c -= 2) {
-    if (c === 6) c--; // Skip vertical timing column
-    const rows = upwards
-      ? Array.from({ length: size }, (_, i) => size - 1 - i)
-      : Array.from({ length: size }, (_, i) => i);
-
-    for (const r of rows) {
-      for (let col = c; col >= c - 1; col--) {
-        if (!isFunction[r][col]) {
-          let bit = false;
-          if (bitIndex < finalCodewords.length * 8) {
-            const byteVal = finalCodewords[Math.floor(bitIndex / 8)];
-            bit = ((byteVal >>> (7 - (bitIndex % 8))) & 1) === 1;
-          }
-          // Mask pattern 0: (row + col) % 2 === 0
-          if ((r + col) % 2 === 0) {
-            bit = !bit;
-          }
-          matrix[r][col] = bit;
-          bitIndex++;
-        }
-      }
-    }
-    upwards = !upwards;
-  }
-
-  // Format info for EC Level M (00) and Mask 0 (000) -> 00000 -> 0x00
-  // Mask pattern 0 + EC Level M (0b00000) with BCH (15, 5) code: 0x5412 ^ 0x0000 = 0x5412
-  const formatInfo = 0x5412;
-  const formatBits: boolean[] = [];
-  for (let i = 0; i < 15; i++) {
-    formatBits.push(((formatInfo >>> i) & 1) === 1);
-  }
-
-  // Apply format info
-  for (let i = 0; i < 6; i++) matrix[8][i] = formatBits[i];
-  matrix[8][7] = formatBits[6];
-  matrix[8][8] = formatBits[7];
-  matrix[7][8] = formatBits[8];
-  for (let i = 9; i < 15; i++) matrix[14 - i][8] = formatBits[i];
-
-  for (let i = 0; i < 7; i++) matrix[size - 1 - i][8] = formatBits[i];
-  for (let i = 7; i < 15; i++) matrix[8][size - 15 + i] = formatBits[i];
-
-  return matrix.map((row) => row.map((cell) => cell === true));
+  return { isValid: true, error: '' };
 }
 
 /**
- * Returns an SVG string representation of the QR code.
+ * Generates a unique, collision-resistant transaction reference for an order.
+ * Format: FC-<TIMESTAMP_BASE36>-<RANDOM_CHARS>
+ */
+export function generateUniquePaymentReference(prefix: string = 'FC'): string {
+  const timeStr = Date.now().toString(36).toUpperCase();
+  const randStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `${prefix}-${timeStr}-${randStr}`;
+}
+
+export interface UpiPayloadValidationResult {
+  isValid: boolean;
+  error?: string;
+  decoded?: {
+    pa: string;
+    pn: string;
+    am: string;
+    cu: string;
+    tr: string;
+    [key: string]: string;
+  };
+}
+
+/**
+ * Decodes and rigorously validates a UPI payment payload string.
+ * Ensures the payload begins with upi://pay? and contains pa, pn, am, cu, and tr.
+ */
+export function decodeUpiPayload(payload: string): UpiPayloadValidationResult {
+  if (!payload || typeof payload !== 'string') {
+    return { isValid: false, error: 'Payment payload must be a non-empty string.' };
+  }
+
+  const trimmed = payload.trim();
+  if (!trimmed.startsWith('upi://pay?')) {
+    return {
+      isValid: false,
+      error: 'Invalid payment payload. Must start with "upi://pay?". Plain text, website URLs, or arbitrary strings are not accepted.',
+    };
+  }
+
+  const queryString = trimmed.slice('upi://pay?'.length);
+  const searchParams = new URLSearchParams(queryString);
+
+  const pa = searchParams.get('pa') || '';
+  const pn = searchParams.get('pn') || '';
+  const am = searchParams.get('am') || '';
+  const cu = searchParams.get('cu') || '';
+  const tr = searchParams.get('tr') || '';
+
+  // 1. Verify UPI ID is present and valid
+  const upiValidation = validateUpiId(pa);
+  if (!upiValidation.isValid) {
+    return { isValid: false, error: upiValidation.error || 'Invalid or missing UPI ID (pa).' };
+  }
+
+  // 2. Verify merchant name is present
+  if (!pn || pn.trim().length === 0) {
+    return { isValid: false, error: 'Merchant name (pn) is required in the UPI payment payload.' };
+  }
+
+  // 3. Verify final amount is greater than 0
+  const numAmount = parseFloat(am);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return { isValid: false, error: 'Final payable amount (am) must be greater than 0.' };
+  }
+
+  // 4. Verify currency is INR
+  if (cu.toUpperCase() !== 'INR') {
+    return { isValid: false, error: 'Currency (cu) must be INR for Indian UPI payments.' };
+  }
+
+  // 5. Verify unique order/payment reference exists
+  if (!tr || tr.trim().length === 0) {
+    return { isValid: false, error: 'Unique order/payment reference (tr) is required.' };
+  }
+
+  const allParams: Record<string, string> = {};
+  searchParams.forEach((val, key) => {
+    allParams[key] = val;
+  });
+
+  return {
+    isValid: true,
+    decoded: {
+      pa,
+      pn,
+      am,
+      cu,
+      tr,
+      ...allParams,
+    },
+  };
+}
+
+/**
+ * Validates a UPI payment payload before QR generation or display.
+ */
+export function validateUpiPayload(payload: string): { isValid: boolean; error?: string } {
+  const result = decodeUpiPayload(payload);
+  return { isValid: result.isValid, error: result.error };
+}
+
+/**
+ * Builds the standard UPI payment URI for a dynamic customer cart transaction.
+ * Payload format:
+ * upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&am=<FINAL_AMOUNT>&cu=INR&tr=<UNIQUE_ORDER_REFERENCE>
+ *
+ * All parameter values are strictly URL-encoded.
+ * Amount is formatted to exactly 2 decimal places (e.g. 239.00).
+ */
+export function buildCustomerPaymentUpiUri(
+  upiId: string,
+  payeeName: string,
+  amount: number,
+  tr?: string
+): string {
+  const cleanUpi = (upiId || '').trim();
+  const cleanPayee = (payeeName || '').trim() || 'FreshCart Grocery Store';
+  const cleanAmount = (Math.max(0, amount) || 0).toFixed(2);
+  const cleanTr = (tr || '').trim() || generateUniquePaymentReference();
+
+  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${encodeURIComponent(cleanAmount)}&cu=INR&tr=${encodeURIComponent(cleanTr)}`;
+}
+
+/**
+ * Builds the merchant configuration UPI URI (without fixed amount).
+ * Format: upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&cu=INR
+ */
+export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
+  const cleanUpi = (upiId || '').trim();
+  const cleanPayee = (payeeName || '').trim() || 'FreshCart Grocery Store';
+  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
+}
+
+/**
+ * Generates an ISO/IEC 18004 standards-compliant boolean matrix for the given text.
+ * Uses QRCode Model 2 with Error Correction Level M and optimal mask evaluation.
+ */
+export function generateQrMatrix(text: string): boolean[][] {
+  const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
+  const size = qr.modules.size;
+  const matrix: boolean[][] = [];
+
+  for (let r = 0; r < size; r++) {
+    const row: boolean[] = [];
+    for (let c = 0; c < size; c++) {
+      row.push(Boolean(qr.modules.get(r, c)));
+    }
+    matrix.push(row);
+  }
+
+  return matrix;
+}
+
+/**
+ * Decodes the generated QR code by rendering its matrix into an RGBA pixel buffer
+ * and scanning it through jsQR.
+ * This guarantees that standard mobile scanners (GPay, PhonePe, Paytm, BHIM)
+ * will recognize and decode the exact payment payload.
+ */
+export function verifyQrPayloadDecodable(payload: string): {
+  decodable: boolean;
+  decodedText?: string;
+  error?: string;
+} {
+  try {
+    const qr = QRCode.create(payload, { errorCorrectionLevel: 'M' });
+    const size = qr.modules.size;
+    const scale = 4;
+    const margin = 4;
+    const totalSize = (size + margin * 2) * scale;
+    const rgba = new Uint8ClampedArray(totalSize * totalSize * 4);
+    rgba.fill(255); // White background
+
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (qr.modules.get(r, c)) {
+          for (let sy = 0; sy < scale; sy++) {
+            for (let sx = 0; sx < scale; sx++) {
+              const y = (r + margin) * scale + sy;
+              const x = (c + margin) * scale + sx;
+              const idx = (y * totalSize + x) * 4;
+              rgba[idx] = 0;
+              rgba[idx + 1] = 0;
+              rgba[idx + 2] = 0;
+              rgba[idx + 3] = 255;
+            }
+          }
+        }
+      }
+    }
+
+    const result = jsQR(rgba, totalSize, totalSize);
+    if (result && result.data === payload) {
+      return { decodable: true, decodedText: result.data };
+    }
+
+    return {
+      decodable: false,
+      error: result
+        ? `Decoded payload mismatch: expected "${payload}", got "${result.data}"`
+        : 'Barcode scanner failed to decode generated QR matrix.',
+    };
+  } catch (err: any) {
+    return {
+      decodable: false,
+      error: err?.message || 'Error occurred during QR barcode verification.',
+    };
+  }
+}
+
+/**
+ * Returns an ISO/IEC 18004 compliant SVG string representation of the QR code.
  */
 export function generateQrSvg(
   text: string,
   options: { size?: number; margin?: number; fgColor?: string; bgColor?: string } = {}
 ): string {
-  const matrix = generateQrMatrix(text);
-  const matrixSize = matrix.length;
+  const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
+  const matrixSize = qr.modules.size;
   const margin = options.margin ?? 3;
   const size = options.size ?? 240;
   const fgColor = options.fgColor ?? '#000000';
@@ -337,7 +269,7 @@ export function generateQrSvg(
 
   for (let r = 0; r < matrixSize; r++) {
     for (let c = 0; c < matrixSize; c++) {
-      if (matrix[r][c]) {
+      if (qr.modules.get(r, c)) {
         const x = c + margin;
         const y = r + margin;
         paths += `M${x},${y}h1v1h-1z `;
@@ -365,31 +297,3 @@ export function generateQrDataUrl(
 export function generateUpiQrCodeSvg(upiUri: string, size: number = 320): string {
   return generateQrDataUrl(upiUri, { size });
 }
-
-/**
- * Builds the standard UPI payment URI for a dynamic customer transaction.
- * Format: upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&am=<AMOUNT>&cu=INR
- */
-export function buildCustomerPaymentUpiUri(
-  upiId: string,
-  payeeName: string,
-  amount: number
-): string {
-  const cleanUpi = (upiId || '').trim();
-  const cleanPayee = (payeeName || '').trim();
-  const formattedAmount = Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
-  const payeeParam = cleanPayee ? `&pn=${encodeURIComponent(cleanPayee)}` : '';
-  return `upi://pay?pa=${cleanUpi}${payeeParam}&am=${formattedAmount}&cu=INR`;
-}
-
-/**
- * Builds the merchant configuration UPI URI (without amount).
- * Format: upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&cu=INR
- */
-export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
-  const cleanUpi = (upiId || '').trim();
-  const cleanPayee = (payeeName || '').trim();
-  const payeeParam = cleanPayee ? `&pn=${encodeURIComponent(cleanPayee)}` : '';
-  return `upi://pay?pa=${cleanUpi}${payeeParam}&cu=INR`;
-}
-

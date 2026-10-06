@@ -9,7 +9,13 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl, buildCustomerPaymentUpiUri } from '../utils/qrCodeGenerator';
+import {
+  generateQrDataUrl,
+  buildCustomerPaymentUpiUri,
+  decodeUpiPayload,
+  verifyQrPayloadDecodable,
+  generateUniquePaymentReference,
+} from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   X,
@@ -218,7 +224,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         status: 'Picking',
         createdAt: new Date().toISOString(),
         paymentMethod: paymentMethodLabel,
-        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Paid',
+        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Pending Verification',
       };
       addOrder(newCustomerOrder);
 
@@ -428,12 +434,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 {/* Amount-Based Payment QR Code */}
                 {(() => {
+                  const modalTxnRef = generateUniquePaymentReference();
                   const modalUpiUri = buildCustomerPaymentUpiUri(
                     paymentSettings.upiId || 'freshcart@upi',
                     paymentSettings.payeeName || 'FreshCart Grocery Store',
-                    total
+                    total,
+                    modalTxnRef
                   );
-                  const modalQrUrl = generateQrDataUrl(modalUpiUri, { size: 180 });
+                  const upiValidation = decodeUpiPayload(modalUpiUri);
+                  const qrScan = verifyQrPayloadDecodable(modalUpiUri);
+                  const modalQrUrl = upiValidation.isValid ? generateQrDataUrl(modalUpiUri, { size: 180 }) : '';
+                  const formattedTotal = Number(total).toFixed(2);
                   return (
                     <>
                       <div className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border border-[#e2e8f0] flex items-center justify-center">
@@ -442,6 +453,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           data-testid="checkout-qr-code-img"
                           src={modalQrUrl}
                           data-upi-uri={modalUpiUri}
+                          data-upi-id={paymentSettings.upiId || 'freshcart@upi'}
+                          data-upi-amount={formattedTotal}
+                          data-upi-pa={upiValidation.decoded?.pa}
+                          data-upi-pn={upiValidation.decoded?.pn}
+                          data-upi-am={upiValidation.decoded?.am}
+                          data-upi-cu={upiValidation.decoded?.cu}
+                          data-upi-tr={upiValidation.decoded?.tr}
+                          data-qr-decodable={qrScan?.decodable ? "true" : "false"}
                           alt={`Merchant UPI Payment QR Code for ${formatINR(total)}`}
                           className="w-full h-full object-contain select-none"
                         />

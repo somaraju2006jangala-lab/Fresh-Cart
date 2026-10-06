@@ -45,7 +45,7 @@ import {
   getPaymentSettingsFromDb,
   savePaymentSettingsToDb,
 } from './db.ts';
-import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
+import { generateQrDataUrl, buildMerchantUpiUri } from '../src/utils/qrCodeGenerator.ts';
 
 ensureEnvLoaded();
 
@@ -1204,7 +1204,7 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
       : current.payeeName;
     let qrCodeUrl = req.body?.qrCodeUrl !== undefined ? req.body.qrCodeUrl : current.qrCodeUrl;
     if (!qrCodeUrl && upiId) {
-      qrCodeUrl = generateQrDataUrl(`upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName || '')}&cu=INR`);
+      qrCodeUrl = generateQrDataUrl(buildMerchantUpiUri(upiId, payeeName || 'FreshCart Grocery Store'));
     }
     const upiPaymentEnabled = req.body?.upiPaymentEnabled !== undefined ? !!req.body.upiPaymentEnabled : current.upiPaymentEnabled;
     const directUpiAppEnabled = req.body?.directUpiAppEnabled !== undefined ? !!req.body.directUpiAppEnabled : current.directUpiAppEnabled;

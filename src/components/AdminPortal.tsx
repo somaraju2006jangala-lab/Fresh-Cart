@@ -46,7 +46,12 @@ import {
   fetchServerPaymentSettings,
   PaymentSettings,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl } from '../utils/qrCodeGenerator';
+import {
+  generateQrDataUrl,
+  buildMerchantUpiUri,
+  validateUpiId,
+  verifyQrPayloadDecodable,
+} from '../utils/qrCodeGenerator';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
@@ -178,7 +183,7 @@ interface AdminPortalProps {
   onToggleCoupon: (couponId: string) => void;
   onDeleteInventoryLog?: (logId: string) => void;
   onClearInventoryLogs?: () => void;
-  onUpdateOrderStatus?: (orderId: string, status: string, extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean }) => void;
+  onUpdateOrderStatus?: (orderId: string, status: string, extraMeta?: { otpVerifiedAt?: string; handoverReleased?: boolean; paymentStatus?: string }) => void;
   onDeleteCustomerOrder?: (orderId: string) => void;
   deliveryCharges?: number;
   onUpdateDeliveryCharges?: (charge: number) => Promise<void> | void;
@@ -235,28 +240,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [savePaymentError, setSavePaymentError] = useState<string>('');
   const [upiValidationError, setUpiValidationError] = useState<string>('');
 
-  const validateUpiId = (upi: string): { isValid: boolean; error: string } => {
-    const trimmed = upi.trim();
-    if (!trimmed) {
-      return { isValid: false, error: 'UPI ID cannot be empty.' };
-    }
-    const upiRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/;
-    if (!upiRegex.test(trimmed) || trimmed.includes(' ') || !trimmed.includes('@')) {
-      return {
-        isValid: false,
-        error: 'Invalid UPI ID format. Please use username@bank format (e.g. merchant@upi).',
-      };
-    }
-    const [user, handle] = trimmed.split('@');
-    if (!user || user.length < 2 || !handle || handle.length < 2) {
-      return {
-        isValid: false,
-        error: 'Invalid UPI ID format. Username and bank handle must each have at least 2 characters (e.g. merchant@upi).',
-      };
-    }
-    return { isValid: true, error: '' };
-  };
-
   // Hydrate settings from server and subscribe to live changes
   useEffect(() => {
     fetchServerPaymentSettings().then((settings) => {
@@ -264,6 +247,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         setPaymentSettings(settings);
         setAdminUpiId(settings.upiId);
         setAdminPayeeName(settings.payeeName);
+        setAdminQrCodeUrl(settings.qrCodeUrl || '');
         setAdminUpiEnabled(settings.upiPaymentEnabled);
         setAdminDirectUpiEnabled(settings.directUpiAppEnabled);
         setInitialUpiId(settings.upiId);
@@ -274,6 +258,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setPaymentSettings(settings);
       setAdminUpiId(settings.upiId);
       setAdminPayeeName(settings.payeeName);
+      setAdminQrCodeUrl(settings.qrCodeUrl || '');
       setAdminUpiEnabled(settings.upiPaymentEnabled);
       setAdminDirectUpiEnabled(settings.directUpiAppEnabled);
       setInitialUpiId(settings.upiId);
@@ -300,8 +285,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setIsGeneratingQr(true);
     try {
       // 2. Generate merchant QR using entered UPI ID
-      const upiUri = `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
+      const upiUri = buildMerchantUpiUri(cleanUpi, cleanPayee);
       const generatedQr = generateQrDataUrl(upiUri, { size: 320 });
+
+      // Verify QR payload is decodable
+      verifyQrPayloadDecodable(upiUri);
 
       // 3. Display generated QR in Admin Payment Settings
       setAdminQrCodeUrl(generatedQr);
@@ -2093,6 +2081,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             </button>
                           )}
 
+                          {/* Payment Verification Action */}
+                          {order.paymentStatus === 'Paid' ? (
+                            <div className="px-2.5 py-1 text-[11px] font-bold text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 rounded-lg flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-[#10b981]" />
+                              <span>Paid</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              id={`order-verify-payment-btn-${order.id}`}
+                              onClick={() => {
+                                if (onUpdateOrderStatus) {
+                                  onUpdateOrderStatus(order.id, order.status, { paymentStatus: 'Paid' });
+                                }
+                              }}
+                              title={`Verify and mark payment as Paid for ${displayOrderId}`}
+                              className="px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs backdrop-blur-xs"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Verify Payment</span>
+                            </button>
+                          )}
+
                           {/* Automatic read-only status display — manual status control removed */}
                           <div
                             id={`order-status-display-${order.id}`}
@@ -2164,6 +2175,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <div>
                           <span className="font-semibold text-[#94a3b8]">Status: </span>
                           <span className="font-bold text-[#10b981]">{order.status}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#94a3b8]">Payment Method: </span>
+                          <span className="font-medium text-slate-200">{order.paymentMethod || 'UPI / QR Payment'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-[#94a3b8]">Payment Status: </span>
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold border font-sans ${
+                              order.paymentStatus === 'Paid'
+                                ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
+                                : 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                order.paymentStatus === 'Paid' ? 'bg-[#16a34a]' : 'bg-[#f59e0b]'
+                              }`}
+                            />
+                            {order.paymentStatus || 'Pending Verification'}
+                          </span>
                         </div>
                       </div>
                     </div>

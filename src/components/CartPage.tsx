@@ -8,7 +8,13 @@ import {
   onPaymentSettingsChange,
   PaymentSettings,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl, buildCustomerPaymentUpiUri } from '../utils/qrCodeGenerator';
+import {
+  generateQrDataUrl,
+  buildCustomerPaymentUpiUri,
+  decodeUpiPayload,
+  verifyQrPayloadDecodable,
+  generateUniquePaymentReference,
+} from '../utils/qrCodeGenerator';
 import {
   ShoppingCart,
   Plus,
@@ -142,16 +148,36 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   const adminUpiId = paymentSettings.upiId || 'freshcart@upi';
   const payeeName = paymentSettings.payeeName || 'FreshCart Grocery Store';
-  const formattedTotal = Number.isInteger(total) ? total.toString() : total.toFixed(2);
-  const customerCartUpiUri = useMemo(
-    () => buildCustomerPaymentUpiUri(adminUpiId, payeeName, total),
-    [adminUpiId, payeeName, total]
-  );
+  const formattedTotal = Number(total).toFixed(2);
 
-  const customerCartQrUrl = useMemo(() => {
+  // Generate a distinct transaction reference when cart items or total change
+  const cartTxnRef = useMemo(() => {
+    return generateUniquePaymentReference();
+  }, [total, items.map((i) => `${i.product.id}:${i.quantity}`).join(',')]);
+
+  // Generate standard UPI URI for customer cart
+  const customerCartUpiUri = useMemo(() => {
     if (total <= 0 || items.length === 0) return '';
-    return generateQrDataUrl(customerCartUpiUri, { size: 220 });
-  }, [customerCartUpiUri, total, items.length]);
+    return buildCustomerPaymentUpiUri(adminUpiId, payeeName, total, cartTxnRef);
+  }, [adminUpiId, payeeName, total, cartTxnRef, items.length]);
+
+  // Rigorous payload validation and parameter decoding before QR generation
+  const upiValidation = useMemo(() => {
+    if (!customerCartUpiUri) return { isValid: false, error: 'Empty payment payload.' };
+    return decodeUpiPayload(customerCartUpiUri);
+  }, [customerCartUpiUri]);
+
+  // Barcode decodability verification via jsQR
+  const qrDecodableResult = useMemo(() => {
+    if (!customerCartUpiUri || !upiValidation.isValid) return null;
+    return verifyQrPayloadDecodable(customerCartUpiUri);
+  }, [customerCartUpiUri, upiValidation.isValid]);
+
+  // Generate compliant QR Data URL from validated payload
+  const customerCartQrUrl = useMemo(() => {
+    if (!upiValidation.isValid || total <= 0 || items.length === 0) return '';
+    return generateQrDataUrl(customerCartUpiUri, { size: 240 });
+  }, [customerCartUpiUri, upiValidation.isValid, total, items.length]);
 
   // Dynamic cart total revalidation when subtotal changes
   const prevSubtotalRef = React.useRef(subtotal);
@@ -683,29 +709,81 @@ export const CartPage: React.FC<CartPageProps> = ({
                     </p>
                   </div>
 
-                  {/* QR Code Container */}
-                  <div className="flex justify-center my-1.5">
-                    <div className="bg-white p-3 rounded-2xl shadow-xl border border-white/90 inline-flex flex-col items-center justify-center">
-                      <img
-                        id="cart-payment-qr-img"
-                        data-testid="cart-payment-qr-img"
-                        src={customerCartQrUrl}
-                        data-upi-uri={customerCartUpiUri}
-                        data-upi-id={adminUpiId}
-                        data-upi-amount={formattedTotal}
-                        alt={`UPI Payment QR for ${formatINR(total)}`}
-                        className="w-40 h-40 sm:w-44 sm:h-44 object-contain select-none"
-                      />
-                    </div>
-                  </div>
+                  {upiValidation.isValid ? (
+                    <>
+                      {/* QR Code Container */}
+                      <div className="flex justify-center my-1.5">
+                        <div className="bg-white p-3 rounded-2xl shadow-xl border border-white/90 inline-flex flex-col items-center justify-center">
+                          <img
+                            id="cart-payment-qr-img"
+                            data-testid="cart-payment-qr-img"
+                            src={customerCartQrUrl}
+                            data-upi-uri={customerCartUpiUri}
+                            data-upi-id={adminUpiId}
+                            data-upi-amount={formattedTotal}
+                            data-upi-pa={upiValidation.decoded?.pa}
+                            data-upi-pn={upiValidation.decoded?.pn}
+                            data-upi-am={upiValidation.decoded?.am}
+                            data-upi-cu={upiValidation.decoded?.cu}
+                            data-upi-tr={upiValidation.decoded?.tr}
+                            data-qr-decodable={qrDecodableResult?.decodable ? "true" : "false"}
+                            alt={`UPI Payment QR for ${formatINR(total)}`}
+                            className="w-40 h-40 sm:w-44 sm:h-44 object-contain select-none"
+                          />
+                        </div>
+                      </div>
 
-                  <p
-                    id="cart-qr-scan-instruction"
-                    data-testid="cart-qr-scan-instruction"
-                    className="text-xs sm:text-sm font-semibold text-slate-200"
-                  >
-                    Scan this QR to pay {formatINR(total)}
-                  </p>
+                      <p
+                        id="cart-qr-scan-instruction"
+                        data-testid="cart-qr-scan-instruction"
+                        className="text-xs sm:text-sm font-semibold text-slate-200"
+                      >
+                        Scan this QR to pay {formatINR(total)}
+                      </p>
+
+                      {/* Decoded UPI Payload Parameters Breakdown */}
+                      {upiValidation.decoded && (
+                        <div
+                          id="cart-qr-decoded-payload-details"
+                          className="text-[11px] font-mono text-left bg-black/40 p-3 rounded-xl border border-white/10 space-y-1.5 text-slate-300"
+                        >
+                          <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                            <span className="text-[10px] uppercase font-bold text-emerald-400 font-sans tracking-wider">
+                              Verified UPI Payload
+                            </span>
+                            <span className="text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full font-sans font-semibold">
+                              ISO 18004 QR
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">pa (Payee UPI):</span>
+                            <span id="cart-decoded-pa" className="text-emerald-400 font-bold">{upiValidation.decoded.pa}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">pn (Merchant):</span>
+                            <span id="cart-decoded-pn" className="text-slate-200 font-semibold">{upiValidation.decoded.pn}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">am (Amount):</span>
+                            <span id="cart-decoded-am" className="text-emerald-400 font-bold">₹{upiValidation.decoded.am}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">cu (Currency):</span>
+                            <span id="cart-decoded-cu" className="text-slate-200">{upiValidation.decoded.cu}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">tr (Txn Ref):</span>
+                            <span id="cart-decoded-tr" className="text-slate-300 font-semibold">{upiValidation.decoded.tr}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
+                      <p className="font-bold">Cannot generate payment QR:</p>
+                      <p className="mt-0.5">{upiValidation.error || 'Invalid payment parameters'}</p>
+                    </div>
+                  )}
 
                   <div className="space-y-2 pt-2 border-t border-white/10">
                     <div className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs">
@@ -731,7 +809,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       Scan using Google Pay, PhonePe, Paytm, BHIM &amp; any UPI app
                     </p>
 
-                    {paymentSettings.directUpiAppEnabled !== false && (
+                    {paymentSettings.directUpiAppEnabled !== false && upiValidation.isValid && (
                       <div className="pt-1">
                         <a
                           id="cart-direct-upi-app-link"

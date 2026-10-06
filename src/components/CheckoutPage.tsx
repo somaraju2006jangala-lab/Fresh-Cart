@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
@@ -9,7 +9,13 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl, buildCustomerPaymentUpiUri } from '../utils/qrCodeGenerator';
+import {
+  generateQrDataUrl,
+  buildCustomerPaymentUpiUri,
+  decodeUpiPayload,
+  verifyQrPayloadDecodable,
+  generateUniquePaymentReference,
+} from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   Banknote,
@@ -157,6 +163,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
+  const checkoutTxnRef = useMemo(() => {
+    return generateUniquePaymentReference();
+  }, [total, items.map((i) => `${i.product.id}:${i.quantity}`).join(',')]);
+
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
@@ -195,7 +205,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         status: 'Picking',
         createdAt: new Date().toISOString(),
         paymentMethod: paymentMethodLabel,
-        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Paid',
+        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Pending Verification',
       };
       addOrder(newCustomerOrder);
 
@@ -315,6 +325,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <span>Estimated Delivery</span>
               </div>
               <p className="pl-6 text-slate-400">Express Cold-Chain Delivery, 24–30 Minutes</p>
+              <div className="flex items-center gap-2 text-white font-semibold pt-1">
+                <CreditCard className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>Payment Details</span>
+              </div>
+              <p className="pl-6 text-slate-400">
+                {paymentMethod === 'cash' ? 'Cash on Delivery (Pending Doorstep Collection)' : 'UPI / QR Payment (Pending Merchant Verification)'}
+              </p>
             </div>
 
             {/* Action Buttons */}
@@ -513,13 +530,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
               {/* UPI / QR Details Area - Directly underneath payment options (Center Aligned) */}
               {paymentMethod === 'upi_qr' && (() => {
+                const formattedTotal = Number(total).toFixed(2);
                 const checkoutUpiUri = buildCustomerPaymentUpiUri(
                   paymentSettings.upiId || 'freshcart@upi',
                   paymentSettings.payeeName || 'FreshCart Grocery Store',
-                  total
+                  total,
+                  checkoutTxnRef
                 );
-                const checkoutQrUrl = generateQrDataUrl(checkoutUpiUri, { size: 180 });
-                const formattedTotal = Number.isInteger(total) ? total.toString() : total.toFixed(2);
+                const upiValidation = decodeUpiPayload(checkoutUpiUri);
+                const qrScan = verifyQrPayloadDecodable(checkoutUpiUri);
+                const checkoutQrUrl = upiValidation.isValid ? generateQrDataUrl(checkoutUpiUri, { size: 180 }) : '';
 
                 return (
                   <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4">
@@ -542,6 +562,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         data-upi-uri={checkoutUpiUri}
                         data-upi-amount={formattedTotal}
                         data-upi-id={paymentSettings.upiId || 'freshcart@upi'}
+                        data-upi-pa={upiValidation.decoded?.pa}
+                        data-upi-pn={upiValidation.decoded?.pn}
+                        data-upi-am={upiValidation.decoded?.am}
+                        data-upi-cu={upiValidation.decoded?.cu}
+                        data-upi-tr={upiValidation.decoded?.tr}
+                        data-qr-decodable={qrScan?.decodable ? "true" : "false"}
                         alt={`UPI Payment QR Code for ${formatINR(total)}`}
                         className="w-36 h-36 sm:w-40 sm:h-40 object-contain select-none"
                       />
