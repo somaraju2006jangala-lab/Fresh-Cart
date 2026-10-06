@@ -511,9 +511,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </button>
               </div>
 
-              {/* UPI / QR Details Area - Directly underneath payment options */}
+              {/* UPI / QR Details Area - Directly underneath payment options (Center Aligned) */}
               {paymentMethod === 'upi_qr' && (
-                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-4 sm:p-5 mt-4 sm:mt-5 flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4">
                   {/* Uploaded / Configured Merchant QR Code */}
                   <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border border-white/90">
                     <img
@@ -525,12 +525,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         )
                       }
                       alt="Merchant UPI QR Code"
-                      className="w-28 h-28 sm:w-32 sm:h-32 object-contain"
+                      className="w-32 h-32 sm:w-36 sm:h-36 object-contain"
                     />
                   </div>
 
                   {/* Merchant Details & Instructions */}
-                  <div className="flex-1 text-center sm:text-left space-y-1">
+                  <div className="space-y-3 w-full max-w-sm mx-auto text-center">
                     <div>
                       <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
                         MERCHANT NAME
@@ -540,11 +540,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </p>
                     </div>
 
-                    <div className="pt-2">
+                    <div>
                       <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
                         MERCHANT UPI ID
                       </p>
-                      <div className="inline-flex items-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
+                      <div className="inline-flex items-center justify-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
                         <span className="font-mono text-xs sm:text-sm text-cyan-300 font-semibold">
                           {paymentSettings.upiId || 'freshcart@upi'}
                         </span>
@@ -563,7 +563,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-400 pt-3 leading-relaxed">
+                    <p className="text-xs text-slate-400 pt-1 leading-relaxed">
                       Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
                     </p>
                   </div>
