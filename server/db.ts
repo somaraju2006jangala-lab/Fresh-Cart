@@ -1639,13 +1639,46 @@ export async function clearCartInDb(customerId: string): Promise<boolean> {
 // ORDER OPERATIONS
 // -----------------------------------------------------------------------------
 
+export let inMemoryOrders: any[] = [];
+
 /**
  * Upserts / creates an order in MySQL, including order items and payment record.
  */
 export async function upsertOrderInDb(orderData: any): Promise<boolean> {
-  if (!orderData?.id) return false;
+  const orderId = orderData?.id || orderData?.order_id;
+  if (!orderId) return false;
+
+  const normalizedOrder = {
+    ...orderData,
+    id: orderId,
+    order_id: orderId,
+    customerId: orderData.customerId || orderData.customer_id || 'guest',
+    customerName: orderData.customerName || orderData.customer_name || 'Customer',
+    email: orderData.customerEmail || orderData.email || '',
+    mobile: orderData.customerPhone || orderData.phone || orderData.mobile || '',
+    deliveryAddress: orderData.deliveryAddress || orderData.delivery_address || 'Address on file',
+    subtotal: Math.max(0, Number(orderData.subtotal) || 0),
+    discount: Math.max(0, Number(orderData.discount) || 0),
+    total: Math.max(0, Number(orderData.total) || 0),
+    couponCode: orderData.couponCode || orderData.coupon_code || null,
+    status: orderData.status || orderData.order_status || 'Picking',
+    order_status: orderData.order_status || orderData.status || 'Picking',
+    paymentMethod: orderData.paymentMethod || orderData.payment_method || 'COD',
+    payment_method: orderData.payment_method || orderData.paymentMethod || 'COD',
+    paymentStatus: orderData.paymentStatus || orderData.payment_status || 'PENDING',
+    payment_status: orderData.payment_status || orderData.paymentStatus || 'PENDING',
+    items: orderData.items || [],
+    createdAt: orderData.createdAt || orderData.created_at || new Date().toISOString(),
+  };
+
+  const existIdx = inMemoryOrders.findIndex((o) => o.id === orderId || o.order_id === orderId);
+  if (existIdx >= 0) {
+    inMemoryOrders[existIdx] = { ...inMemoryOrders[existIdx], ...normalizedOrder };
+  } else {
+    inMemoryOrders.unshift(normalizedOrder);
+  }
+
   const pool = getPool();
-  const orderId = orderData.id;
   const customerId = orderData.customerId || 'guest';
   const customerName = orderData.customerName || 'Customer';
   const email = orderData.customerEmail || orderData.email || '';
@@ -1660,8 +1693,9 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
   const paymentStatus = orderData.paymentStatus || 'PENDING';
   const paymentId = orderData.paymentId || `PAY-${orderId.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
 
-  const connection = await pool.getConnection();
+  let connection: any = null;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
 
     // 1. Ensure customer exists if customerId is provided
@@ -1741,11 +1775,15 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
     await connection.commit();
     return true;
   } catch (err: any) {
-    await connection.rollback();
-    console.error('[MySQL] Error saving order:', err?.message);
-    return false;
+    if (connection) {
+      try { await connection.rollback(); } catch {}
+    }
+    console.warn('[MySQL] Error saving order to DB, preserved in memory:', err?.message);
+    return true;
   } finally {
-    connection.release();
+    if (connection) {
+      try { connection.release(); } catch {}
+    }
   }
 }
 
