@@ -250,41 +250,40 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   return (
     <div id="checkout-page-container" className="w-full flex flex-col min-h-screen">
-      <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      <div className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
 
         {/* Top Header Banner (Semi-Solid Opaque) */}
         <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             <button
               type="button"
               id="checkout-back-to-cart-btn"
               onClick={onBackToCart}
-              className="p-2 sm:p-2.5 rounded-xl cart-semi-opaque-control hover:bg-slate-700/80 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0"
+              className="p-2 sm:p-2.5 rounded-xl cart-semi-opaque-control hover:bg-slate-700/80 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0 border border-white/10"
               title="Return to Cart"
             >
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Zap className="w-4 h-4" />
-                </div>
+              <div className="flex items-center gap-2.5">
                 <h1 className="text-xl sm:text-2xl font-bold text-white font-display">
-                  {step === 'details' ? 'Payment' : t('orderConfirmed')}
+                  {step === 'details' ? 'Checkout' : t('orderConfirmed')}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {step === 'details' ? 'Final Step' : `#FC-${orderNumber}`}
-                </span>
+                {step === 'details' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Final Step
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-400 mt-1 pl-10 hidden sm:block">
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
                 {step === 'details'
-                  ? 'Choose your payment method and complete your FreshCart grocery order'
+                  ? 'Complete your delivery and payment information'
                   : 'Your fresh farm groceries have been scheduled for direct pod dispatch'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-3 text-xs text-slate-400 self-start sm:self-center">
             <span className="flex items-center gap-1.5 text-slate-300">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>100% Secure Checkout</span>
@@ -379,11 +378,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </div>
           </div>
         ) : (
-          /* Step: Details - 2-Column Responsive Layout */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* LEFT SIDE: Delivery & Payment Methods (lg:col-span-7) */}
-            <div className="lg:col-span-7 space-y-6">
+          /* Step: Details - Vertical Stacked Full-Width Layout */
+          <div className="space-y-6">
               
               {/* Delivery Address Card (Semi-Solid Opaque) */}
               <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
@@ -609,13 +605,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 )}
 
               </div>
-            </div>
 
-            {/* RIGHT SIDE: Order Summary & Place Order (lg:col-span-5) */}
-            <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-28">
-              
-              {/* Order Summary Card (Semi-Solid Opaque) */}
-              <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
+              {/* SECTION 3: Order Summary Card (Full-Width Semi-Solid Opaque) */}
+              <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-7 space-y-5">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2">
                     <ShoppingBag className="w-4 h-4 text-emerald-400" />
@@ -741,8 +733,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 </div>
               </div>
-
-            </div>
           </div>
         )}
       </div>
