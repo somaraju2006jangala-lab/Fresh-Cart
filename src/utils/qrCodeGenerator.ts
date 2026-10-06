@@ -365,3 +365,31 @@ export function generateQrDataUrl(
 export function generateUpiQrCodeSvg(upiUri: string, size: number = 320): string {
   return generateQrDataUrl(upiUri, { size });
 }
+
+/**
+ * Builds the standard UPI payment URI for a dynamic customer transaction.
+ * Format: upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&am=<AMOUNT>&cu=INR
+ */
+export function buildCustomerPaymentUpiUri(
+  upiId: string,
+  payeeName: string,
+  amount: number
+): string {
+  const cleanUpi = (upiId || '').trim();
+  const cleanPayee = (payeeName || '').trim();
+  const formattedAmount = Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
+  const payeeParam = cleanPayee ? `&pn=${encodeURIComponent(cleanPayee)}` : '';
+  return `upi://pay?pa=${cleanUpi}${payeeParam}&am=${formattedAmount}&cu=INR`;
+}
+
+/**
+ * Builds the merchant configuration UPI URI (without amount).
+ * Format: upi://pay?pa=<UPI_ID>&pn=<MERCHANT_NAME>&cu=INR
+ */
+export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
+  const cleanUpi = (upiId || '').trim();
+  const cleanPayee = (payeeName || '').trim();
+  const payeeParam = cleanPayee ? `&pn=${encodeURIComponent(cleanPayee)}` : '';
+  return `upi://pay?pa=${cleanUpi}${payeeParam}&cu=INR`;
+}
+

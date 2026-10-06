@@ -9,7 +9,7 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl } from '../utils/qrCodeGenerator';
+import { generateQrDataUrl, buildCustomerPaymentUpiUri } from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   Banknote,
@@ -512,63 +512,86 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               {/* UPI / QR Details Area - Directly underneath payment options (Center Aligned) */}
-              {paymentMethod === 'upi_qr' && (
-                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4">
-                  {/* Uploaded / Configured Merchant QR Code */}
-                  <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border border-white/90">
-                    <img
-                      src={
-                        paymentSettings.qrCodeUrl ||
-                        generateQrDataUrl(
-                          `upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`,
-                          { size: 160 }
-                        )
-                      }
-                      alt="Merchant UPI QR Code"
-                      className="w-32 h-32 sm:w-36 sm:h-36 object-contain"
-                    />
-                  </div>
+              {paymentMethod === 'upi_qr' && (() => {
+                const checkoutUpiUri = buildCustomerPaymentUpiUri(
+                  paymentSettings.upiId || 'freshcart@upi',
+                  paymentSettings.payeeName || 'FreshCart Grocery Store',
+                  total
+                );
+                const checkoutQrUrl = generateQrDataUrl(checkoutUpiUri, { size: 180 });
+                const formattedTotal = Number.isInteger(total) ? total.toString() : total.toFixed(2);
 
-                  {/* Merchant Details & Instructions */}
-                  <div className="space-y-3 w-full max-w-sm mx-auto text-center">
-                    <div>
+                return (
+                  <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4">
+                    {/* Amount to Pay */}
+                    <div className="space-y-0.5">
                       <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        MERCHANT NAME
+                        Amount to Pay
                       </p>
-                      <p className="text-sm sm:text-base font-bold text-white mt-0.5">
-                        {paymentSettings.payeeName || 'Freshcart Grocery Store'}
+                      <p id="checkout-qr-amount-display" className="text-xl sm:text-2xl font-extrabold text-[#00e699] font-display tabular-nums">
+                        {formatINR(total)}
                       </p>
                     </div>
 
-                    <div>
-                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        MERCHANT UPI ID
-                      </p>
-                      <div className="inline-flex items-center justify-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
-                        <span className="font-mono text-xs sm:text-sm text-cyan-300 font-semibold">
-                          {paymentSettings.upiId || 'freshcart@upi'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleCopyUpi}
-                          className="p-1 rounded text-slate-300 hover:text-white transition-colors cursor-pointer"
-                          title="Copy UPI ID"
-                        >
-                          {copiedUpi ? (
-                            <Check className="w-3.5 h-3.5 text-cyan-400" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                          )}
-                        </button>
-                      </div>
+                    {/* Customer Cart Amount-Specific QR Code */}
+                    <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border border-white/90">
+                      <img
+                        id="checkout-payment-qr-img"
+                        data-testid="checkout-payment-qr-img"
+                        src={checkoutQrUrl}
+                        data-upi-uri={checkoutUpiUri}
+                        data-upi-amount={formattedTotal}
+                        data-upi-id={paymentSettings.upiId || 'freshcart@upi'}
+                        alt={`UPI Payment QR Code for ${formatINR(total)}`}
+                        className="w-36 h-36 sm:w-40 sm:h-40 object-contain select-none"
+                      />
                     </div>
 
-                    <p className="text-xs text-slate-400 pt-1 leading-relaxed">
-                      Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
+                    <p id="checkout-qr-scan-instruction" className="text-xs sm:text-sm font-semibold text-white">
+                      Scan this QR to pay {formatINR(total)}
                     </p>
+
+                    {/* Merchant Details & Instructions */}
+                    <div className="space-y-3 w-full max-w-sm mx-auto text-center">
+                      <div>
+                        <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          MERCHANT NAME
+                        </p>
+                        <p className="text-sm sm:text-base font-bold text-white mt-0.5">
+                          {paymentSettings.payeeName || 'FreshCart Grocery Store'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          MERCHANT UPI ID
+                        </p>
+                        <div className="inline-flex items-center justify-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
+                          <span className="font-mono text-xs sm:text-sm text-cyan-300 font-semibold">
+                            {paymentSettings.upiId || 'freshcart@upi'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyUpi}
+                            className="p-1 rounded text-slate-300 hover:text-white transition-colors cursor-pointer"
+                            title="Copy UPI ID"
+                          >
+                            {copiedUpi ? (
+                              <Check className="w-3.5 h-3.5 text-cyan-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-400 pt-1 leading-relaxed">
+                        Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Direct UPI App Option Details (Center Aligned) */}
               {paymentMethod === 'upi_app' && (
@@ -577,11 +600,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     Tap the button below to launch your installed UPI payment application (Google Pay, PhonePe, Paytm) directly on your device:
                   </p>
                   <a
-                    href={`upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`}
+                    href={buildCustomerPaymentUpiUri(
+                      paymentSettings.upiId || 'freshcart@upi',
+                      paymentSettings.payeeName || 'FreshCart Grocery Store',
+                      total
+                    )}
                     className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md transition-all active:scale-95"
                   >
                     <Smartphone className="w-4 h-4" />
-                    <span>Open UPI App to Pay</span>
+                    <span>Open UPI App to Pay ({formatINR(total)})</span>
                   </a>
                 </div>
               )}

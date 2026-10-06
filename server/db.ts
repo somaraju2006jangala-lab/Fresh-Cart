@@ -1,5 +1,6 @@
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
 
 let pool: Pool | null = null;
 let isConnected = false;
@@ -2173,11 +2174,13 @@ export interface PaymentSettingsRecord {
 export const DEFAULT_PAYMENT_CONFIG: PaymentSettingsRecord = {
   upiId: 'freshcart@upi',
   payeeName: 'FreshCart Grocery Store',
-  qrCodeUrl: '',
+  qrCodeUrl: generateQrDataUrl('upi://pay?pa=freshcart@upi&pn=FreshCart%20Grocery%20Store&cu=INR'),
   upiPaymentEnabled: true,
   directUpiAppEnabled: true,
   updatedAt: new Date().toISOString(),
 };
+
+let inMemoryPaymentSettings: PaymentSettingsRecord = { ...DEFAULT_PAYMENT_CONFIG };
 
 export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord> {
   const pool = getPool();
@@ -2191,7 +2194,7 @@ export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord>
         ? JSON.parse(rows[0].setting_value)
         : rows[0].setting_value;
       if (val && typeof val.upiId === 'string' && val.upiId.trim().length > 0) {
-        return {
+        const result: PaymentSettingsRecord = {
           upiId: val.upiId.trim(),
           payeeName: val.payeeName?.trim() || 'FreshCart Grocery Store',
           qrCodeUrl: val.qrCodeUrl || '',
@@ -2199,16 +2202,19 @@ export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord>
           directUpiAppEnabled: val.directUpiAppEnabled !== false,
           updatedAt: val.updatedAt || new Date().toISOString(),
         };
+        inMemoryPaymentSettings = result;
+        return result;
       }
     }
   } catch (err: any) {
     console.warn('[MySQL] Error reading payment settings from DB:', err?.message);
   }
 
-  return DEFAULT_PAYMENT_CONFIG;
+  return inMemoryPaymentSettings;
 }
 
 export async function savePaymentSettingsToDb(settings: PaymentSettingsRecord): Promise<boolean> {
+  inMemoryPaymentSettings = { ...settings };
   try {
     const pool = getPool();
     await pool.query(

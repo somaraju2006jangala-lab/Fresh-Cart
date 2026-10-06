@@ -53,7 +53,13 @@ function FreshCartStore() {
     try {
       const savedV2 = localStorage.getItem(STORAGE_PRODUCTS_KEY);
       if (savedV2) {
-        return JSON.parse(savedV2);
+        const parsed: Product[] = JSON.parse(savedV2);
+        INITIAL_PRODUCTS.forEach((initP) => {
+          if (!parsed.some((p) => p.id === initP.id)) {
+            parsed.push(initP);
+          }
+        });
+        return parsed;
       }
       const savedV1 = localStorage.getItem('freshcart_products_inr_v1');
       if (savedV1) {

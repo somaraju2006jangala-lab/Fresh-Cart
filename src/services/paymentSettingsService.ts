@@ -116,6 +116,7 @@ export async function updateServerPaymentSettings(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-admin-request': 'true',
       },
       body: JSON.stringify(nextSettings),
     });

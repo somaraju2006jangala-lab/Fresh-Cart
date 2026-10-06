@@ -9,7 +9,7 @@ import {
   fetchServerPaymentSettings,
   onPaymentSettingsChange,
 } from '../services/paymentSettingsService';
-import { generateQrDataUrl } from '../utils/qrCodeGenerator';
+import { generateQrDataUrl, buildCustomerPaymentUpiUri } from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   X,
@@ -426,38 +426,47 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 </div>
 
-                {/* Static Merchant QR Code */}
-                <div className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border border-[#e2e8f0] flex items-center justify-center">
-                  <img
-                    id="checkout-qr-code-img"
-                    src={
-                      paymentSettings.qrCodeUrl ||
-                      generateQrDataUrl(
-                        `upi://pay?pa=${encodeURIComponent(paymentSettings.upiId || 'freshcart@upi')}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart Grocery Store')}&cu=INR`
-                      )
-                    }
-                    alt="Merchant UPI Payment QR Code"
-                    className="w-full h-full object-contain select-none"
-                  />
-                </div>
+                {/* Amount-Based Payment QR Code */}
+                {(() => {
+                  const modalUpiUri = buildCustomerPaymentUpiUri(
+                    paymentSettings.upiId || 'freshcart@upi',
+                    paymentSettings.payeeName || 'FreshCart Grocery Store',
+                    total
+                  );
+                  const modalQrUrl = generateQrDataUrl(modalUpiUri, { size: 180 });
+                  return (
+                    <>
+                      <div className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border border-[#e2e8f0] flex items-center justify-center">
+                        <img
+                          id="checkout-qr-code-img"
+                          data-testid="checkout-qr-code-img"
+                          src={modalQrUrl}
+                          data-upi-uri={modalUpiUri}
+                          alt={`Merchant UPI Payment QR Code for ${formatINR(total)}`}
+                          className="w-full h-full object-contain select-none"
+                        />
+                      </div>
 
-                <div className="space-y-1">
-                  <p className="text-[12px] font-bold text-[#006b2c] flex items-center justify-center gap-1.5">
-                    <QrCode className="w-4 h-4" />
-                    <span>SCAN QR CODE TO PAY</span>
-                  </p>
-                  <p className="text-[11px] text-[#565e74]">
-                    Scan using Google Pay, PhonePe, Paytm, or BHIM.
-                  </p>
-                  <div>
-                    <a
-                      href={`upi://pay?pa=${encodeURIComponent(paymentSettings.upiId || 'freshcart@upi')}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart Grocery Store')}&cu=INR`}
-                      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#006b2c] hover:underline"
-                    >
-                      <span>{t('payWithUpiApp') || 'Pay with UPI App →'}</span>
-                    </a>
-                  </div>
-                </div>
+                      <div className="space-y-1">
+                        <p className="text-[12px] font-bold text-[#006b2c] flex items-center justify-center gap-1.5">
+                          <QrCode className="w-4 h-4" />
+                          <span>SCAN QR CODE TO PAY {formatINR(total)}</span>
+                        </p>
+                        <p className="text-[11px] text-[#565e74]">
+                          Scan using Google Pay, PhonePe, Paytm, or BHIM.
+                        </p>
+                        <div>
+                          <a
+                            href={modalUpiUri}
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#006b2c] hover:underline"
+                          >
+                            <span>{t('payWithUpiApp') || 'Pay with UPI App →'}</span>
+                          </a>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
 

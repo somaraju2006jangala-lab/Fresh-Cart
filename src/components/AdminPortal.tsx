@@ -230,6 +230,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [adminDirectUpiEnabled, setAdminDirectUpiEnabled] = useState<boolean>(paymentSettings.directUpiAppEnabled);
   const [initialUpiId, setInitialUpiId] = useState<string>(paymentSettings.upiId);
   const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState<boolean>(false);
+  const [isGeneratingQr, setIsGeneratingQr] = useState<boolean>(false);
   const [savePaymentSuccess, setSavePaymentSuccess] = useState<string>('');
   const [savePaymentError, setSavePaymentError] = useState<string>('');
   const [upiValidationError, setUpiValidationError] = useState<string>('');
@@ -280,47 +281,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     return () => unsub();
   }, []);
 
-  // Automatically generate QR code when UPI ID or Merchant Name changes
-  useEffect(() => {
-    const val = validateUpiId(adminUpiId);
-    if (!val.isValid) {
-      setUpiValidationError(val.error);
-      setAdminQrCodeUrl('');
-      return;
-    }
-
-    setUpiValidationError('');
-    const cleanUpi = adminUpiId.trim();
-    const cleanPayee = adminPayeeName.trim() || 'FreshCart Grocery Store';
-    const upiUri = `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
-    const qrDataUrl = generateQrDataUrl(upiUri, { size: 320 });
-    setAdminQrCodeUrl(qrDataUrl);
-  }, [adminUpiId, adminPayeeName]);
-
-  const handleSavePaymentSettings = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Explicit QR generation ONLY when Admin clicks "Generate QR"
+  const handleGenerateQr = async () => {
     setSavePaymentSuccess('');
     setSavePaymentError('');
 
+    // 1. Validate the UPI ID
     const val = validateUpiId(adminUpiId);
     if (!val.isValid) {
-      setSavePaymentError(val.error);
+      setUpiValidationError(val.error);
       return;
     }
+    setUpiValidationError('');
 
-    if (!adminPayeeName.trim()) {
-      setSavePaymentError('Merchant / Payee Name cannot be empty.');
-      return;
-    }
+    const cleanUpi = adminUpiId.trim();
+    const cleanPayee = adminPayeeName.trim() || 'FreshCart Grocery Store';
 
-    setIsSavingPaymentSettings(true);
+    setIsGeneratingQr(true);
     try {
-      const cleanUpi = adminUpiId.trim();
-      const cleanPayee = adminPayeeName.trim();
+      // 2. Generate merchant QR using entered UPI ID
       const upiUri = `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&cu=INR`;
       const generatedQr = generateQrDataUrl(upiUri, { size: 320 });
 
-      await updatePaymentSettings({
+      // 3. Display generated QR in Admin Payment Settings
+      setAdminQrCodeUrl(generatedQr);
+      setInitialUpiId(cleanUpi);
+
+      // 4. Save UPI ID and generated QR/configuration using existing backend/database
+      const updated = await updatePaymentSettings({
         upiId: cleanUpi,
         payeeName: cleanPayee,
         qrCodeUrl: generatedQr,
@@ -328,8 +316,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         directUpiAppEnabled: adminDirectUpiEnabled,
       });
 
-      setAdminQrCodeUrl(generatedQr);
-      setInitialUpiId(cleanUpi);
+      if (updated?.settings) {
+        setPaymentSettings(updated.settings);
+      }
+
+      // 5. Success notification
+      setSavePaymentSuccess(`Merchant QR generated successfully for ${cleanUpi} and configuration saved.`);
+      setTimeout(() => setSavePaymentSuccess(''), 4000);
+    } catch (err: any) {
+      setSavePaymentError(err?.message || 'Failed to generate and save QR code.');
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  const handleSavePaymentSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavePaymentSuccess('');
+    setSavePaymentError('');
+
+    setIsSavingPaymentSettings(true);
+    try {
+      const cleanPayee = adminPayeeName.trim() || 'FreshCart Grocery Store';
+      // Use the active/generated UPI ID and merchant QR
+      const activeUpi = (paymentSettings.upiId || adminUpiId).trim();
+
+      const updated = await updatePaymentSettings({
+        upiId: activeUpi,
+        payeeName: cleanPayee,
+        qrCodeUrl: adminQrCodeUrl,
+        upiPaymentEnabled: adminUpiEnabled,
+        directUpiAppEnabled: adminDirectUpiEnabled,
+      });
+
+      if (updated?.settings) {
+        setPaymentSettings(updated.settings);
+      }
+
       setSavePaymentSuccess('Payment settings saved successfully and updated live across the store.');
       setTimeout(() => setSavePaymentSuccess(''), 4000);
     } catch (err: any) {
@@ -2781,20 +2804,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <label htmlFor="admin-upi-id-input" className="block text-[13px] font-bold text-slate-200">
                   UPI ID <span className="text-emerald-400">*</span>
                 </label>
-                <div className="relative max-w-md">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 max-w-lg">
                   <input
                     id="admin-upi-id-input"
                     type="text"
                     value={adminUpiId}
-                    onChange={(e) => setAdminUpiId(e.target.value)}
+                    onChange={(e) => {
+                      setAdminUpiId(e.target.value);
+                      if (upiValidationError) setUpiValidationError('');
+                    }}
                     placeholder="e.g. freshcart@upi"
                     required
-                    className={`w-full px-3.5 py-2.5 rounded-xl bg-black/30 text-white font-mono text-[14px] focus:outline-hidden focus:ring-2 placeholder:text-[#64748b] ${
+                    className={`flex-1 px-3.5 py-2.5 rounded-xl bg-black/30 text-white font-mono text-[14px] focus:outline-hidden focus:ring-2 placeholder:text-[#64748b] ${
                       upiValidationError
                         ? 'border border-rose-500/70 focus:ring-rose-500'
                         : 'border border-white/15 focus:ring-[#10b981]'
                     }`}
                   />
+                  <button
+                    type="button"
+                    id="admin-generate-qr-btn"
+                    onClick={handleGenerateQr}
+                    disabled={isGeneratingQr || !adminUpiId.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-[#006b2c] hover:bg-[#00873a] text-white text-[13px] font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>{isGeneratingQr ? 'Generating...' : 'Generate QR'}</span>
+                  </button>
                 </div>
                 {upiValidationError ? (
                   <p id="admin-upi-validation-msg" className="text-[12px] text-rose-400 flex items-center gap-1.5 font-medium">
@@ -2803,7 +2839,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </p>
                 ) : (
                   <p className="text-[11px] text-[#94a3b8]">
-                    The Virtual Payment Address (VPA) customers will pay to (e.g. freshcart@okhdfcbank, merchant@upi).
+                    Enter store UPI ID and click &quot;Generate QR&quot; to validate, create, and save the merchant QR code.
                   </p>
                 )}
               </div>
@@ -2829,10 +2865,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </p>
               </div>
 
-              {/* Current QR Code Preview & Automatic Generation Status */}
+              {/* Current QR Code Preview */}
               <div className="space-y-2">
                 <label className="block text-[13px] font-bold text-slate-200">
-                  Current QR Code
+                  Current Merchant QR Code
                 </label>
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 p-4 rounded-xl bg-black/25 border border-white/10">
                   {/* QR Preview Box */}
@@ -2847,21 +2883,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     ) : (
                       <div className="text-center text-slate-400 text-[12px] p-2 flex flex-col items-center justify-center">
                         <QrCode className="w-10 h-10 mb-1.5 text-slate-400" />
-                        <span>{upiValidationError || 'Enter a valid UPI ID to generate QR'}</span>
+                        <span>{upiValidationError || 'Enter UPI ID and click "Generate QR"'}</span>
                       </div>
                     )}
                   </div>
 
-                  {/* QR Details & Auto-Generation Status */}
+                  {/* QR Details */}
                   <div className="space-y-3 flex-1 text-center sm:text-left">
                     <div className="text-[12px] text-slate-300 space-y-1">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-semibold text-[#94a3b8]">Currently Active UPI:</span>
-                        <span className="font-mono text-emerald-400 font-bold">{adminUpiId.trim() || '—'}</span>
+                        <span className="font-semibold text-[#94a3b8]">Saved Merchant UPI:</span>
+                        <span id="admin-saved-upi-display" className="font-mono text-emerald-400 font-bold">
+                          {paymentSettings.upiId || '—'}
+                        </span>
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-semibold text-[#94a3b8]">Merchant Name:</span>
-                        <span className="text-white font-medium">{adminPayeeName.trim() || '—'}</span>
+                        <span className="text-white font-medium">{paymentSettings.payeeName || '—'}</span>
                       </div>
                     </div>
 
@@ -2869,18 +2907,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       {adminQrCodeUrl ? (
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[12px] font-medium">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Automatically generated from UPI ID</span>
+                          <span>Generated Merchant QR (Saved &amp; Active)</span>
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[12px] font-medium">
                           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>QR generation paused (invalid UPI ID)</span>
+                          <span>No merchant QR generated yet</span>
                         </div>
                       )}
                     </div>
 
                     <p className="text-[11px] text-[#94a3b8]">
-                      The QR code updates automatically whenever the UPI ID or Merchant Name changes. Click "Save Payment Settings" to publish the updated QR across the store.
+                      Click &quot;Generate QR&quot; above to create and save the merchant QR. Changing the UPI ID in the text field will not replace the existing QR until you click &quot;Generate QR&quot;.
                     </p>
                   </div>
                 </div>

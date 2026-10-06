@@ -272,6 +272,29 @@ export const INITIAL_PRODUCTS: Product[] = [
     batchNumber: 'LOT-2026-TRM-902',
     expiryDate: 'In 12 months',
   },
+  {
+    id: 'prod-12',
+    title: 'Fresh Coriander Bunch',
+    supplier: 'Verde Valley Organic Collective',
+    sku: 'SKU-7710',
+    price: 10,
+    unit: '1 bunch',
+    stock: 50,
+    badge: 'Fresh Herb',
+    image:
+      'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=600&q=80',
+    category: 'produce',
+    categoryLabel: 'Fruits & Veggies',
+    isOrganic: true,
+    isQuickPrep: true,
+    description: 'Crisp, aromatic farm-fresh coriander leaves harvested at sunrise.',
+    farmOrigin: 'Verde Valley Herb Gardens, Block 4',
+    harvestDate: 'Today, 05:00 AM',
+    tempRequirement: '4°C - 8°C Chilled',
+    nutrition: 'Vitamin A · Vitamin K · Folate',
+    batchNumber: 'LOT-2026-CRD-771',
+    expiryDate: 'In 4 days',
+  },
 ];
 
 export const INITIAL_INVENTORY_LOGS: InventoryLog[] = [
