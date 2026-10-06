@@ -570,15 +570,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </div>
               )}
 
-              {/* Direct UPI App Option Details */}
+              {/* Direct UPI App Option Details (Center Aligned) */}
               {paymentMethod === 'upi_app' && (
-                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-5 mt-4 space-y-3">
-                  <p className="text-xs text-slate-300 leading-relaxed">
+                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4">
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
                     Tap the button below to launch your installed UPI payment application (Google Pay, PhonePe, Paytm) directly on your device:
                   </p>
                   <a
                     href={`upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md transition-all"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md transition-all active:scale-95"
                   >
                     <Smartphone className="w-4 h-4" />
                     <span>Open UPI App to Pay</span>
