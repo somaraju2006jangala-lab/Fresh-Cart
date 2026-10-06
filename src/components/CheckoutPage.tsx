@@ -126,6 +126,54 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return () => clearInterval(interval);
   }, [otpExpiresAt, orderHandoverOtp]);
 
+  // QR Code UPI Deep Link & Tap / Long-press Interaction State
+  const [isQrLaunchingUpi, setIsQrLaunchingUpi] = useState(false);
+  const [showQrUpiFallback, setShowQrUpiFallback] = useState(false);
+  const longPressTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const isMobileClient = () => {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+  };
+
+  const handleLaunchUpiDeepLink = (upiUri: string) => {
+    if (isQrLaunchingUpi) return;
+    setIsQrLaunchingUpi(true);
+    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
+
+    if (isMobileClient()) {
+      try {
+        window.location.href = upiUri;
+        setTimeout(() => {
+          setShowQrUpiFallback(true);
+        }, 1500);
+      } catch {
+        setShowQrUpiFallback(true);
+      }
+    } else {
+      // Desktop behavior:
+      // Do not force navigation to an unsupported payment application.
+      // Keep the QR available for scanning with a mobile phone.
+      setShowQrUpiFallback(true);
+    }
+  };
+
+  const handleQrPointerDown = (upiUri: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      handleLaunchUpiDeepLink(upiUri);
+    }, 450);
+  };
+
+  const handleQrPointerUpOrCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
 
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -602,8 +650,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                     {/* Customer Cart Amount-Specific QR Code - Only QR Code in Customer Flow */}
                     {upiValidation.isValid ? (
-                      <>
-                        <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border border-white/90">
+                      <div className="flex flex-col items-center space-y-3">
+                        {/* Interactive Clickable QR Code Container */}
+                        <div
+                          id="checkout-payment-qr-container"
+                          data-testid="checkout-payment-qr-container"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`UPI Payment QR Code. Click to open UPI app or scan to pay ${formatINR(total)}`}
+                          data-upi-uri={checkoutUpiUri}
+                          onPointerDown={() => handleQrPointerDown(checkoutUpiUri)}
+                          onPointerUp={handleQrPointerUpOrCancel}
+                          onPointerLeave={handleQrPointerUpOrCancel}
+                          onPointerCancel={handleQrPointerUpOrCancel}
+                          onClick={() => handleLaunchUpiDeepLink(checkoutUpiUri)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleLaunchUpiDeepLink(checkoutUpiUri);
+                            }
+                          }}
+                          className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border-2 border-white/90 hover:border-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer active:scale-98 select-none group relative"
+                          title="Click to open UPI app or scan to pay"
+                        >
                           <img
                             id="checkout-payment-qr-img"
                             data-testid="checkout-payment-qr-img"
@@ -618,14 +687,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             data-upi-tr={upiValidation.decoded?.tr}
                             data-qr-decodable={qrScan?.decodable ? "true" : "false"}
                             alt={`UPI Payment QR Code for ${formatINR(total)}`}
-                            className="w-36 h-36 sm:w-40 sm:h-40 object-contain select-none"
+                            className="w-36 h-36 sm:w-40 sm:h-40 object-contain pointer-events-none"
                           />
                         </div>
 
                         <p id="checkout-qr-scan-instruction" data-testid="checkout-qr-scan-instruction" className="text-xs sm:text-sm font-semibold text-white">
                           Scan this QR to pay {formatINR(total)}
                         </p>
-                      </>
+
+                        {/* Fallback Notice for desktop or unsupported environments */}
+                        {showQrUpiFallback && (
+                          <div
+                            id="qr-upi-fallback-notice"
+                            data-testid="qr-upi-fallback-notice"
+                            className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs text-center max-w-sm animate-in fade-in"
+                          >
+                            <p className="font-medium">
+                              Open your UPI app and complete the payment, then upload your payment screenshot.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
                         <p className="font-bold">Cannot generate payment QR:</p>

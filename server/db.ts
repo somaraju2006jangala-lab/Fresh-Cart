@@ -1866,6 +1866,15 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
     return order;
   } catch (err: any) {
     console.warn('[MySQL] Error finding order:', err?.message);
+    const memOrder = inMemoryOrders.find((o) => o.id === orderId || o.id === altId || o.order_id === orderId || o.order_id === altId);
+    if (memOrder) {
+      const memProof = inMemoryPaymentProofs.find((p) => p.orderId === orderId || p.orderId === altId);
+      return {
+        ...memOrder,
+        paymentProof: memProof || null,
+        paymentVerificationStatus: memProof?.verificationStatus || memOrder.paymentVerificationStatus || 'NOT_UPLOADED',
+      };
+    }
     return null;
   }
 }
@@ -2363,7 +2372,7 @@ export async function savePaymentSettingsToDb(settings: PaymentSettingsRecord): 
  * Payment Proof Data & Verification Storage
  */
 export interface PaymentProofRecord {
-  id: string;
+  id?: string;
   orderId: string;
   customerId: string;
   customerName?: string;
@@ -2373,11 +2382,11 @@ export interface PaymentProofRecord {
   fileName: string;
   fileType: string;
   fileSize: number;
-  filePath: string;
+  filePath?: string;
   fileData?: string;
   fileUrl?: string;
   verificationStatus: 'NOT_UPLOADED' | 'UPLOADED' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED';
-  uploadedAt: string;
+  uploadedAt?: string;
   verifiedRejectedAt?: string;
   verifiedRejectedBy?: string;
   adminNotes?: string;
@@ -2403,6 +2412,22 @@ export async function savePaymentProofInDb(proof: PaymentProofRecord): Promise<b
     inMemoryPaymentProofs[existingIdx] = { ...inMemoryPaymentProofs[existingIdx], ...proof };
   } else {
     inMemoryPaymentProofs.unshift({ ...proof });
+  }
+
+  // Update in-memory order status if present
+  const memOrdIdx = inMemoryOrders.findIndex(
+    (o) => o.id === proof.orderId || o.id === altOrderId || o.order_id === proof.orderId || o.order_id === altOrderId
+  );
+  if (memOrdIdx >= 0) {
+    inMemoryOrders[memOrdIdx] = {
+      ...inMemoryOrders[memOrdIdx],
+      status: 'PAYMENT VERIFICATION PENDING',
+      order_status: 'PAYMENT VERIFICATION PENDING',
+      paymentStatus: 'PENDING VERIFICATION',
+      payment_status: 'PENDING VERIFICATION',
+      paymentVerificationStatus: proof.verificationStatus || 'PENDING_VERIFICATION',
+      paymentProof: proof,
+    };
   }
 
   // 2. MySQL database update
@@ -2586,7 +2611,13 @@ export async function verifyPaymentProofInDb(
   action: 'VERIFY' | 'REJECT',
   adminOperator = 'Admin',
   notes = ''
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  success: boolean;
+  verificationStatus?: string;
+  paymentStatus?: string;
+  orderStatus?: string;
+  error?: string;
+}> {
   const altOrderId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
   const nowIso = new Date().toISOString();
 
@@ -2601,6 +2632,21 @@ export async function verifyPaymentProofInDb(
       verifiedRejectedAt: nowIso,
       verifiedRejectedBy: adminOperator,
       adminNotes: notes,
+    };
+  }
+
+  // Update in-memory order if present
+  const ordIdx = inMemoryOrders.findIndex(
+    (o) => o.id === orderId || o.id === altOrderId || o.order_id === orderId || o.order_id === altOrderId
+  );
+  if (ordIdx >= 0) {
+    inMemoryOrders[ordIdx] = {
+      ...inMemoryOrders[ordIdx],
+      status: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
+      order_status: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
+      paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
+      payment_status: action === 'VERIFY' ? 'PAID' : 'REJECTED',
+      paymentVerificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
     };
   }
 
@@ -2706,7 +2752,12 @@ export async function verifyPaymentProofInDb(
       }
 
       await connection.commit();
-      return { success: true };
+      return {
+        success: true,
+        verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
+        paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
+        orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
+      };
     } catch (err: any) {
       await connection.rollback();
       throw err;
@@ -2715,7 +2766,12 @@ export async function verifyPaymentProofInDb(
     }
   } catch (err: any) {
     console.warn('[MySQL] Error verifying payment proof in DB (in-memory state updated):', err?.message);
-    return { success: true };
+    return {
+      success: true,
+      verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
+      paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
+      orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
+    };
   }
 }
 

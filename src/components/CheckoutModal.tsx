@@ -113,6 +113,64 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Order Handover OTP States for successful order placement screen
   const [orderHandoverOtp, setOrderHandoverOtp] = useState<string | null>(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+
+  // QR Code UPI Deep Link & Tap / Long-press Interaction State
+  const [isQrLaunchingUpi, setIsQrLaunchingUpi] = useState(false);
+  const [showQrUpiFallback, setShowQrUpiFallback] = useState(false);
+  const longPressTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const isMobileClient = () => {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+  };
+
+  const handleLaunchUpiDeepLink = (upiUri: string) => {
+    if (isQrLaunchingUpi) return;
+    setIsQrLaunchingUpi(true);
+    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
+
+    if (isMobileClient()) {
+      try {
+        window.location.href = upiUri;
+        setTimeout(() => {
+          setShowQrUpiFallback(true);
+        }, 1500);
+      } catch {
+        setShowQrUpiFallback(true);
+      }
+    } else {
+      // Desktop behavior:
+      // Try to open deep link if supported, without breaking checkout or redirecting away
+      try {
+        const link = document.createElement('a');
+        link.href = upiUri;
+        link.rel = 'noopener noreferrer';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch {
+        // Ignored
+      }
+      setShowQrUpiFallback(true);
+    }
+  };
+
+  const handleQrPointerDown = (upiUri: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      handleLaunchUpiDeepLink(upiUri);
+    }, 450);
+  };
+
+  const handleQrPointerUpOrCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
   const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
   const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);
   const [placedOrderId, setPlacedOrderId] = useState<string>('');
@@ -446,8 +504,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   const modalQrUrl = upiValidation.isValid ? generateQrDataUrl(modalUpiUri, { size: 180 }) : '';
                   const formattedTotal = Number(total).toFixed(2);
                   return (
-                    <>
-                      <div className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border border-[#e2e8f0] flex items-center justify-center">
+                    <div className="flex flex-col items-center space-y-3">
+                      <div
+                        id="checkout-qr-interaction-container"
+                        data-testid="checkout-qr-interaction-container"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`UPI Payment QR Code. Click to open UPI app or scan to pay ${formatINR(total)}`}
+                        data-upi-uri={modalUpiUri}
+                        onPointerDown={() => handleQrPointerDown(modalUpiUri)}
+                        onPointerUp={handleQrPointerUpOrCancel}
+                        onPointerLeave={handleQrPointerUpOrCancel}
+                        onPointerCancel={handleQrPointerUpOrCancel}
+                        onClick={() => handleLaunchUpiDeepLink(modalUpiUri)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleLaunchUpiDeepLink(modalUpiUri);
+                          }
+                        }}
+                        className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border-2 border-[#e2e8f0] hover:border-[#006b2c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] flex items-center justify-center cursor-pointer active:scale-98 transition-all select-none"
+                        title="Click to open UPI app or scan to pay"
+                      >
                         <img
                           id="checkout-qr-code-img"
                           data-testid="checkout-qr-code-img"
@@ -462,7 +540,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           data-upi-tr={upiValidation.decoded?.tr}
                           data-qr-decodable={qrScan?.decodable ? "true" : "false"}
                           alt={`Merchant UPI Payment QR Code for ${formatINR(total)}`}
-                          className="w-full h-full object-contain select-none"
+                          className="w-full h-full object-contain pointer-events-none"
                         />
                       </div>
 
@@ -474,16 +552,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         <p className="text-[11px] text-[#565e74]">
                           Scan using Google Pay, PhonePe, Paytm, or BHIM.
                         </p>
-                        <div>
-                          <a
-                            href={modalUpiUri}
-                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#006b2c] hover:underline"
-                          >
-                            <span>{t('payWithUpiApp') || 'Pay with UPI App →'}</span>
-                          </a>
-                        </div>
                       </div>
-                    </>
+
+                      {/* Fallback Notice for desktop or unsupported environments */}
+                      {showQrUpiFallback && (
+                        <div
+                          id="modal-qr-upi-fallback-notice"
+                          data-testid="modal-qr-upi-fallback-notice"
+                          className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs text-center max-w-sm animate-in fade-in"
+                        >
+                          <p className="font-medium">
+                            Open your UPI app and complete the payment, then upload your payment screenshot.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   );
                 })()}
               </div>

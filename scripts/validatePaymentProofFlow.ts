@@ -69,7 +69,7 @@ async function runTests() {
 
   // 3. Customer Uploads Payment Proof
   const fakeBase64Data = `data:image/jpeg;base64,${jpegHeader.toString('base64')}`;
-  const savedProof = await savePaymentProofInDb({
+  const saveSuccess = await savePaymentProofInDb({
     orderId: testOrderId,
     customerId: testCustomerId,
     fileName: 'upi_payment_screenshot.jpg',
@@ -79,14 +79,13 @@ async function runTests() {
     verificationStatus: 'PENDING_VERIFICATION',
   });
 
-  assert.ok(savedProof, 'Proof should be saved');
-  assert.strictEqual(savedProof.verificationStatus, 'PENDING_VERIFICATION');
-  assert.strictEqual(savedProof.fileName, 'upi_payment_screenshot.jpg');
+  assert.strictEqual(saveSuccess, true, 'Proof should be saved successfully');
 
   // Verify retrieval
   const retrievedProof = await getPaymentProofForOrderInDb(testOrderId);
   assert.ok(retrievedProof, 'Proof should be retrievable for order');
   assert.strictEqual(retrievedProof.orderId, testOrderId);
+  assert.strictEqual(retrievedProof.fileName, 'upi_payment_screenshot.jpg');
   assert.strictEqual(retrievedProof.verificationStatus, 'PENDING_VERIFICATION');
   console.log('✓ Payment proof successfully saved and linked to order and customer.');
 
@@ -150,7 +149,7 @@ async function runTests() {
 
   // 7. Customer Can Replace Rejected Payment Proof
   console.log('7. Testing customer replacement of rejected proof...');
-  const replacedProof = await savePaymentProofInDb({
+  const replaceSuccess = await savePaymentProofInDb({
     orderId: testOrderId2,
     customerId: testCustomerId,
     fileName: 'clear_payment_screenshot.jpg',
@@ -160,9 +159,11 @@ async function runTests() {
     verificationStatus: 'PENDING_VERIFICATION',
   });
 
-  assert.ok(replacedProof);
-  assert.strictEqual(replacedProof.verificationStatus, 'PENDING_VERIFICATION');
-  assert.strictEqual(replacedProof.fileName, 'clear_payment_screenshot.jpg');
+  assert.strictEqual(replaceSuccess, true);
+  const retrievedReplaced = await getPaymentProofForOrderInDb(testOrderId2);
+  assert.ok(retrievedReplaced);
+  assert.strictEqual(retrievedReplaced.verificationStatus, 'PENDING_VERIFICATION');
+  assert.strictEqual(retrievedReplaced.fileName, 'clear_payment_screenshot.jpg');
 
   const reloadedOrder = await findOrderInDb(testOrderId2);
   assert.ok(reloadedOrder);
