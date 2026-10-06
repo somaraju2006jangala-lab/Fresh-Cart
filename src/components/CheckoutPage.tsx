@@ -597,66 +597,73 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               )}
             </div>
 
-            {/* 4. ORDER SUMMARY & PLACE ORDER (Full-Width Section BELOW Payment) */}
-            <div className="checkout-panel rounded-2xl p-5 sm:p-6">
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                
-                {/* Left Side: Order Summary Heading & Optional Cart Items Peek */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ShoppingBag className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight font-display">
-                      Order Summary
-                    </h2>
-                  </div>
+            {/* 4. ORDER SUMMARY & PLACE ORDER (Full-Width Section BELOW Payment - Centered Alignment) */}
+            <div className="checkout-panel rounded-2xl p-6 sm:p-8">
+              <div className="w-full max-w-md mx-auto space-y-5 text-center">
 
-                  {items.length > 0 && (
-                    <div className="text-xs text-slate-400">
-                      <button
-                        type="button"
-                        onClick={() => setShowItemsList(!showItemsList)}
-                        className="hover:text-cyan-400 transition-colors flex items-center gap-1.5 cursor-pointer text-slate-400"
-                      >
-                        <span>{totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in cart</span>
-                        <span className="text-[10px] text-cyan-400 underline">{showItemsList ? 'Hide items' : 'View items'}</span>
-                      </button>
-
-                      {showItemsList && (
-                        <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {items.map((item) => (
-                            <div
-                              key={item.product.id}
-                              className="flex items-center gap-2.5 checkout-subpanel p-2 rounded-lg text-xs"
-                            >
-                              <img
-                                src={item.product.image}
-                                alt={item.product.title}
-                                className="w-8 h-8 rounded object-cover bg-slate-800 shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-white font-medium truncate">{item.product.title}</p>
-                                <span className="text-slate-400">
-                                  Qty: {item.quantity} × {formatINR(item.product.price)}
-                                </span>
-                              </div>
-                              <span className="font-semibold text-white tabular-nums shrink-0">
-                                {formatINR(item.product.price * item.quantity)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                {/* Centered Heading */}
+                <div className="flex items-center justify-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-cyan-400 shrink-0" />
+                  <h2 className="text-lg sm:text-xl font-semibold text-white tracking-tight font-display">
+                    Order Summary
+                  </h2>
                 </div>
 
-                {/* Right Side: Financial Breakdown & Place Order Button */}
-                <div className="w-full md:w-[380px] lg:w-[420px] space-y-3 shrink-0">
+                {/* Optional Cart Items Peek (Centered trigger, left-aligned item rows) */}
+                {items.length > 0 && (
+                  <div className="text-xs text-slate-400">
+                    <button
+                      type="button"
+                      onClick={() => setShowItemsList(!showItemsList)}
+                      className="hover:text-cyan-400 transition-colors inline-flex items-center gap-1.5 cursor-pointer text-slate-400"
+                    >
+                      <span>{totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in cart</span>
+                      <span className="text-[10px] text-cyan-400 underline">{showItemsList ? 'Hide items' : 'View items'}</span>
+                    </button>
+
+                    {showItemsList && (
+                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1 text-left">
+                        {items.map((item) => (
+                          <div
+                            key={item.product.id}
+                            className="flex items-center gap-2.5 checkout-subpanel p-2 rounded-lg text-xs"
+                          >
+                            <img
+                              src={item.product.image}
+                              alt={item.product.title}
+                              className="w-8 h-8 rounded object-cover bg-slate-800 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-medium truncate">{item.product.title}</p>
+                              <span className="text-slate-400">
+                                Qty: {item.quantity} × {formatINR(item.product.price)}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-white tabular-nums shrink-0">
+                              {formatINR(item.product.price * item.quantity)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Financial Breakdown (Centered container, visually aligned rows) */}
+                <div className="space-y-3 pt-1">
                   {/* Subtotal */}
                   <div className="flex justify-between items-center text-sm text-slate-300">
                     <span>Subtotal</span>
                     <span className="font-semibold text-white tabular-nums">
                       {formatINR(subtotal)}
+                    </span>
+                  </div>
+
+                  {/* Delivery Charges */}
+                  <div className="flex justify-between items-center text-sm text-slate-300">
+                    <span>Delivery Charges</span>
+                    <span className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-white' : 'text-emerald-400 font-semibold'}`}>
+                      {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
                     </span>
                   </div>
 
@@ -668,16 +675,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </div>
                   )}
 
-                  {/* Delivery Charges */}
-                  <div className="flex justify-between items-center text-sm text-slate-300">
-                    <span>Delivery Charges</span>
-                    <span className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-white' : 'text-emerald-400 font-semibold'}`}>
-                      {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
-                    </span>
-                  </div>
-
-                  {/* Final Total */}
-                  <div className="flex justify-between items-baseline pt-2 border-t border-[#0c2b4a]">
+                  {/* Final Total (Centered & visually emphasized) */}
+                  <div className="flex justify-between items-baseline pt-3 border-t border-[#0c2b4a]">
                     <span className="text-base sm:text-lg font-bold text-white">
                       Final Total
                     </span>
@@ -685,14 +684,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       {formatINR(total)}
                     </span>
                   </div>
+                </div>
 
-                  {/* Place Order Button */}
+                {/* Place Order Button (Centered with reasonable width) */}
+                <div className="pt-2 flex justify-center">
                   <button
                     type="button"
                     id="checkout-place-order-btn"
                     disabled={items.length === 0 || isSubmitting}
                     onClick={handlePlaceOrder}
-                    className={`w-full py-3.5 px-6 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer ${
+                    className={`w-full max-w-sm py-3.5 px-6 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer ${
                       items.length === 0 || isSubmitting
                         ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
                         : 'checkout-neon-btn text-white active:scale-[0.99]'
