@@ -16,8 +16,7 @@ import {
   MapPin,
   Clock,
   ShieldCheck,
-  Tag,
-  Zap,
+  CreditCard,
   QrCode,
   Smartphone,
   Copy,
@@ -27,10 +26,8 @@ import {
   ShoppingBag,
   Truck,
   RotateCw,
-  Sparkles,
 } from 'lucide-react';
 import { generateOrderOtp, resendOrderOtp } from '../services/otpClientService';
-import { TrustBanner } from './TrustBanner';
 import { Footer } from './Footer';
 
 interface CheckoutPageProps {
@@ -78,6 +75,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>('upi_qr');
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showItemsList, setShowItemsList] = useState(false);
 
   // Payment Settings state
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getStoredPaymentSettings());
@@ -155,7 +153,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const deliveryChargesAmount = items.length > 0 && subtotal > 0 && applicableDeliveryRule
     ? applicableDeliveryRule.deliveryCharge
-    : 0;
+    : (items.length > 0 ? deliveryCharges : 0);
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
@@ -187,7 +185,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerEmail: currentUser?.email,
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
-        deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
+        deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
         estimatedDeliveryTime: 'Picking in progress',
         items: [...items],
         subtotal,
@@ -250,50 +248,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   return (
     <div id="checkout-page-container" className="w-full flex flex-col min-h-screen">
-      <div className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-
-        {/* Top Header Banner (Semi-Solid Opaque) */}
-        <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <button
-              type="button"
-              id="checkout-back-to-cart-btn"
-              onClick={onBackToCart}
-              className="p-2 sm:p-2.5 rounded-xl cart-semi-opaque-control hover:bg-slate-700/80 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0 border border-white/10"
-              title="Return to Cart"
-            >
-              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-bold text-white font-display">
-                  {step === 'details' ? 'Checkout' : t('orderConfirmed')}
-                </h1>
-                {step === 'details' && (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    Final Step
-                  </span>
-                )}
-              </div>
-              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-                {step === 'details'
-                  ? 'Complete your delivery and payment information'
-                  : 'Your fresh farm groceries have been scheduled for direct pod dispatch'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-slate-400 self-start sm:self-center">
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>100% Secure Checkout</span>
-            </span>
-          </div>
-        </div>
+      <div className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-4.5">
 
         {/* Step: Order Confirmed Screen (Semi-Solid Opaque) */}
         {step === 'success' ? (
-          <div className="cart-semi-opaque-panel rounded-3xl p-6 sm:p-10 max-w-2xl mx-auto my-6 text-center space-y-6">
+          <div className="checkout-panel rounded-3xl p-6 sm:p-10 max-w-2xl mx-auto my-6 text-center space-y-6">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
               <CheckCircle className="w-9 h-9" />
             </div>
@@ -307,8 +266,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </p>
             </div>
 
-            {/* Handover OTP Verification Box (Semi-Solid Opaque) */}
-            <div className="cart-semi-opaque-card rounded-2xl p-5 sm:p-6 text-center space-y-3">
+            {/* Handover OTP Verification Box */}
+            <div className="checkout-subpanel rounded-2xl p-5 sm:p-6 text-center space-y-3">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Delivery Handover OTP</span>
@@ -345,17 +304,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </div>
 
             {/* Delivery Details Recap */}
-            <div className="cart-semi-opaque-card rounded-2xl p-4 text-left text-xs text-slate-300 space-y-2">
+            <div className="checkout-subpanel rounded-2xl p-4 text-left text-xs text-slate-300 space-y-2">
               <div className="flex items-center gap-2 text-white font-semibold">
-                <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+                <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span>Delivery Address</span>
               </div>
               <p className="pl-6 text-slate-400">{address}</p>
               <div className="flex items-center gap-2 text-white font-semibold pt-1">
-                <Truck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span>Estimated Delivery</span>
               </div>
-              <p className="pl-6 text-slate-400">24–30 Minutes (Direct Express Pod)</p>
+              <p className="pl-6 text-slate-400">Express Cold-Chain Delivery, 24–30 Minutes</p>
             </div>
 
             {/* Action Buttons */}
@@ -363,7 +322,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigateToDashboard?.()}
-                className="flex-1 py-3 px-4 rounded-xl bg-[#00873a] hover:bg-[#00a347] text-white text-sm font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-xl checkout-neon-btn text-white text-sm font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <span>View Order in Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
@@ -371,341 +330,372 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigateToStorefront?.()}
-                className="py-3 px-5 rounded-xl cart-semi-opaque-control hover:bg-slate-700/80 text-white text-sm font-semibold transition-all cursor-pointer"
+                className="py-3 px-5 rounded-xl checkout-subpanel hover:bg-slate-800 text-white text-sm font-semibold transition-all cursor-pointer"
               >
                 Continue Shopping
               </button>
             </div>
           </div>
         ) : (
-          /* Step: Details - Vertical Stacked Full-Width Layout */
-          <div className="space-y-6">
-              
-              {/* Delivery Address Card (Semi-Solid Opaque) */}
-              <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
-                <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                  <MapPin className="w-4 h-4 text-emerald-400" />
-                  <h2 className="text-base sm:text-lg font-bold text-white font-display">
-                    Delivery Address & Time Slot
+          /* Step: Details - Full-width dedicated checkout vertical sequence matching reference design */
+          <>
+            {/* 1. CHECKOUT HEADER */}
+            <div className="checkout-panel rounded-2xl p-4 sm:p-5 flex items-center gap-4">
+              <button
+                type="button"
+                id="checkout-back-to-cart-btn"
+                onClick={onBackToCart}
+                className="w-10 h-10 rounded-full bg-[#051c33] border border-cyan-500/30 hover:border-cyan-400/60 hover:bg-[#072440] text-cyan-400 transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95"
+                title="Return to Cart"
+              >
+                <ArrowLeft className="w-5 h-5 text-cyan-400" />
+              </button>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
+                  Checkout
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                  Complete your delivery and payment information
+                </p>
+              </div>
+            </div>
+
+            {/* 2. DELIVERY ADDRESS & TIME SLOT */}
+            <div className="checkout-panel rounded-2xl p-5 sm:p-6 space-y-3.5">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+                <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight font-display">
+                  Delivery Address & Time Slot
+                </h2>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-normal">
+                    Delivery Address
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Enter delivery street address"
+                    className="checkout-input w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-normal">
+                    Delivery Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryNote}
+                    onChange={(e) => setDeliveryNote(e.target.value)}
+                    placeholder="e.g. Leave with doorman in thermal tote"
+                    className="checkout-input w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="checkout-subpanel w-full px-4 py-2.5 rounded-xl flex items-center gap-2.5 text-xs sm:text-sm text-slate-300">
+                  <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>Express Cold-Chain Delivery, 24–30 Minutes</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. SELECT PAYMENT METHOD & PAYMENT DETAILS */}
+            <div className="checkout-panel rounded-2xl p-5 sm:p-6 space-y-4 sm:space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight font-display">
+                    Select Payment Method
                   </h2>
                 </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Delivery Address
-                    </label>
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Enter delivery street address"
-                      className="cart-semi-opaque-control w-full px-3.5 py-2.5 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Delivery Note (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={deliveryNote}
-                      onChange={(e) => setDeliveryNote(e.target.value)}
-                      placeholder="e.g. Leave at front door, ring bell"
-                      className="cart-semi-opaque-control w-full px-3.5 py-2.5 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 p-3 rounded-xl cart-semi-opaque-card text-xs text-slate-300">
-                    <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Express Cold-Chain Delivery: <strong className="text-white">24–30 Minutes</strong></span>
-                  </div>
-                </div>
+                <span className="text-xs sm:text-sm text-cyan-400 font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>Verified</span>
+                </span>
               </div>
 
-              {/* Payment Method Selection Card (Semi-Solid Opaque) */}
-              <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Banknote className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-base sm:text-lg font-bold text-white font-display">
-                      Select Payment Method
-                    </h2>
-                  </div>
-                  <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Verified</span>
-                  </span>
-                </div>
-
-                {/* Payment Option Buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  
-                  {/* Option 1: UPI / QR Payment */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('upi_qr')}
-                    className={`p-3.5 rounded-2xl text-left transition-all border cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'upi_qr'
-                        ? 'cart-semi-opaque-card border-emerald-500/80 ring-1 ring-emerald-500/40'
-                        : 'cart-semi-opaque-card border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <QrCode className="w-5 h-5 text-emerald-400" />
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        paymentMethod === 'upi_qr' ? 'border-emerald-400 bg-emerald-500' : 'border-slate-500'
-                      }`}>
-                        {paymentMethod === 'upi_qr' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <p className="text-xs sm:text-sm font-bold text-white">UPI / QR Code</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Scan & Pay via any app</p>
-                    </div>
-                  </button>
-
-                  {/* Option 2: Direct UPI App */}
-                  {paymentSettings.directUpiAppEnabled !== false && (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('upi_app')}
-                      className={`p-3.5 rounded-2xl text-left transition-all border cursor-pointer flex flex-col justify-between ${
-                        paymentMethod === 'upi_app'
-                          ? 'cart-semi-opaque-card border-emerald-500/80 ring-1 ring-emerald-500/40'
-                          : 'cart-semi-opaque-card border-white/10 hover:border-white/20'
+              {/* 3 Payment Options in a single row on desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
+                {/* Option 1: UPI / QR Code */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi_qr')}
+                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
+                    paymentMethod === 'upi_qr'
+                      ? 'checkout-card-selected'
+                      : 'checkout-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <QrCode className="w-5 h-5 text-cyan-400" />
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                        paymentMethod === 'upi_qr'
+                          ? 'bg-[#00d2aa] text-[#030d1a]'
+                          : 'border border-slate-600 bg-transparent'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <Smartphone className="w-5 h-5 text-emerald-400" />
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          paymentMethod === 'upi_app' ? 'border-emerald-400 bg-emerald-500' : 'border-slate-500'
-                        }`}>
-                          {paymentMethod === 'upi_app' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                      </div>
-                      <div className="mt-3">
-                        <p className="text-xs sm:text-sm font-bold text-white">Direct UPI App</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Paytm, GPay, PhonePe</p>
-                      </div>
-                    </button>
-                  )}
-
-                  {/* Option 3: Cash on Delivery */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cash')}
-                    className={`p-3.5 rounded-2xl text-left transition-all border cursor-pointer flex flex-col justify-between ${
-                      paymentMethod === 'cash'
-                        ? 'cart-semi-opaque-card border-emerald-500/80 ring-1 ring-emerald-500/40'
-                        : 'cart-semi-opaque-card border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Banknote className="w-5 h-5 text-emerald-400" />
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        paymentMethod === 'cash' ? 'border-emerald-400 bg-emerald-500' : 'border-slate-500'
-                      }`}>
-                        {paymentMethod === 'cash' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <p className="text-xs sm:text-sm font-bold text-white">Cash on Delivery</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Pay at doorstep</p>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Sub-Section 1: UPI / QR Details (Semi-Solid Opaque) */}
-                {paymentMethod === 'upi_qr' && (
-                  <div className="cart-semi-opaque-card rounded-2xl p-5 space-y-4 border border-emerald-500/30">
-                    <div className="flex flex-col sm:flex-row items-center gap-5">
-                      {/* QR Code Container */}
-                      <div className="bg-white p-3 rounded-2xl shadow-md shrink-0 border border-white/80">
-                        <img
-                          src={
-                            paymentSettings.qrCodeUrl ||
-                            generateQrDataUrl(
-                              `upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`,
-                              { size: 160 }
-                            )
-                          }
-                          alt="Merchant UPI QR Code"
-                          className="w-36 h-36 object-contain"
-                        />
-                      </div>
-
-                      {/* Merchant Details */}
-                      <div className="space-y-3 flex-1 text-center sm:text-left">
-                        <div>
-                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                            Merchant Name
-                          </p>
-                          <p className="text-sm font-bold text-white">
-                            {paymentSettings.payeeName || 'FreshCart Grocery Store'}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                            Merchant UPI ID
-                          </p>
-                          <div className="flex items-center justify-center sm:justify-start gap-2 mt-1">
-                            <span className="font-mono text-xs sm:text-sm text-emerald-400 font-bold bg-slate-900/80 px-2.5 py-1 rounded-lg border border-white/10">
-                              {paymentSettings.upiId || 'freshcart@upi'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={handleCopyUpi}
-                              className="p-1.5 rounded-lg cart-semi-opaque-control hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                              title="Copy UPI ID"
-                            >
-                              {copiedUpi ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
-                        </p>
-                      </div>
+                      {paymentMethod === 'upi_qr' && (
+                        <Check className="w-3.5 h-3.5 stroke-[3] text-[#030d1a]" />
+                      )}
                     </div>
                   </div>
-                )}
+                  <div className="mt-3.5">
+                    <p className="text-sm sm:text-base font-bold text-white">UPI / QR Code</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Scan & Pay via any app</p>
+                  </div>
+                </button>
 
-                {/* Sub-Section 2: Direct UPI App Details */}
-                {paymentMethod === 'upi_app' && (
-                  <div className="cart-semi-opaque-card rounded-2xl p-5 space-y-3 border border-emerald-500/30">
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Tap the button below to launch your installed UPI payment application (Google Pay, PhonePe, Paytm) directly on your device:
-                    </p>
-                    <a
-                      href={`upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`}
-                      className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all"
+                {/* Option 2: Direct UPI App */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi_app')}
+                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
+                    paymentMethod === 'upi_app'
+                      ? 'checkout-card-selected'
+                      : 'checkout-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <Smartphone className="w-5 h-5 text-cyan-400" />
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                        paymentMethod === 'upi_app'
+                          ? 'bg-[#00d2aa] text-[#030d1a]'
+                          : 'border border-slate-600 bg-transparent'
+                      }`}
                     >
-                      <Smartphone className="w-4 h-4" />
-                      <span>Open UPI App to Pay</span>
-                    </a>
+                      {paymentMethod === 'upi_app' && (
+                        <Check className="w-3.5 h-3.5 stroke-[3] text-[#030d1a]" />
+                      )}
+                    </div>
                   </div>
-                )}
-
-                {/* Sub-Section 3: Cash on Delivery Details */}
-                {paymentMethod === 'cash' && (
-                  <div className="cart-semi-opaque-card rounded-2xl p-4 text-xs text-slate-300 space-y-1 border border-white/10">
-                    <p className="font-semibold text-white">Doorstep Payment Selected</p>
-                    <p className="text-slate-400">
-                      You can pay via Cash or ask the delivery runner for their on-the-spot UPI QR code upon handover.
-                    </p>
+                  <div className="mt-3.5">
+                    <p className="text-sm sm:text-base font-bold text-white">Direct UPI App</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Paytm, GPay, PhonePe</p>
                   </div>
-                )}
+                </button>
 
+                {/* Option 3: Cash on Delivery */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
+                    paymentMethod === 'cash'
+                      ? 'checkout-card-selected'
+                      : 'checkout-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <Banknote className="w-5 h-5 text-cyan-400" />
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                        paymentMethod === 'cash'
+                          ? 'bg-[#00d2aa] text-[#030d1a]'
+                          : 'border border-slate-600 bg-transparent'
+                      }`}
+                    >
+                      {paymentMethod === 'cash' && (
+                        <Check className="w-3.5 h-3.5 stroke-[3] text-[#030d1a]" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3.5">
+                    <p className="text-sm sm:text-base font-bold text-white">Cash on Delivery</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Pay at doorstep</p>
+                  </div>
+                </button>
               </div>
 
-              {/* SECTION 3: Order Summary Card (Full-Width Semi-Solid Opaque) */}
-              <div className="cart-semi-opaque-panel rounded-2xl sm:rounded-3xl p-5 sm:p-7 space-y-5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              {/* UPI / QR Details Area - Directly underneath payment options */}
+              {paymentMethod === 'upi_qr' && (
+                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-4 sm:p-5 mt-4 sm:mt-5 flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+                  {/* Uploaded / Configured Merchant QR Code */}
+                  <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border border-white/90">
+                    <img
+                      src={
+                        paymentSettings.qrCodeUrl ||
+                        generateQrDataUrl(
+                          `upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`,
+                          { size: 160 }
+                        )
+                      }
+                      alt="Merchant UPI QR Code"
+                      className="w-28 h-28 sm:w-32 sm:h-32 object-contain"
+                    />
+                  </div>
+
+                  {/* Merchant Details & Instructions */}
+                  <div className="flex-1 text-center sm:text-left space-y-1">
+                    <div>
+                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        MERCHANT NAME
+                      </p>
+                      <p className="text-sm sm:text-base font-bold text-white mt-0.5">
+                        {paymentSettings.payeeName || 'Freshcart Grocery Store'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        MERCHANT UPI ID
+                      </p>
+                      <div className="inline-flex items-center gap-2 mt-1 px-3 py-1.5 rounded-lg bg-[#041626] border border-cyan-800/40">
+                        <span className="font-mono text-xs sm:text-sm text-cyan-300 font-semibold">
+                          {paymentSettings.upiId || 'freshcart@upi'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCopyUpi}
+                          className="p-1 rounded text-slate-300 hover:text-white transition-colors cursor-pointer"
+                          title="Copy UPI ID"
+                        >
+                          {copiedUpi ? (
+                            <Check className="w-3.5 h-3.5 text-cyan-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-400 pt-3 leading-relaxed">
+                      Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI banking app.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Direct UPI App Option Details */}
+              {paymentMethod === 'upi_app' && (
+                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-5 mt-4 space-y-3">
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Tap the button below to launch your installed UPI payment application (Google Pay, PhonePe, Paytm) directly on your device:
+                  </p>
+                  <a
+                    href={`upi://pay?pa=${paymentSettings.upiId || 'freshcart@upi'}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart')}&cu=INR`}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md transition-all"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Open UPI App to Pay</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Cash on Delivery Details */}
+              {paymentMethod === 'cash' && (
+                <div className="checkout-subpanel rounded-xl sm:rounded-2xl p-4 mt-4 text-xs text-slate-300 space-y-1">
+                  <p className="font-semibold text-white">Doorstep Payment Selected</p>
+                  <p className="text-slate-400">
+                    You can pay via Cash or ask the delivery runner for their on-the-spot UPI QR code upon handover.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 4. ORDER SUMMARY & PLACE ORDER (Full-Width Section BELOW Payment) */}
+            <div className="checkout-panel rounded-2xl p-5 sm:p-6">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                
+                {/* Left Side: Order Summary Heading & Optional Cart Items Peek */}
+                <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <ShoppingBag className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-base sm:text-lg font-bold text-white font-display">
+                    <ShoppingBag className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight font-display">
                       Order Summary
                     </h2>
                   </div>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
-                  </span>
+
+                  {items.length > 0 && (
+                    <div className="text-xs text-slate-400">
+                      <button
+                        type="button"
+                        onClick={() => setShowItemsList(!showItemsList)}
+                        className="hover:text-cyan-400 transition-colors flex items-center gap-1.5 cursor-pointer text-slate-400"
+                      >
+                        <span>{totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in cart</span>
+                        <span className="text-[10px] text-cyan-400 underline">{showItemsList ? 'Hide items' : 'View items'}</span>
+                      </button>
+
+                      {showItemsList && (
+                        <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {items.map((item) => (
+                            <div
+                              key={item.product.id}
+                              className="flex items-center gap-2.5 checkout-subpanel p-2 rounded-lg text-xs"
+                            >
+                              <img
+                                src={item.product.image}
+                                alt={item.product.title}
+                                className="w-8 h-8 rounded object-cover bg-slate-800 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white font-medium truncate">{item.product.title}</p>
+                                <span className="text-slate-400">
+                                  Qty: {item.quantity} × {formatINR(item.product.price)}
+                                </span>
+                              </div>
+                              <span className="font-semibold text-white tabular-nums shrink-0">
+                                {formatINR(item.product.price * item.quantity)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Product Items List inside Order Summary */}
-                {items.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400 cart-semi-opaque-card rounded-xl">
-                    Your cart is empty.{' '}
-                    <button
-                      type="button"
-                      onClick={onBackToCart}
-                      className="text-emerald-400 underline font-semibold hover:text-emerald-300"
-                    >
-                      Return to Cart
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                    {items.map((item) => (
-                      <div
-                        key={item.product.id}
-                        className="flex items-center gap-3 p-2.5 rounded-xl cart-semi-opaque-card"
-                      >
-                        <img
-                          src={item.product.image}
-                          alt={item.product.title}
-                          className="w-12 h-12 rounded-lg object-cover bg-slate-800/80 shrink-0 border border-white/10"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs sm:text-sm font-semibold text-white truncate leading-snug">
-                            {item.product.title}
-                          </p>
-                          <div className="flex items-center justify-between text-xs mt-1">
-                            <span className="text-slate-400">
-                              Qty: {item.quantity} × {formatINR(item.product.price)}
-                            </span>
-                            <span className="font-bold text-white tabular-nums">
-                              {formatINR(item.product.price * item.quantity)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Financial Breakdown */}
-                <div className="space-y-2.5 text-xs sm:text-sm pt-2 border-t border-white/10">
-                  <div className="flex justify-between text-slate-300">
+                {/* Right Side: Financial Breakdown & Place Order Button */}
+                <div className="w-full md:w-[380px] lg:w-[420px] space-y-3 shrink-0">
+                  {/* Subtotal */}
+                  <div className="flex justify-between items-center text-sm text-slate-300">
                     <span>Subtotal</span>
                     <span className="font-semibold text-white tabular-nums">
                       {formatINR(subtotal)}
                     </span>
                   </div>
 
+                  {/* Coupon Discount (if applicable) */}
                   {discount > 0 && activeCoupon && (
-                    <div className="flex justify-between text-emerald-400 font-semibold">
+                    <div className="flex justify-between items-center text-sm text-emerald-400 font-medium">
                       <span>Discount ({activeCoupon.discountPercentage}% OFF)</span>
-                      <span className="tabular-nums">-{formatINR(discount)}</span>
+                      <span className="tabular-nums font-semibold">-{formatINR(discount)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-slate-300">
+                  {/* Delivery Charges */}
+                  <div className="flex justify-between items-center text-sm text-slate-300">
                     <span>Delivery Charges</span>
                     <span className={`tabular-nums ${deliveryChargesAmount > 0 ? 'font-semibold text-white' : 'text-emerald-400 font-semibold'}`}>
                       {items.length === 0 ? '₹0' : (deliveryChargesAmount > 0 ? formatINR(deliveryChargesAmount) : 'FREE')}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-baseline pt-3 border-t border-white/10">
-                    <span className="text-sm sm:text-base font-bold text-white">
+                  {/* Final Total */}
+                  <div className="flex justify-between items-baseline pt-2 border-t border-[#0c2b4a]">
+                    <span className="text-base sm:text-lg font-bold text-white">
                       Final Total
                     </span>
-                    <span className="text-xl sm:text-2xl font-bold text-emerald-400 tabular-nums font-display">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-[#00e699] tabular-nums font-display">
                       {formatINR(total)}
                     </span>
                   </div>
-                </div>
 
-                {/* Place Order Button */}
-                <div className="pt-2 space-y-3">
+                  {/* Place Order Button */}
                   <button
                     type="button"
                     id="checkout-place-order-btn"
                     disabled={items.length === 0 || isSubmitting}
                     onClick={handlePlaceOrder}
-                    className={`w-full py-3.5 rounded-xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${
+                    className={`w-full py-3.5 px-6 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer ${
                       items.length === 0 || isSubmitting
                         ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
-                        : 'bg-[#00873a] hover:bg-[#00a347] text-white hover:brightness-105 active:scale-98 cursor-pointer'
+                        : 'checkout-neon-btn text-white active:scale-[0.99]'
                     }`}
                   >
                     {isSubmitting ? (
@@ -715,30 +705,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </>
                     ) : (
                       <>
-                        <span>Place Order ({formatINR(total)})</span>
-                        <ArrowRight className="w-4 h-4" />
+                        <span>Place Order ({formatINR(total)}) →</span>
                       </>
                     )}
                   </button>
-
-                  <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400 pt-1">
-                    <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>SSL Encrypted</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>7-Min Pod Dispatch</span>
-                    </span>
-                  </div>
                 </div>
+
               </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
-
-      {/* Trust & Guarantee Banner */}
-      <TrustBanner />
 
       {/* Footer */}
       <Footer

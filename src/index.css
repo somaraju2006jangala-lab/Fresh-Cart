@@ -640,3 +640,67 @@ div[id$="-modal-panel"] {
   border-color: rgba(255, 255, 255, 0.16) !important;
 }
 
+/* ==========================================================================
+   FUTURISTIC DARK NEON CHECKOUT PAGE STYLES
+   - Semi-solid opaque dark-blue/black containers (90%-94% opacity)
+   - Subtle cyan/blue borders with soft glow
+   - FreshCart vibrant green/cyan accents
+   - Clean, rounded corners with backdrop blur
+   - High contrast, readable typography
+   ========================================================================== */
+
+.checkout-panel {
+  background-color: rgba(6, 18, 36, 0.90) !important;
+  border: 1px solid rgba(14, 55, 95, 0.70) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  backdrop-filter: blur(14px) !important;
+  box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.65) !important;
+}
+
+.checkout-subpanel {
+  background-color: rgba(3, 13, 26, 0.92) !important;
+  border: 1px solid rgba(14, 48, 82, 0.75) !important;
+}
+
+.checkout-input {
+  background-color: rgba(3, 13, 26, 0.92) !important;
+  border: 1px solid rgba(14, 48, 82, 0.75) !important;
+  color: #ffffff !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.checkout-input:focus {
+  background-color: rgba(4, 18, 36, 0.96) !important;
+  border-color: rgba(0, 210, 170, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(0, 210, 170, 0.2) !important;
+}
+
+.checkout-card {
+  background-color: rgba(3, 13, 26, 0.85) !important;
+  border: 1px solid rgba(14, 48, 82, 0.75) !important;
+  transition: all 0.2s ease !important;
+}
+
+.checkout-card:hover {
+  border-color: rgba(0, 210, 170, 0.45) !important;
+  background-color: rgba(4, 18, 35, 0.9) !important;
+}
+
+.checkout-card-selected {
+  background-color: rgba(4, 26, 40, 0.88) !important;
+  border: 2px solid #00d2aa !important;
+  box-shadow: 0 0 16px rgba(0, 210, 170, 0.2) !important;
+}
+
+.checkout-neon-btn {
+  background: #00c978 !important;
+  box-shadow: 0 4px 18px rgba(0, 201, 120, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+.checkout-neon-btn:hover {
+  background: #00b86e !important;
+  filter: brightness(1.08) !important;
+  box-shadow: 0 6px 24px rgba(0, 201, 120, 0.45) !important;
+}
+
