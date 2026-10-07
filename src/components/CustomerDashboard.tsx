@@ -107,7 +107,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (!currentUser?.id) return;
 
     activeOrders.forEach((order) => {
-      if (order.status === 'Picking' && !customerOrderOtps[order.id]) {
+      const isCod = order.paymentMethod?.toLowerCase().includes('cash') || order.paymentMethod === 'Cash on Delivery';
+      if (order.status === 'Picking' && !isCod && !customerOrderOtps[order.id]) {
         // Mark loading state
         setCustomerOrderOtps((prev) => ({
           ...prev,
@@ -551,13 +552,22 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 animate-pulse">
                               ● Verification Pending
                             </span>
-                          ) : order.paymentStatus === 'PAID' || order.status === 'CONFIRMED' ? (
+                          ) : order.paymentStatus === 'PAID' ? (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
-                              ✓ Confirmed (Paid)
+                              ✓ Paid
+                            </span>
+                          ) : order.paymentStatus === 'PENDING' || order.paymentStatus === 'Pending' ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200">
+                              ● Payment Pending
                             </span>
                           ) : (
                             <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
                               ● {getStatusLabel(order.status)}
+                            </span>
+                          )}
+                          {order.status === 'CONFIRMED' && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                              ✓ Order Confirmed
                             </span>
                           )}
                         </div>
@@ -605,8 +615,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       />
                     )}
 
-                    {/* Order Handover OTP Section for Picking Status */}
-                    {order.status === 'Picking' && (
+                    {/* Order Handover OTP Section for Picking Status (Bypassed for Cash on Delivery) */}
+                    {order.status === 'Picking' &&
+                      !order.paymentMethod?.toLowerCase().includes('cash') &&
+                      order.paymentMethod !== 'Cash on Delivery' && (
                       <div
                         id={`order-handover-otp-${order.id.replace('#', '')}`}
                         className="p-4 sm:p-5 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2.5 shadow-xs animate-in fade-in duration-200"

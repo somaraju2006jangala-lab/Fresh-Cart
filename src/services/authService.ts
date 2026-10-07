@@ -51,6 +51,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     status: 'Picking',
     createdAt: new Date().toISOString(),
     paymentMethod: 'Cash on Delivery',
+    paymentStatus: 'PENDING',
   },
   {
     id: '#FC-1006',
@@ -87,6 +88,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     status: 'Picking',
     createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
     paymentMethod: 'Cash on Delivery',
+    paymentStatus: 'PENDING',
   },
   {
     id: '#1001',
@@ -123,6 +125,7 @@ const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
     status: 'Picking',
     createdAt: '2026-09-23T10:42:00.000Z',
     paymentMethod: 'Cash on Delivery',
+    paymentStatus: 'PENDING',
   },
   {
     id: '#FC-94821',

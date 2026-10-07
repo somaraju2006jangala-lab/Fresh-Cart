@@ -61,12 +61,12 @@ export interface Order {
   discount: number;
   total: number;
   couponCode?: string;
-  status: 'Picking' | 'Ordered' | 'Pending' | 'Picking at Pod #104' | 'Cold-Chain En Route' | 'Delivered' | string;
+  status: 'Picking' | 'Ordered' | 'Pending' | 'Picking at Pod #104' | 'Cold-Chain En Route' | 'Delivered' | 'CONFIRMED' | string;
   createdAt: string;
   otpVerifiedAt?: string;
   handoverReleased?: boolean;
   paymentMethod?: string;
-  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'PENDING VERIFICATION' | 'PAID' | 'REJECTED' | string;
+  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'PENDING VERIFICATION' | 'PAID' | 'REJECTED' | 'PENDING' | string;
   paymentVerificationStatus?: PaymentVerificationStatus;
   paymentProof?: PaymentProofData;
 }

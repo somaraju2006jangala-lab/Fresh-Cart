@@ -327,6 +327,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setTimeout(async () => {
       setIsSubmitting(false);
       const isUpi = paymentMethod === 'upi_qr' || paymentMethod === 'upi_app';
+      const isCod = paymentMethod === 'cash';
       const generatedOrder = placedOrderId || draftOrderId;
       const orderNum = generatedOrder.replace('#FC-', '');
       setOrderNumber(orderNum);
@@ -349,36 +350,40 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
-        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : 'Picking in progress',
+        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : (isCod ? 'Express Cold-Chain Delivery' : 'Picking in progress'),
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : 'Picking',
+        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : (isCod ? 'CONFIRMED' : 'Picking'),
         createdAt: new Date().toISOString(),
         paymentMethod: paymentMethodLabel,
-        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'Pending',
+        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'PENDING',
         paymentVerificationStatus: isUpi ? (submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED') : undefined,
         paymentProof: submittedProof || undefined,
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend Order Handover OTP generation for the new order
-      try {
-        const otpRes = await generateOrderOtp(
-          generatedOrder,
-          newCustomerOrder.customerId || 'guest_user',
-          customerPhone || ''
-        );
+      // Trigger backend Order Handover OTP generation ONLY for online orders (completely bypassed for Cash on Delivery)
+      if (!isCod) {
+        try {
+          const otpRes = await generateOrderOtp(
+            generatedOrder,
+            newCustomerOrder.customerId || 'guest_user',
+            customerPhone || ''
+          );
 
-        if (otpRes.success && otpRes.otp) {
-          setOrderHandoverOtp(otpRes.otp);
-          setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
-          setIsOtpExpired(false);
+          if (otpRes.success && otpRes.otp) {
+            setOrderHandoverOtp(otpRes.otp);
+            setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
+            setIsOtpExpired(false);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      } else {
+        setOrderHandoverOtp(null);
       }
 
       setPlacedOrderId(generatedOrder);
@@ -431,42 +436,44 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </p>
             </div>
 
-            {/* Handover OTP Verification Box */}
-            <div className="checkout-subpanel rounded-2xl p-5 sm:p-6 text-center space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Delivery Handover OTP</span>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-400 font-mono">
-                  {orderHandoverOtp || '----'}
-                </span>
-                <p className="text-xs text-slate-300 max-w-sm mx-auto pt-1">
-                  Share this 4-digit code with your delivery runner at your doorstep to receive your items.
-                </p>
-              </div>
-
-              {isOtpExpired ? (
-                <div className="space-y-2 pt-1">
-                  <p className="text-xs text-amber-400 font-medium">OTP has expired</p>
-                  <button
-                    type="button"
-                    onClick={handleCustomerResendOtp}
-                    disabled={isResendingOtp}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-white/10 transition-colors cursor-pointer"
-                  >
-                    <RotateCw className={`w-3.5 h-3.5 ${isResendingOtp ? 'animate-spin' : ''}`} />
-                    <span>Resend OTP</span>
-                  </button>
+            {/* Handover OTP Verification Box (Only for online orders with active OTP; completely bypassed for Cash on Delivery) */}
+            {paymentMethod !== 'cash' && orderHandoverOtp && (
+              <div className="checkout-subpanel rounded-2xl p-5 sm:p-6 text-center space-y-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Delivery Handover OTP</span>
                 </div>
-              ) : (
-                <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Valid for 10 minutes</span>
-                </p>
-              )}
-            </div>
+
+                <div className="space-y-1">
+                  <span className="text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-400 font-mono">
+                    {orderHandoverOtp || '----'}
+                  </span>
+                  <p className="text-xs text-slate-300 max-w-sm mx-auto pt-1">
+                    Share this 4-digit code with your delivery runner at your doorstep to receive your items.
+                  </p>
+                </div>
+
+                {isOtpExpired ? (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs text-amber-400 font-medium">OTP has expired</p>
+                    <button
+                      type="button"
+                      onClick={handleCustomerResendOtp}
+                      disabled={isResendingOtp}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-white/10 transition-colors cursor-pointer"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${isResendingOtp ? 'animate-spin' : ''}`} />
+                      <span>Resend OTP</span>
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Valid for 10 minutes</span>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Delivery Details Recap */}
             <div className="checkout-subpanel rounded-2xl p-4 text-left text-xs text-slate-300 space-y-2">

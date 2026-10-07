@@ -208,6 +208,23 @@ export async function generateOrderOtp(
 
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
 
+  // If order is Cash on Delivery, OTP is NOT required and must not be generated
+  const dbOrder = (await findOrderInDb(orderId)) || (await findOrderInDb(altId));
+  const isCod =
+    dbOrder?.paymentMethod?.toLowerCase().includes('cash') ||
+    dbOrder?.paymentMethod === 'Cash on Delivery';
+  if (isCod) {
+    return {
+      success: false,
+      orderId,
+      maskedPhone: 'Not available',
+      expiresAt: 0,
+      otp: '',
+      message: 'OTP is not required for Cash on Delivery orders.',
+      error: 'OTP is not required for Cash on Delivery orders.',
+    };
+  }
+
   // If an active UNUSED and unexpired OTP already exists for this order, reuse it
   const existing = otpStore.get(orderId) || otpStore.get(altId);
   if (existing && existing.status === 'UNUSED' && Date.now() < existing.expiresAt) {
@@ -311,6 +328,21 @@ export async function resendOrderOtp(
   }
 
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  // If order is Cash on Delivery, OTP is NOT required
+  const dbOrder = (await findOrderInDb(orderId)) || (await findOrderInDb(altId));
+  const isCod =
+    dbOrder?.paymentMethod?.toLowerCase().includes('cash') ||
+    dbOrder?.paymentMethod === 'Cash on Delivery';
+  if (isCod) {
+    return {
+      success: false,
+      orderId,
+      message: 'OTP is not required for Cash on Delivery orders.',
+      error: 'OTP is not required for Cash on Delivery orders.',
+    };
+  }
+
   const existing = otpStore.get(orderId) || otpStore.get(altId);
   const customerId = fallbackCustomerId || existing?.customerId || 'guest';
   const customerPhone = fallbackCustomerPhone || existing?.customerPhone || '';
@@ -421,6 +453,20 @@ export async function verifyOrderOtp(
   }
 
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  // If order is Cash on Delivery, OTP is NOT required
+  const dbOrder = (await findOrderInDb(orderId)) || (await findOrderInDb(altId));
+  const isCod =
+    dbOrder?.paymentMethod?.toLowerCase().includes('cash') ||
+    dbOrder?.paymentMethod === 'Cash on Delivery';
+  if (isCod) {
+    return {
+      success: false,
+      error: 'OTP verification is not required for Cash on Delivery orders.',
+      status: 'Picking',
+    };
+  }
+
   const dbOtp = await findOtpRecordInDb(orderId);
   const localRecord = otpStore.get(orderId) || otpStore.get(altId);
 
@@ -635,9 +681,24 @@ export async function getCustomerOrderOtp(
   }
 
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const dbOrder = await findOrderInDb(orderId);
+  const dbOrder = (await findOrderInDb(orderId)) || (await findOrderInDb(altId));
   const localRecord = otpStore.get(orderId) || otpStore.get(altId);
   const knownOrder = KNOWN_CUSTOMER_ORDERS[orderId] || KNOWN_CUSTOMER_ORDERS[altId];
+
+  // If order is Cash on Delivery, OTP is NOT required
+  const isCod =
+    dbOrder?.paymentMethod?.toLowerCase().includes('cash') ||
+    dbOrder?.paymentMethod === 'Cash on Delivery';
+  if (isCod) {
+    return {
+      success: false,
+      orderId,
+      expiresAt: 0,
+      isExpired: false,
+      status: 'NOT_FOUND',
+      error: 'OTP is not required for Cash on Delivery orders.',
+    };
+  }
 
   const orderOwner = dbOrder?.customerId || localRecord?.customerId || knownOrder?.customerId;
   const orderStatus = dbOrder?.status || knownOrder?.status || (localRecord?.status === 'USED' ? 'Delivered' : 'Picking');

@@ -362,6 +362,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       const customerPhone = currentUser?.phone?.trim() || '';
 
+      const isCod = paymentMethod === 'cash';
+      const isUpi = paymentMethod === 'upi_qr' || paymentMethod === 'upi_app';
       const paymentMethodLabel =
         paymentMethod === 'upi_qr'
           ? 'UPI / QR Payment'
@@ -378,34 +380,38 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
-        estimatedDeliveryTime: 'Picking in progress',
+        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : (isCod ? 'Express Cold-Chain Delivery' : 'Picking in progress'),
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: 'Picking',
+        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : (isCod ? 'CONFIRMED' : 'Picking'),
         createdAt: new Date().toISOString(),
         paymentMethod: paymentMethodLabel,
-        paymentStatus: paymentMethod === 'cash' ? 'Pending' : 'Pending Verification',
+        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'PENDING',
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend Order Handover OTP generation for the new order
-      try {
-        const otpRes = await generateOrderOtp(
-          generatedOrder,
-          newCustomerOrder.customerId || 'guest_user',
-          customerPhone || ''
-        );
+      // Trigger backend Order Handover OTP generation ONLY for online orders (completely bypassed for Cash on Delivery)
+      if (!isCod) {
+        try {
+          const otpRes = await generateOrderOtp(
+            generatedOrder,
+            newCustomerOrder.customerId || 'guest_user',
+            customerPhone || ''
+          );
 
-        if (otpRes.success && otpRes.otp) {
-          setOrderHandoverOtp(otpRes.otp);
-          setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
-          setIsOtpExpired(false);
+          if (otpRes.success && otpRes.otp) {
+            setOrderHandoverOtp(otpRes.otp);
+            setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
+            setIsOtpExpired(false);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      } else {
+        setOrderHandoverOtp(null);
       }
 
       setPlacedOrderId(generatedOrder);
@@ -849,8 +855,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            {/* Order Handover OTP Card */}
-            {orderHandoverOtp && (
+            {/* Order Handover OTP Card (Only for non-COD orders with active OTP; bypassed for Cash on Delivery) */}
+            {orderHandoverOtp && paymentMethod !== 'cash' && (
               <div
                 id="order-handover-otp-section"
                 className="p-4 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2 shadow-xs animate-in fade-in duration-200"
