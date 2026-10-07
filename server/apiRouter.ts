@@ -53,6 +53,11 @@ import {
 import fs from 'fs';
 import path from 'path';
 import { generateQrDataUrl, buildMerchantUpiUri } from '../src/utils/qrCodeGenerator.ts';
+import {
+  getPhonePeConfig,
+  createUpiPaymentIntent,
+  verifyUpiPaymentWithProvider,
+} from './paymentProviderService.ts';
 
 ensureEnvLoaded();
 
@@ -1232,6 +1237,76 @@ apiRouter.post('/api/payment-settings', async (req: Request, res: Response) => {
     sendJson(res, 200, { success: true, settings });
   } catch (err: any) {
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to save payment settings.' });
+  }
+});
+
+// ============================================================================
+// SERVER-GENERATED UPI PAYMENT INTENT & PROVIDER STATUS ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/payments/provider-config
+ * Checks whether live PhonePe Payment Gateway credentials are configured.
+ */
+apiRouter.get('/api/payments/provider-config', (_req: Request, res: Response) => {
+  const config = getPhonePeConfig();
+  sendJson(res, 200, {
+    success: true,
+    isGatewayConfigured: config.isConfigured,
+    provider: 'PHONEPE_PG',
+    env: config.env,
+    missingKeys: config.missingKeys,
+  });
+});
+
+/**
+ * POST /api/payments/create-intent
+ * Creates a server-generated UPI intent with unique transaction tracking.
+ */
+apiRouter.post('/api/payments/create-intent', async (req: Request, res: Response) => {
+  try {
+    const { orderId, amount, customerId, customerPhone, targetApp } = req.body || {};
+    if (!orderId || !amount || Number(amount) <= 0) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Valid orderId and positive amount are required to generate UPI intent.',
+      });
+      return;
+    }
+
+    const auth = extractAuthCustomer(req);
+    const result = await createUpiPaymentIntent({
+      orderId: String(orderId),
+      amount: Number(amount),
+      customerId: customerId || auth.customerId || 'guest_user',
+      customerPhone: customerPhone ? String(customerPhone) : undefined,
+      targetApp: targetApp || 'phonepe',
+    });
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error generating UPI payment intent.',
+    });
+  }
+});
+
+/**
+ * GET /api/payments/status/:orderId
+ * Verifies transaction with payment gateway/provider.
+ */
+apiRouter.get('/api/payments/status/:orderId', async (req: Request, res: Response) => {
+  try {
+    const orderId = decodeURIComponent(req.params.orderId);
+    const transactionId = (req.query.transactionId as string) || '';
+    const result = await verifyUpiPaymentWithProvider(orderId, transactionId);
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error checking payment status.',
+    });
   }
 });
 

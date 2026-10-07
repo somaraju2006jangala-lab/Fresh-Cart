@@ -276,7 +276,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
    * - QR Code long-press
    * - QR Code desktop double-click
    */
-  const handleLaunchUpiDeepLink = (optionalUri?: string) => {
+  const handleLaunchUpiDeepLink = async (optionalUri?: string) => {
     // 1. Verify valid payable amount and UPI ID
     if (total <= 0) {
       console.warn('[FreshCart UPI Launch] Prevented launch: Order amount must be greater than 0.');
@@ -296,15 +296,41 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     lastLaunchTimeRef.current = now;
 
     // 2. Build the standard UPI payment URI from the single generator
-    const upiUriToLaunch = optionalUri || buildCustomerPaymentUpiUri(
+    let upiUriToLaunch = optionalUri || buildCustomerPaymentUpiUri(
       cleanUpiId,
       paymentSettings.payeeName || 'FreshCart Grocery Store',
       total,
       checkoutTxnRef
     );
 
-    // 3. Pre-save order context in sessionStorage and customer history/MySQL backend
     const orderIdToUse = placedOrderId || draftOrderId;
+
+    // For Direct UPI, request server-generated UPI intent from backend/provider
+    if (paymentMethod === 'upi_app' && !optionalUri) {
+      try {
+        const intentRes = await fetch('/api/payments/create-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: orderIdToUse,
+            amount: total,
+            customerId: currentUser?.id || 'guest_user',
+            customerPhone: currentUser?.phone || undefined,
+            targetApp: 'phonepe',
+          }),
+        });
+        if (intentRes.ok) {
+          const intentData = await intentRes.json();
+          if (intentData.success && intentData.intentUri) {
+            upiUriToLaunch = intentData.intentUri;
+          }
+        }
+      } catch {
+        // Fallback to standard URI
+      }
+    }
+
+    // 3. Pre-save order context in sessionStorage and customer history/MySQL backend
     try {
       sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
       sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);

@@ -142,20 +142,45 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
   };
 
-  const handleLaunchUpiDeepLink = (upiUri: string) => {
+  const handleLaunchUpiDeepLink = async (upiUri: string) => {
     if (!upiUri) return;
     const now = Date.now();
     // Guard against duplicate launches within 1500ms
     if (now - lastLaunchTimeRef.current < 1500) {
       return;
     }
+    lastLaunchTimeRef.current = now;
+
+    let upiUriToLaunch = upiUri;
+    if (paymentMethod === 'upi_app') {
+      try {
+        const intentRes = await fetch('/api/payments/create-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: placedOrderId || '#FC-MODAL',
+            amount: total,
+            customerId: currentUser?.id || 'guest_user',
+            customerPhone: currentUser?.phone || undefined,
+            targetApp: 'phonepe',
+          }),
+        });
+        if (intentRes.ok) {
+          const intentData = await intentRes.json();
+          if (intentData.success && intentData.intentUri) {
+            upiUriToLaunch = intentData.intentUri;
+          }
+        }
+      } catch {}
+    }
+
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
       console.log('[FreshCart UPI Payment Launch - Modal]', {
         paymentMethod,
         amount: total.toFixed(2),
         hasUpiId: Boolean(paymentSettings.upiId),
-        uriScheme: upiUri.substring(0, 10),
-        uriParams: upiUri.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
+        uriScheme: upiUriToLaunch.substring(0, 10),
+        uriParams: upiUriToLaunch.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
       });
     }
 
@@ -163,7 +188,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setTimeout(() => setIsQrLaunchingUpi(false), 2500);
 
     // Synchronously launch the UPI deep link directly in the user gesture
-    openUPIPayment(upiUri);
+    openUPIPayment(upiUriToLaunch);
     setShowQrUpiFallback(true);
   };
 
