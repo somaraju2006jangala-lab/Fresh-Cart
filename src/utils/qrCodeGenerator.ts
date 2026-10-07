@@ -175,33 +175,33 @@ export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
 
 /**
  * Synchronously launches the given UPI deep-link URI within an active user gesture.
- * Directly launches compatible installed UPI payment applications (Google Pay, PhonePe, Paytm, BHIM).
+ * Directly launches compatible installed UPI payment applications (PhonePe, Google Pay, Paytm, BHIM).
  */
 export function openUPIPayment(upiUri: string): boolean {
   if (!upiUri || typeof window === 'undefined') return false;
   try {
-    // 1. Dispatch via temporary top-level anchor click for clean Android Intent dispatch
-    const link = document.createElement('a');
-    link.href = upiUri;
-    link.setAttribute('target', '_top');
-    link.rel = 'noreferrer';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      try {
-        if (document.body.contains(link)) {
-          document.body.removeChild(link);
-        }
-      } catch {}
-    }, 200);
-
-    // 2. Direct location assignment fallback
+    // Directly launch the UPI deep link via window.location.href.
+    // This is the cleanest, single-intent dispatch supported across all Android UPI apps (PhonePe, Google Pay, Paytm, BHIM).
+    // Using a single direct navigation avoids:
+    // 1. Double-intent triggers caused by consecutive anchor.click() and location.href calls
+    // 2. Intent cancellation caused by target="_top" or rel="noreferrer" stripping
+    // 3. Duplicate transaction reference collisions in PhonePe's payment router
     window.location.href = upiUri;
     return true;
   } catch (err) {
     try {
-      window.location.href = upiUri;
+      const link = document.createElement('a');
+      link.href = upiUri;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        try {
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
+          }
+        } catch {}
+      }, 100);
       return true;
     } catch (fallbackErr) {
       console.error('Failed to launch UPI deep link URI:', fallbackErr);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
@@ -336,6 +336,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
+  const modalTxnRef = useMemo(() => {
+    const activeOrderId = (placedOrderId || '#FC-MODAL').replace(/^#/, '');
+    const storageKey = `freshcart_modal_txn_ref_${activeOrderId}`;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem(storageKey);
+        if (saved) return saved;
+      } catch {}
+    }
+    const cleanId = activeOrderId.replace(/[^a-zA-Z0-9]/g, '');
+    const ref = cleanId ? `FC-${cleanId}` : generateUniquePaymentReference();
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(storageKey, ref);
+      } catch {}
+    }
+    return ref;
+  }, [placedOrderId]);
+
   const handleApplyCheckoutCoupon = () => {
     const code = checkoutCouponInput.trim().toUpperCase();
     if (!code) return;
@@ -615,7 +634,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 {/* Amount-Based Payment QR Code */}
                 {(() => {
-                  const modalTxnRef = generateUniquePaymentReference();
                   const modalUpiUri = buildCustomerPaymentUpiUri(
                     paymentSettings.upiId || 'freshcart@upi',
                     paymentSettings.payeeName || 'FreshCart Grocery Store',
@@ -700,7 +718,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 paymentSettings.upiId || 'freshcart@upi',
                 paymentSettings.payeeName || 'FreshCart Grocery Store',
                 total,
-                generateUniquePaymentReference()
+                modalTxnRef
               );
 
               return (

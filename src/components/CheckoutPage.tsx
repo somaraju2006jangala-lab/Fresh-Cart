@@ -249,14 +249,24 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
   const checkoutTxnRef = useMemo(() => {
+    const activeOrderId = (placedOrderId || draftOrderId || '').replace(/^#/, '');
+    const storageKey = `freshcart_txn_ref_${activeOrderId || 'active'}`;
     if (typeof window !== 'undefined') {
       try {
-        const savedRef = sessionStorage.getItem('freshcart_active_checkout_payment_ref');
+        const savedRef = sessionStorage.getItem(storageKey) || sessionStorage.getItem('freshcart_active_checkout_payment_ref');
         if (savedRef) return savedRef;
       } catch {}
     }
-    return generateUniquePaymentReference();
-  }, [total, items.map((i) => `${i.product.id}:${i.quantity}`).join(',')]);
+    const cleanId = activeOrderId.replace(/[^a-zA-Z0-9]/g, '');
+    const newRef = cleanId ? `FC-${cleanId}` : generateUniquePaymentReference();
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(storageKey, newRef);
+        sessionStorage.setItem('freshcart_active_checkout_payment_ref', newRef);
+      } catch {}
+    }
+    return newRef;
+  }, [placedOrderId, draftOrderId]);
 
   /**
    * Single Source of Truth for Launching UPI Payment Intents:
