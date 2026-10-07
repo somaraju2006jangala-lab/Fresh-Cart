@@ -210,14 +210,155 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const lastMouseClickTimeRef = useRef<number>(0);
   const lastLaunchTimeRef = useRef<number>(0);
 
+  // Payment Verification & Status Feedback State
+  const [paymentStatusFeedback, setPaymentStatusFeedback] = useState<{
+    type: 'checking' | 'processing' | 'verified' | 'failed' | 'pending';
+    message: string;
+    subMessage?: string;
+  } | null>(null);
+
+  const activePaymentTxnRef = useRef<{ orderId: string; transactionId: string } | null>(null);
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef<boolean>(false);
+
   // Clean up timer on unmount
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
       }
+      if (pollingTimerRef.current) {
+        clearTimeout(pollingTimerRef.current);
+      }
     };
   }, []);
+
+  const checkPaymentStatusOnce = async (orderId: string, transactionId: string): Promise<boolean> => {
+    try {
+      setPaymentStatusFeedback((prev) => ({
+        type: prev?.type === 'processing' ? 'processing' : 'checking',
+        message: prev?.type === 'processing' ? 'Payment is being verified...' : 'Checking payment status...',
+        subMessage: 'Verifying real transaction with payment backend...',
+      }));
+
+      const cleanId = orderId.replace(/^#/, '');
+      const res = await fetch(
+        `/api/payments/status/${encodeURIComponent(cleanId)}?transactionId=${encodeURIComponent(transactionId)}`
+      );
+      if (!res.ok) return false;
+      const data = await res.json();
+
+      if (data?.verified && data?.paymentStatus === 'PAID') {
+        setPaymentStatusFeedback({
+          type: 'verified',
+          message: 'Payment successful',
+          subMessage: 'Your transaction was confirmed and order placed!',
+        });
+        isPollingRef.current = false;
+        if (pollingTimerRef.current) {
+          clearTimeout(pollingTimerRef.current);
+          pollingTimerRef.current = null;
+        }
+        onClearCart();
+        setStep('success');
+        return true;
+      }
+
+      if (data?.paymentStatus === 'PAYMENT_PROCESSING') {
+        setPaymentStatusFeedback({
+          type: 'processing',
+          message: 'Payment is being verified...',
+          subMessage: 'Awaiting confirmation from bank or UPI app...',
+        });
+        return false;
+      }
+
+      if (data?.paymentStatus === 'FAILED') {
+        setPaymentStatusFeedback({
+          type: 'failed',
+          message: 'Payment failed',
+          subMessage: data.error || 'Transaction was declined or failed in UPI app.',
+        });
+        isPollingRef.current = false;
+        return true;
+      }
+
+      if (data?.paymentStatus === 'REJECTED') {
+        setPaymentStatusFeedback({
+          type: 'failed',
+          message: 'Payment rejected',
+          subMessage: data.error || 'Payment amount mismatch or rejected by system.',
+        });
+        isPollingRef.current = false;
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const startBoundedStatusPolling = (orderId: string, transactionId: string) => {
+    if (pollingTimerRef.current) {
+      clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+    isPollingRef.current = true;
+    activePaymentTxnRef.current = { orderId, transactionId };
+
+    // Sequence of bounded checks: 0ms (immediate), 2s, 4s, 6s (total ~12s max)
+    const delays = [0, 2000, 4000, 6000];
+    let stepIndex = 0;
+
+    const executeStep = async () => {
+      if (!isPollingRef.current) return;
+      const isTerminal = await checkPaymentStatusOnce(orderId, transactionId);
+      if (isTerminal) return;
+
+      stepIndex++;
+      if (stepIndex < delays.length && isPollingRef.current) {
+        pollingTimerRef.current = setTimeout(executeStep, delays[stepIndex]);
+      } else if (isPollingRef.current) {
+        // Polling finished without automatic gateway confirmation
+        isPollingRef.current = false;
+        setPaymentStatusFeedback({
+          type: 'pending',
+          message: 'Payment verification pending',
+          subMessage: 'Please upload your payment screenshot below so our admin team can verify your payment.',
+        });
+      }
+    };
+
+    executeStep();
+  };
+
+  // Visibility and window focus listeners for returning customers
+  useEffect(() => {
+    const handleReturn = () => {
+      if (document.visibilityState === 'visible' && activePaymentTxnRef.current && step !== 'success') {
+        startBoundedStatusPolling(activePaymentTxnRef.current.orderId, activePaymentTxnRef.current.transactionId);
+      }
+    };
+
+    const handleFocus = () => {
+      if (activePaymentTxnRef.current && step !== 'success') {
+        startBoundedStatusPolling(activePaymentTxnRef.current.orderId, activePaymentTxnRef.current.transactionId);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleReturn);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleReturn);
+      window.removeEventListener('focus', handleFocus);
+      if (pollingTimerRef.current) {
+        clearTimeout(pollingTimerRef.current);
+      }
+    };
+  }, [step]);
+
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
@@ -396,6 +537,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     const upiUri = upiUriToLaunch;
     openUPIPayment(upiUri);
     setShowQrUpiFallback(true);
+
+    // 6. Start bounded payment status polling with payment backend
+    startBoundedStatusPolling(orderIdToUse, checkoutTxnRef);
   };
 
   const launchExistingUpiIntent = handleLaunchUpiDeepLink;
@@ -1028,6 +1172,35 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             </p>
                           </div>
                         )}
+
+                        {/* Real Payment Status Feedback Banner */}
+                        {paymentStatusFeedback && (
+                          <div
+                            id="checkout-payment-status-feedback-qr"
+                            data-testid="checkout-payment-status-feedback"
+                            className={`p-3.5 rounded-xl border text-xs sm:text-sm text-center max-w-sm w-full transition-all space-y-1 ${
+                              paymentStatusFeedback.type === 'verified'
+                                ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200'
+                                : paymentStatusFeedback.type === 'processing'
+                                ? 'bg-amber-950/50 border-amber-500/50 text-amber-200 animate-pulse'
+                                : paymentStatusFeedback.type === 'checking'
+                                ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 animate-pulse'
+                                : paymentStatusFeedback.type === 'failed'
+                                ? 'bg-rose-950/50 border-rose-500/50 text-rose-200'
+                                : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+                            }`}
+                          >
+                            <p className="font-bold flex items-center justify-center gap-1.5">
+                              {paymentStatusFeedback.type === 'checking' && <RotateCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                              {paymentStatusFeedback.type === 'processing' && <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-400" />}
+                              {paymentStatusFeedback.type === 'verified' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                              <span>{paymentStatusFeedback.message}</span>
+                            </p>
+                            {paymentStatusFeedback.subMessage && (
+                              <p className="text-[11px] opacity-80 leading-normal">{paymentStatusFeedback.subMessage}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
@@ -1093,6 +1266,36 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <span>Pay {formatINR(total)} via UPI App</span>
                       </a>
                     </div>
+
+                    {/* Real Payment Status Feedback Banner */}
+                    {paymentStatusFeedback && (
+                      <div
+                        id="checkout-payment-status-feedback-app"
+                        data-testid="checkout-payment-status-feedback"
+                        className={`p-3.5 rounded-xl border text-xs sm:text-sm text-center max-w-sm w-full transition-all space-y-1 ${
+                          paymentStatusFeedback.type === 'verified'
+                            ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200'
+                            : paymentStatusFeedback.type === 'processing'
+                            ? 'bg-amber-950/50 border-amber-500/50 text-amber-200 animate-pulse'
+                            : paymentStatusFeedback.type === 'checking'
+                            ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 animate-pulse'
+                            : paymentStatusFeedback.type === 'failed'
+                            ? 'bg-rose-950/50 border-rose-500/50 text-rose-200'
+                            : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+                        }`}
+                      >
+                        <p className="font-bold flex items-center justify-center gap-1.5">
+                          {paymentStatusFeedback.type === 'checking' && <RotateCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
+                          {paymentStatusFeedback.type === 'processing' && <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-400" />}
+                          {paymentStatusFeedback.type === 'verified' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                          <span>{paymentStatusFeedback.message}</span>
+                        </p>
+                        {paymentStatusFeedback.subMessage && (
+                          <p className="text-[11px] opacity-80 leading-normal">{paymentStatusFeedback.subMessage}</p>
+                        )}
+                      </div>
+                    )}
+
 
                     {/* Clear option: Upload Payment Screenshot after completing payment */}
                     <div className="w-full pt-2">

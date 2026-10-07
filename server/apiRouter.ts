@@ -57,6 +57,7 @@ import {
   getPhonePeConfig,
   createUpiPaymentIntent,
   verifyUpiPaymentWithProvider,
+  handlePhonePeWebhook,
 } from './paymentProviderService.ts';
 
 ensureEnvLoaded();
@@ -1309,6 +1310,24 @@ apiRouter.get('/api/payments/status/:orderId', async (req: Request, res: Respons
     });
   }
 });
+
+/**
+ * POST /api/payments/webhook & /api/payments/phonepe/webhook
+ * Official server-side webhook notification receiver for payment gateway (PhonePe PG).
+ * Verifies SHA256 checksum signature, matches exact transaction amount, and idempotently updates payment/order.
+ */
+apiRouter.post(['/api/payments/webhook', '/api/payments/phonepe/webhook', '/payments/phonepe/webhook'], async (req: Request, res: Response) => {
+  try {
+    const result = await handlePhonePeWebhook(req.body, req.headers);
+    sendJson(res, result.statusCode, result);
+  } catch (err: any) {
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Server error processing payment webhook.',
+    });
+  }
+});
+
 
 // ============================================================================
 // PAYMENT PROOF VERIFICATION API ENDPOINTS

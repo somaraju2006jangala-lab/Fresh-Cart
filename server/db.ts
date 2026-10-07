@@ -2660,10 +2660,15 @@ export async function verifyPaymentProofInDb(
   }
 
   // Update in-memory order if present
+  let isAlreadyPaidInMemory = false;
   const ordIdx = inMemoryOrders.findIndex(
     (o) => o.id === orderId || o.id === altOrderId || o.order_id === orderId || o.order_id === altOrderId
   );
   if (ordIdx >= 0) {
+    isAlreadyPaidInMemory = (
+      inMemoryOrders[ordIdx].paymentStatus === 'PAID' ||
+      inMemoryOrders[ordIdx].payment_status === 'PAID'
+    );
     inMemoryOrders[ordIdx] = {
       ...inMemoryOrders[ordIdx],
       status: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
@@ -2682,6 +2687,13 @@ export async function verifyPaymentProofInDb(
       await connection.beginTransaction();
 
       if (action === 'VERIFY') {
+        // Check existing order payment status to enforce IDEMPOTENCY
+        const [existingOrderRows] = await connection.query<RowDataPacket[]>(
+          `SELECT payment_status FROM orders WHERE order_id IN (?, ?) LIMIT 1`,
+          [orderId, altOrderId]
+        );
+        const isAlreadyPaidInDb = existingOrderRows.length > 0 && existingOrderRows[0].payment_status === 'PAID';
+
         // Update payment_proofs
         await connection.query(
           `UPDATE payment_proofs
@@ -2711,40 +2723,42 @@ export async function verifyPaymentProofInDb(
           [orderId, altOrderId]
         );
 
-        // Deduct inventory ONLY on admin verification
-        const [items] = await connection.query<RowDataPacket[]>(
-          `SELECT product_id, quantity, product_name FROM order_items WHERE order_id IN (?, ?)`,
-          [orderId, altOrderId]
-        );
-
-        for (const it of items) {
-          const qty = Number(it.quantity) || 1;
-          const [prodRows] = await connection.query<RowDataPacket[]>(
-            `SELECT stock, title, sku FROM products WHERE product_id = ? LIMIT 1`,
-            [it.product_id]
+        // Deduct inventory ONLY on the first verification transition to PAID (prevents duplicate inventory deduction)
+        if (!isAlreadyPaidInDb && !isAlreadyPaidInMemory) {
+          const [items] = await connection.query<RowDataPacket[]>(
+            `SELECT product_id, quantity, product_name FROM order_items WHERE order_id IN (?, ?)`,
+            [orderId, altOrderId]
           );
 
-          if (prodRows.length > 0) {
-            const currentStock = Number(prodRows[0].stock) || 0;
-            const newStock = Math.max(0, currentStock - qty);
-            await connection.query(
-              `UPDATE products SET stock = ? WHERE product_id = ?`,
-              [newStock, it.product_id]
+          for (const it of items) {
+            const qty = Number(it.quantity) || 1;
+            const [prodRows] = await connection.query<RowDataPacket[]>(
+              `SELECT stock, title, sku FROM products WHERE product_id = ? LIMIT 1`,
+              [it.product_id]
             );
 
-            // Record inventory log audit entry
-            await connection.query(
-              `INSERT INTO inventory_logs (product_id, previous_quantity, new_quantity, change_quantity, action, notes, operator)
-               VALUES (?, ?, ?, ?, 'SALE', ?, ?)`,
-              [
-                it.product_id,
-                currentStock,
-                newStock,
-                -qty,
-                `Verified Payment Order (${orderId})`,
-                adminOperator,
-              ]
-            );
+            if (prodRows.length > 0) {
+              const currentStock = Number(prodRows[0].stock) || 0;
+              const newStock = Math.max(0, currentStock - qty);
+              await connection.query(
+                `UPDATE products SET stock = ? WHERE product_id = ?`,
+                [newStock, it.product_id]
+              );
+
+              // Record inventory log audit entry
+              await connection.query(
+                `INSERT INTO inventory_logs (product_id, previous_quantity, new_quantity, change_quantity, action, notes, operator)
+                 VALUES (?, ?, ?, ?, 'SALE', ?, ?)`,
+                [
+                  it.product_id,
+                  currentStock,
+                  newStock,
+                  -qty,
+                  `Verified Payment Order (${orderId})`,
+                  adminOperator,
+                ]
+              );
+            }
           }
         }
       } else {
@@ -2797,6 +2811,62 @@ export async function verifyPaymentProofInDb(
       orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
     };
   }
+}
+
+/**
+ * Finds an order by its payment ID or transaction reference.
+ */
+export async function findOrderByPaymentOrTransactionIdInDb(transactionId: string): Promise<any | null> {
+  if (!transactionId) return null;
+  const cleanTxn = transactionId.trim();
+
+  // 1. Direct match by order ID
+  const byOrder = await findOrderInDb(cleanTxn);
+  if (byOrder) return byOrder;
+
+  // 2. Extract base order reference if format is FC-XXXX-...
+  const fcMatch = cleanTxn.match(/^FC-([A-Za-z0-9]+)/i);
+  if (fcMatch) {
+    const candidateId = `#FC-${fcMatch[1]}`;
+    const candOrder = await findOrderInDb(candidateId);
+    if (candOrder) return candOrder;
+    const candOrder2 = await findOrderInDb(`FC-${fcMatch[1]}`);
+    if (candOrder2) return candOrder2;
+  }
+
+  // 3. Check in-memory orders
+  const mem = inMemoryOrders.find(
+    (o) =>
+      o.paymentId === cleanTxn ||
+      o.payment_id === cleanTxn ||
+      o.id === cleanTxn ||
+      o.order_id === cleanTxn
+  );
+  if (mem) return mem;
+
+  // 4. Check MySQL orders and payments table
+  const pool = getPool();
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT order_id FROM orders WHERE payment_id = ? LIMIT 1`,
+      [cleanTxn]
+    );
+    if (rows.length > 0 && rows[0].order_id) {
+      return await findOrderInDb(rows[0].order_id);
+    }
+
+    const [payRows] = await pool.query<RowDataPacket[]>(
+      `SELECT order_id FROM payments WHERE payment_id = ? LIMIT 1`,
+      [cleanTxn]
+    );
+    if (payRows.length > 0 && payRows[0].order_id) {
+      return await findOrderInDb(payRows[0].order_id);
+    }
+  } catch {
+    // MySQL query error gracefully caught
+  }
+
+  return null;
 }
 
 
