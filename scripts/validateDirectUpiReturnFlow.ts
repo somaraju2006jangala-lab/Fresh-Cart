@@ -49,26 +49,28 @@ async function runDirectUpiReturnValidation() {
   assert.ok(checkoutPageCode.includes('checkout-payment-upi-app-opt'), '📱 Pay Directly via UPI App option exists');
   console.log('✓ All 3 payment methods are preserved inside FreshCart.');
 
-  // TEST 2: Check Direct UPI URI generator with returnUrl
-  console.log('\nTEST 2: Verifying Direct UPI deep link and dynamic return URL...');
+  // TEST 2: Check Direct UPI URI generator adheres to UPI standard without invalid returnUrl
+  console.log('\nTEST 2: Verifying Direct UPI deep link adheres to strict NPCI UPI standard without url query param...');
   const testUpiId = 'freshcart@upi';
   const testPayee = 'FreshCart Grocery Store';
   const testAmount = 649.50;
   const testTr = 'FC-ORDER-3880';
-  const testReturnUrl = 'http://testsite.org:4000/#/checkout?orderId=FC-3880&paymentMethod=upi_app&returnFrom=upi_app';
 
-  const upiUri = buildCustomerPaymentUpiUri(testUpiId, testPayee, testAmount, testTr, testReturnUrl);
+  const upiUri = buildCustomerPaymentUpiUri(testUpiId, testPayee, testAmount, testTr);
   assert.ok(upiUri.startsWith('upi://pay?'), 'URI starts with upi://pay?');
   assert.ok(upiUri.includes('pa=freshcart%40upi'), 'UPI ID encoded properly');
+  assert.ok(upiUri.includes('pn=FreshCart%20Grocery%20Store'), 'Merchant name encoded properly');
   assert.ok(upiUri.includes('am=649.50'), 'Payable amount formatted with 2 decimal places');
+  assert.ok(upiUri.includes('cu=INR'), 'Currency is INR');
   assert.ok(upiUri.includes(`tr=${encodeURIComponent(testTr)}`), 'Transaction ref included');
-  assert.ok(upiUri.includes(`&url=${encodeURIComponent(testReturnUrl)}`), 'Return URL appended to deep link');
+  assert.ok(!upiUri.includes('&url='), 'Return URL is strictly omitted to avoid NPCI merchant rejection');
 
   const decoded = decodeUpiPayload(upiUri);
   assert.strictEqual(decoded.isValid, true, 'UPI payload decodable and valid');
   assert.strictEqual(decoded.decoded?.am, '649.50', 'Decoded amount matches');
   assert.strictEqual(decoded.decoded?.pa, testUpiId, 'Decoded payee ID matches');
-  console.log('✓ Direct UPI deep link includes dynamic return URL and adheres to UPI standard.');
+  assert.strictEqual(decoded.decoded?.cu, 'INR', 'Decoded currency is INR');
+  console.log('✓ Direct UPI deep link adheres to NPCI UPI standard without extraneous parameters.');
 
   // TEST 3: External App/Web Embedding Prevention Guard
   console.log('\nTEST 3: Verifying external web/app embedding prevention...');
@@ -87,12 +89,8 @@ async function runDirectUpiReturnValidation() {
   );
   console.log('✓ FreshCart payment UI is strictly barred from rendering inside external iframes/embeds.');
 
-  // TEST 4: Dynamic window.location.origin used without hard-coding
-  console.log('\nTEST 4: Verifying dynamic origin return without hardcoded URLs...');
-  assert.ok(
-    checkoutPageCode.includes('window.location.origin'),
-    'CheckoutPage uses dynamic window.location.origin'
-  );
+  // TEST 4: No hardcoded return URLs and manual customer return model
+  console.log('\nTEST 4: Verifying no hardcoded return/callback URLs and adherence to manual return model...');
   assert.ok(
     !checkoutPageCode.includes("'http://localhost:3000'") &&
       !checkoutPageCode.includes('"http://localhost:3000"') &&
@@ -100,7 +98,11 @@ async function runDirectUpiReturnValidation() {
       !checkoutPageCode.includes('vercel.app'),
     'CheckoutPage has NO hard-coded localhost or Vercel URLs'
   );
-  console.log('✓ Dynamic origin window.location.origin is correctly utilized.');
+  assert.ok(
+    !checkoutPageCode.includes('returnUrl') && !checkoutPageCode.includes('callbackUrl'),
+    'CheckoutPage does not inject automatic callback/return URLs into UPI payment deep links'
+  );
+  console.log('✓ No hardcoded callback URLs; manual customer return flow respected.');
 
   // TEST 5: Return Context Restoration & Route parameter handling
   console.log('\nTEST 5: Verifying return context restoration in App.tsx and CheckoutPage.tsx...');

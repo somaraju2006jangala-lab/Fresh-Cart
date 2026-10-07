@@ -219,143 +219,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     };
   }, []);
 
-  const handleLaunchUpiDeepLink = (upiUri: string) => {
-    if (!upiUri) return;
-    const now = Date.now();
-    // Guard against duplicate launches within 1500ms
-    if (now - lastLaunchTimeRef.current < 1500) {
-      return;
-    }
-    lastLaunchTimeRef.current = now;
-
-    setIsQrLaunchingUpi(true);
-    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
-
-    // Synchronously launch the UPI deep link directly in the user gesture
-    openUPIPayment(upiUri);
-    setShowQrUpiFallback(true);
-  };
-
-  // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
-  const handleQrPointerDown = (e: React.PointerEvent, upiUri: string) => {
-    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
-    pointerStartTimeRef.current = Date.now();
-    hasMovedSignificantlyRef.current = false;
-    longPressTriggeredRef.current = false;
-
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const isTouch = e.pointerType === 'touch';
-    if (isTouch) {
-      longPressTimerRef.current = setTimeout(() => {
-        if (!hasMovedSignificantlyRef.current) {
-          longPressTriggeredRef.current = true;
-          handleLaunchUpiDeepLink(upiUri);
-        }
-      }, 700);
-    }
-  };
-
-  // If user moves finger > 25px (page scroll), cancel long-press
-  const handleQrPointerMove = (e: React.PointerEvent) => {
-    if (!pointerStartPosRef.current) return;
-    const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
-    const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
-    if (dx > 25 || dy > 25) {
-      hasMovedSignificantlyRef.current = true;
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-    }
-  };
-
-  // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
-  const handleQrPointerUp = (e: React.PointerEvent, upiUri: string) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const holdDuration = Date.now() - pointerStartTimeRef.current;
-    const isTouch = e.pointerType === 'touch';
-
-    // Touch device long-press release handling
-    if (isTouch) {
-      if (longPressTriggeredRef.current) {
-        // Already launched by timer
-        longPressTriggeredRef.current = false;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        return;
-      }
-
-      // If held for >= 680ms without significant movement, launch synchronously in user gesture
-      if (!hasMovedSignificantlyRef.current && holdDuration >= 680) {
-        longPressTriggeredRef.current = true;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        handleLaunchUpiDeepLink(upiUri);
-        return;
-      }
-    }
-
-    // If finger dragged significantly (scrolling), cancel tap/click gesture
-    if (hasMovedSignificantlyRef.current) {
-      pointerStartPosRef.current = null;
-      return;
-    }
-
-    const now = Date.now();
-
-    if (isTouch) {
-      // Mobile / Touch double-tap detection
-      const timeSinceLastTap = now - lastTapTimeRef.current;
-      if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
-        // Double-tap detected!
-        lastTapTimeRef.current = 0;
-        handleLaunchUpiDeepLink(upiUri);
-      } else {
-        // Single tap -> record timestamp, do nothing
-        lastTapTimeRef.current = now;
-      }
-    } else {
-      // Desktop mouse pointer double-click detection
-      const timeSinceLastClick = now - lastMouseClickTimeRef.current;
-      if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
-        // Double-click detected!
-        lastMouseClickTimeRef.current = 0;
-        handleLaunchUpiDeepLink(upiUri);
-      } else {
-        // Single click -> record timestamp, do nothing
-        lastMouseClickTimeRef.current = now;
-      }
-    }
-
-    pointerStartPosRef.current = null;
-  };
-
-  const handleQrPointerCancel = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressTriggeredRef.current = false;
-    pointerStartPosRef.current = null;
-    hasMovedSignificantlyRef.current = false;
-  };
-
-  // Native DOM Double-click on desktop
-  const handleQrDoubleClick = (e: React.MouseEvent, upiUri: string) => {
-    e.preventDefault();
-    handleLaunchUpiDeepLink(upiUri);
-  };
-
-
-
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -395,26 +258,52 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return generateUniquePaymentReference();
   }, [total, items.map((i) => `${i.product.id}:${i.quantity}`).join(',')]);
 
-  // Dynamically generated return URL using window.location.origin
-  const dynamicReturnUrl = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    const origin = window.location.origin;
-    const cleanId = (placedOrderId || draftOrderId).replace(/^#/, '');
-    return `${origin}/#/checkout?orderId=${encodeURIComponent(cleanId)}&paymentMethod=upi_app&returnFrom=upi_app`;
-  }, [placedOrderId, draftOrderId]);
+  /**
+   * Single Source of Truth for Launching UPI Payment Intents:
+   * Used identically by:
+   * - 📱 "Pay Directly via UPI App" button
+   * - QR Code double-tap
+   * - QR Code long-press
+   * - QR Code desktop double-click
+   */
+  const handleLaunchUpiDeepLink = (optionalUri?: string) => {
+    // 1. Verify valid payable amount and UPI ID
+    if (total <= 0) {
+      console.warn('[FreshCart UPI Launch] Prevented launch: Order amount must be greater than 0.');
+      return;
+    }
+    const cleanUpiId = (paymentSettings.upiId || 'freshcart@upi').trim();
+    if (!cleanUpiId) {
+      console.warn('[FreshCart UPI Launch] Prevented launch: Admin UPI ID is missing.');
+      return;
+    }
 
-  const handleDirectUpiClick = () => {
+    const now = Date.now();
+    // Guard against duplicate launches within 1500ms
+    if (now - lastLaunchTimeRef.current < 1500) {
+      return;
+    }
+    lastLaunchTimeRef.current = now;
+
+    // 2. Build the standard UPI payment URI from the single generator
+    const upiUriToLaunch = optionalUri || buildCustomerPaymentUpiUri(
+      cleanUpiId,
+      paymentSettings.payeeName || 'FreshCart Grocery Store',
+      total,
+      checkoutTxnRef
+    );
+
+    // 3. Pre-save order context in sessionStorage and customer history/MySQL backend
     const orderIdToUse = placedOrderId || draftOrderId;
     try {
       sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
       sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);
-      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_app');
+      sessionStorage.setItem('freshcart_active_checkout_method', paymentMethod);
     } catch {}
 
     setPlacedOrderId(orderIdToUse);
     setOrderNumber(orderIdToUse.replace('#FC-', ''));
 
-    // Pre-save pending order in customer history and MySQL backend
     const customerPhone = currentUser?.phone?.trim() || '';
     const pendingOrder: CustomerOrder = {
       id: orderIdToUse,
@@ -432,7 +321,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       couponCode: appliedCoupon || undefined,
       status: 'PAYMENT VERIFICATION PENDING',
       createdAt: new Date().toISOString(),
-      paymentMethod: 'Direct UPI App Payment',
+      paymentMethod: paymentMethod === 'upi_app' ? 'Direct UPI App Payment' : 'UPI / QR Payment',
       paymentStatus: 'PENDING',
       paymentVerificationStatus: submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED',
       paymentProof: submittedProof || undefined,
@@ -451,6 +340,146 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         paymentId: checkoutTxnRef,
       }),
     }).catch(() => {});
+
+    // 4. Safe development-only debug logging
+    if (typeof window !== 'undefined') {
+      console.log('[FreshCart UPI Payment Launch]', {
+        paymentMethod,
+        orderNumber: orderIdToUse.replace('#', ''),
+        amount: total.toFixed(2),
+        hasUpiId: Boolean(cleanUpiId),
+        uriScheme: upiUriToLaunch.substring(0, 10),
+        uriParams: upiUriToLaunch.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
+      });
+    }
+
+    setIsQrLaunchingUpi(true);
+    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
+
+    // 5. Synchronously launch the UPI deep link directly in the user gesture
+    const upiUri = upiUriToLaunch;
+    openUPIPayment(upiUri);
+    setShowQrUpiFallback(true);
+  };
+
+  const launchExistingUpiIntent = handleLaunchUpiDeepLink;
+
+  // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
+  const handleQrPointerDown = (e: React.PointerEvent, _upiUri?: string) => {
+    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
+    pointerStartTimeRef.current = Date.now();
+    hasMovedSignificantlyRef.current = false;
+    longPressTriggeredRef.current = false;
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    const isTouch = e.pointerType === 'touch';
+    if (isTouch) {
+      longPressTimerRef.current = setTimeout(() => {
+        if (!hasMovedSignificantlyRef.current) {
+          longPressTriggeredRef.current = true;
+          try {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              navigator.vibrate(40);
+            }
+          } catch {}
+        }
+      }, 700);
+    }
+  };
+
+  // If user moves finger > 25px (page scroll), cancel long-press
+  const handleQrPointerMove = (e: React.PointerEvent) => {
+    if (!pointerStartPosRef.current) return;
+    const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
+    const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
+    if (dx > 25 || dy > 25) {
+      hasMovedSignificantlyRef.current = true;
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
+  const handleQrPointerUp = (e: React.PointerEvent, upiUri?: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    const holdDuration = Date.now() - pointerStartTimeRef.current;
+    const isTouch = e.pointerType === 'touch';
+
+    // If finger dragged significantly (scrolling), cancel tap/click gesture
+    if (hasMovedSignificantlyRef.current) {
+      pointerStartPosRef.current = null;
+      return;
+    }
+
+    const now = Date.now();
+
+    if (isTouch) {
+      // 1. Touch device long-press handling: hold duration >= 650ms (or timer marked ready)
+      // Launch UPI Intent directly from the valid user gesture event (pointerup)!
+      if (longPressTriggeredRef.current || holdDuration >= 650) {
+        longPressTriggeredRef.current = false;
+        lastTapTimeRef.current = 0;
+        pointerStartPosRef.current = null;
+        handleLaunchUpiDeepLink(upiUri);
+        return;
+      }
+
+      // 2. Mobile / Touch double-tap detection
+      const timeSinceLastTap = now - lastTapTimeRef.current;
+      if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
+        // Double-tap detected!
+        lastTapTimeRef.current = 0;
+        pointerStartPosRef.current = null;
+        handleLaunchUpiDeepLink(upiUri);
+      } else {
+        // Single tap -> record timestamp, do nothing
+        lastTapTimeRef.current = now;
+      }
+    } else {
+      // Desktop mouse pointer double-click detection
+      const timeSinceLastClick = now - lastMouseClickTimeRef.current;
+      if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
+        // Double-click detected!
+        lastMouseClickTimeRef.current = 0;
+        handleLaunchUpiDeepLink(upiUri);
+      } else {
+        // Single click -> record timestamp, do nothing
+        lastMouseClickTimeRef.current = now;
+      }
+    }
+
+    pointerStartPosRef.current = null;
+  };
+
+  const handleQrPointerCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressTriggeredRef.current = false;
+    pointerStartPosRef.current = null;
+    hasMovedSignificantlyRef.current = false;
+  };
+
+  // Native DOM Double-click on desktop
+  const handleQrDoubleClick = (e: React.MouseEvent, upiUri?: string) => {
+    e.preventDefault();
+    handleLaunchUpiDeepLink(upiUri);
+  };
+
+  const handleDirectUpiClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    handleLaunchUpiDeepLink();
   };
 
   const handlePlaceOrder = (e: React.FormEvent) => {
@@ -994,8 +1023,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   paymentSettings.upiId || 'freshcart@upi',
                   paymentSettings.payeeName || 'FreshCart Grocery Store',
                   total,
-                  checkoutTxnRef,
-                  dynamicReturnUrl
+                  checkoutTxnRef
                 );
 
                 return (

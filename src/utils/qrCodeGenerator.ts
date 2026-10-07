@@ -153,20 +153,14 @@ export function buildCustomerPaymentUpiUri(
   upiId: string,
   payeeName: string,
   amount: number,
-  tr?: string,
-  returnUrl?: string
+  tr?: string
 ): string {
   const cleanUpi = (upiId || '').trim();
   const cleanPayee = (payeeName || '').trim() || 'FreshCart Grocery Store';
   const cleanAmount = (Math.max(0, amount) || 0).toFixed(2);
   const cleanTr = (tr || '').trim() || generateUniquePaymentReference();
-  const cleanUrl = (returnUrl || '').trim();
 
-  let uri = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${encodeURIComponent(cleanAmount)}&cu=INR&tr=${encodeURIComponent(cleanTr)}`;
-  if (cleanUrl) {
-    uri += `&url=${encodeURIComponent(cleanUrl)}`;
-  }
-  return uri;
+  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${encodeURIComponent(cleanAmount)}&cu=INR&tr=${encodeURIComponent(cleanTr)}`;
 }
 
 /**
@@ -180,17 +174,39 @@ export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
 }
 
 /**
- * Synchronously navigates to the given UPI deep-link URI within a user gesture.
+ * Synchronously launches the given UPI deep-link URI within an active user gesture.
  * Directly launches compatible installed UPI payment applications (Google Pay, PhonePe, Paytm, BHIM).
  */
 export function openUPIPayment(upiUri: string): boolean {
   if (!upiUri || typeof window === 'undefined') return false;
   try {
+    // 1. Dispatch via temporary top-level anchor click for clean Android Intent dispatch
+    const link = document.createElement('a');
+    link.href = upiUri;
+    link.setAttribute('target', '_top');
+    link.rel = 'noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      try {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
+      } catch {}
+    }, 200);
+
+    // 2. Direct location assignment fallback
     window.location.href = upiUri;
     return true;
   } catch (err) {
-    console.error('Failed to launch UPI deep link URI:', err);
-    return false;
+    try {
+      window.location.href = upiUri;
+      return true;
+    } catch (fallbackErr) {
+      console.error('Failed to launch UPI deep link URI:', fallbackErr);
+      return false;
+    }
   }
 }
 

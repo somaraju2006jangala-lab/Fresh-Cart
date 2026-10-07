@@ -149,7 +149,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (now - lastLaunchTimeRef.current < 1500) {
       return;
     }
-    lastLaunchTimeRef.current = now;
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      console.log('[FreshCart UPI Payment Launch - Modal]', {
+        paymentMethod,
+        amount: total.toFixed(2),
+        hasUpiId: Boolean(paymentSettings.upiId),
+        uriScheme: upiUri.substring(0, 10),
+        uriParams: upiUri.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
+      });
+    }
 
     setIsQrLaunchingUpi(true);
     setTimeout(() => setIsQrLaunchingUpi(false), 2500);
@@ -159,8 +167,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setShowQrUpiFallback(true);
   };
 
+  const launchExistingUpiIntent = handleLaunchUpiDeepLink;
+
   // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
-  const handleQrPointerDown = (e: React.PointerEvent, upiUri: string) => {
+  const handleQrPointerDown = (e: React.PointerEvent, _upiUri: string) => {
     pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
     pointerStartTimeRef.current = Date.now();
     hasMovedSignificantlyRef.current = false;
@@ -176,7 +186,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       longPressTimerRef.current = setTimeout(() => {
         if (!hasMovedSignificantlyRef.current) {
           longPressTriggeredRef.current = true;
-          handleLaunchUpiDeepLink(upiUri);
+          try {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              navigator.vibrate(40);
+            }
+          } catch {}
         }
       }, 700);
     }
@@ -206,26 +220,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     const holdDuration = Date.now() - pointerStartTimeRef.current;
     const isTouch = e.pointerType === 'touch';
 
-    // Touch device long-press release handling
-    if (isTouch) {
-      if (longPressTriggeredRef.current) {
-        // Already launched by timer
-        longPressTriggeredRef.current = false;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        return;
-      }
-
-      // If held for >= 680ms without significant movement, launch synchronously in user gesture
-      if (!hasMovedSignificantlyRef.current && holdDuration >= 680) {
-        longPressTriggeredRef.current = true;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        handleLaunchUpiDeepLink(upiUri);
-        return;
-      }
-    }
-
     // If finger dragged significantly (scrolling), cancel tap/click gesture
     if (hasMovedSignificantlyRef.current) {
       pointerStartPosRef.current = null;
@@ -233,6 +227,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
 
     const now = Date.now();
+
+    // Touch device long-press release handling
+    if (isTouch) {
+      if (longPressTriggeredRef.current || holdDuration >= 650) {
+        longPressTriggeredRef.current = false;
+        lastTapTimeRef.current = 0;
+        pointerStartPosRef.current = null;
+        launchExistingUpiIntent(upiUri);
+        return;
+      }
+    }
 
     if (isTouch) {
       // Mobile / Touch double-tap detection
@@ -695,8 +700,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 paymentSettings.upiId || 'freshcart@upi',
                 paymentSettings.payeeName || 'FreshCart Grocery Store',
                 total,
-                generateUniquePaymentReference(),
-                typeof window !== 'undefined' ? `${window.location.origin}/#/checkout?returnFrom=upi_app` : undefined
+                generateUniquePaymentReference()
               );
 
               return (
@@ -714,7 +718,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
 
                   <a
+                    id="modal-direct-upi-app-link"
                     href={modalDirectUpiUri}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleLaunchUpiDeepLink(modalDirectUpiUri);
+                    }}
                     className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-bold hover:bg-[#00873a] transition-all shadow-md cursor-pointer"
                   >
                     <Smartphone className="w-4 h-4" />
