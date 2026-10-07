@@ -80,10 +80,59 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     currentUser?.address || '742 Evergreen Terrace, Apt 4B'
   );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>('upi_qr');
-  const [draftOrderId] = useState(() => `#FC-${Math.floor(1000 + Math.random() * 9000)}`);
+  // External UPI app/webview embedding guard:
+  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
+  const isEmbeddedIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+  const getInitialOrderId = () => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx !== -1) {
+        const sp = new URLSearchParams(hash.substring(qIdx + 1));
+        const val = sp.get('orderId') || sp.get('order_id');
+        if (val) return val.startsWith('#') ? val : `#${val}`;
+      }
+      const search = window.location.search || '';
+      if (search) {
+        const sp = new URLSearchParams(search);
+        const val = sp.get('orderId') || sp.get('order_id');
+        if (val) return val.startsWith('#') ? val : `#${val}`;
+      }
+      try {
+        const saved = sessionStorage.getItem('freshcart_active_checkout_order_id');
+        if (saved) return saved.startsWith('#') ? saved : `#${saved}`;
+      } catch {}
+    }
+    return `#FC-${Math.floor(1000 + Math.random() * 9000)}`;
+  };
+
+  const getInitialPaymentMethod = (): 'cash' | 'upi_qr' | 'upi_app' => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx !== -1) {
+        const sp = new URLSearchParams(hash.substring(qIdx + 1));
+        const m = sp.get('paymentMethod') || sp.get('method');
+        if (m === 'cash' || m === 'upi_qr' || m === 'upi_app') return m;
+        if (sp.get('returnFrom') === 'upi_app') return 'upi_app';
+      }
+      try {
+        const savedMethod = sessionStorage.getItem('freshcart_active_checkout_method');
+        if (savedMethod === 'cash' || savedMethod === 'upi_qr' || savedMethod === 'upi_app') {
+          return savedMethod;
+        }
+      } catch {}
+    }
+    return 'upi_qr';
+  };
+
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>(getInitialPaymentMethod);
+  const [draftOrderId] = useState<string>(getInitialOrderId);
   const [submittedProof, setSubmittedProof] = useState<PaymentProofData | null>(null);
-  const [orderNumber, setOrderNumber] = useState('');
+  const [orderNumber, setOrderNumber] = useState(() => {
+    return getInitialOrderId().replace('#FC-', '');
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showItemsList, setShowItemsList] = useState(false);
 
@@ -94,7 +143,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
   const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);
-  const [placedOrderId, setPlacedOrderId] = useState<string>('');
+  const [placedOrderId, setPlacedOrderId] = useState<string>(() => {
+    return getInitialOrderId();
+  });
+
+  // Synchronize draft order context & retrieve payment proof if returning
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem('freshcart_active_checkout_order_id', draftOrderId);
+      sessionStorage.setItem('freshcart_active_checkout_method', paymentMethod);
+    } catch {}
+
+    const cleanId = draftOrderId.replace(/^#/, '');
+    fetch(`/api/payment-proofs/${encodeURIComponent(cleanId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data?.proof) {
+          setSubmittedProof(data.proof);
+        }
+      })
+      .catch(() => {});
+  }, [draftOrderId, paymentMethod]);
 
   // Synchronize payment settings
   useEffect(() => {
@@ -316,8 +386,72 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
   const checkoutTxnRef = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedRef = sessionStorage.getItem('freshcart_active_checkout_payment_ref');
+        if (savedRef) return savedRef;
+      } catch {}
+    }
     return generateUniquePaymentReference();
   }, [total, items.map((i) => `${i.product.id}:${i.quantity}`).join(',')]);
+
+  // Dynamically generated return URL using window.location.origin
+  const dynamicReturnUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    const cleanId = (placedOrderId || draftOrderId).replace(/^#/, '');
+    return `${origin}/#/checkout?orderId=${encodeURIComponent(cleanId)}&paymentMethod=upi_app&returnFrom=upi_app`;
+  }, [placedOrderId, draftOrderId]);
+
+  const handleDirectUpiClick = () => {
+    const orderIdToUse = placedOrderId || draftOrderId;
+    try {
+      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
+      sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);
+      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_app');
+    } catch {}
+
+    setPlacedOrderId(orderIdToUse);
+    setOrderNumber(orderIdToUse.replace('#FC-', ''));
+
+    // Pre-save pending order in customer history and MySQL backend
+    const customerPhone = currentUser?.phone?.trim() || '';
+    const pendingOrder: CustomerOrder = {
+      id: orderIdToUse,
+      customerId: currentUser?.id || 'guest_user',
+      customerName: currentUser?.name || 'Guest Customer',
+      customerEmail: currentUser?.email,
+      customerPhone: customerPhone || undefined,
+      deliveryAddress: address,
+      deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
+      estimatedDeliveryTime: 'Awaiting payment verification',
+      items: [...items],
+      subtotal,
+      discount,
+      total,
+      couponCode: appliedCoupon || undefined,
+      status: 'PAYMENT VERIFICATION PENDING',
+      createdAt: new Date().toISOString(),
+      paymentMethod: 'Direct UPI App Payment',
+      paymentStatus: 'PENDING',
+      paymentVerificationStatus: submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED',
+      paymentProof: submittedProof || undefined,
+    };
+    addOrder(pendingOrder);
+
+    // Sync to MySQL backend asynchronously
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
+      },
+      body: JSON.stringify({
+        ...pendingOrder,
+        paymentId: checkoutTxnRef,
+      }),
+    }).catch(() => {});
+  };
 
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -415,6 +549,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setIsResendingOtp(false);
     }
   };
+
+  // External UPI app/webview embedding guard:
+  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
+  if (isEmbeddedIframe) {
+    return null;
+  }
 
   return (
     <div id="checkout-page-container" className="w-full flex flex-col min-h-screen">
@@ -854,7 +994,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   paymentSettings.upiId || 'freshcart@upi',
                   paymentSettings.payeeName || 'FreshCart Grocery Store',
                   total,
-                  checkoutTxnRef
+                  checkoutTxnRef,
+                  dynamicReturnUrl
                 );
 
                 return (
@@ -881,6 +1022,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         id="checkout-direct-upi-app-link"
                         data-testid="checkout-direct-upi-app-link"
                         href={checkoutUpiUri}
+                        onClick={handleDirectUpiClick}
                         className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-sm font-bold shadow-lg shadow-cyan-900/30 transition-all active:scale-95 cursor-pointer"
                       >
                         <Smartphone className="w-4 h-4" />

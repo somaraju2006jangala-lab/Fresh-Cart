@@ -276,12 +276,14 @@ function FreshCartStore() {
     const handleHashChange = () => {
       const hash = window.location.hash.toLowerCase();
       const pathname = window.location.pathname.toLowerCase();
-      if (pathname === '/checkout' && hash !== '#/checkout') {
-        window.location.hash = '#/checkout';
+      if (pathname.startsWith('/checkout') && !hash.startsWith('#/checkout') && !hash.startsWith('#checkout')) {
+        const query = window.location.search;
+        window.location.hash = `#/checkout${query}`;
         return;
       }
-      if (pathname === '/cart' && hash !== '#/cart') {
-        window.location.hash = '#/cart';
+      if (pathname.startsWith('/cart') && !hash.startsWith('#/cart') && !hash.startsWith('#cart')) {
+        const query = window.location.search;
+        window.location.hash = `#/cart${query}`;
         return;
       }
 
@@ -304,11 +306,11 @@ function FreshCartStore() {
         // AUTHENTICATED CUSTOMERS:
         if (hash === '#/admin' || hash === '#admin') {
           setCurrentView('admin');
-        } else if (hash === '#/dashboard' || hash === '#dashboard') {
+        } else if (hash === '#/dashboard' || hash === '#dashboard' || hash.startsWith('#/dashboard?') || hash.startsWith('#dashboard?')) {
           setCurrentView('dashboard');
-        } else if (hash === '#/cart' || hash === '#cart') {
+        } else if (hash === '#/cart' || hash === '#cart' || hash.startsWith('#/cart?') || hash.startsWith('#cart?')) {
           setCurrentView('cart');
-        } else if (hash === '#/checkout' || hash === '#checkout') {
+        } else if (hash === '#/checkout' || hash === '#checkout' || hash.startsWith('#/checkout?') || hash.startsWith('#checkout?')) {
           setCurrentView('checkout');
         } else if (hash.startsWith('#/search') || hash.startsWith('#search')) {
           setCurrentView('search');

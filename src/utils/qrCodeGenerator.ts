@@ -153,14 +153,20 @@ export function buildCustomerPaymentUpiUri(
   upiId: string,
   payeeName: string,
   amount: number,
-  tr?: string
+  tr?: string,
+  returnUrl?: string
 ): string {
   const cleanUpi = (upiId || '').trim();
   const cleanPayee = (payeeName || '').trim() || 'FreshCart Grocery Store';
   const cleanAmount = (Math.max(0, amount) || 0).toFixed(2);
   const cleanTr = (tr || '').trim() || generateUniquePaymentReference();
+  const cleanUrl = (returnUrl || '').trim();
 
-  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${encodeURIComponent(cleanAmount)}&cu=INR&tr=${encodeURIComponent(cleanTr)}`;
+  let uri = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${encodeURIComponent(cleanAmount)}&cu=INR&tr=${encodeURIComponent(cleanTr)}`;
+  if (cleanUrl) {
+    uri += `&url=${encodeURIComponent(cleanUrl)}`;
+  }
+  return uri;
 }
 
 /**

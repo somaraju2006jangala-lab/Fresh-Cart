@@ -452,6 +452,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     onClose();
   };
 
+  // External UPI app/webview embedding guard:
+  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
+  const isEmbeddedIframe = typeof window !== 'undefined' && window.self !== window.top;
+  if (isEmbeddedIframe) {
+    return null;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/40 backdrop-blur-xs">
       <div className="bg-white/45 backdrop-blur-xl rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-white/60 flex flex-col animate-in fade-in zoom-in-95 duration-200">
@@ -683,29 +690,39 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             )}
 
             {/* Direct UPI App Payment Display */}
-            {paymentMethod === 'upi_app' && (
-              <div
-                id="checkout-direct-upi-section"
-                className="p-4 rounded-2xl bg-white/35 backdrop-blur-md border border-white/50 space-y-3 text-center"
-              >
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-[#565e74] uppercase tracking-wider block">
-                    {t('payDirectUpi') || 'DIRECT UPI APP PAYMENT'}
-                  </span>
-                  <p className="text-[12px] text-[#565e74]">
-                    Launch Google Pay, PhonePe, Paytm, or BHIM to pay directly.
-                  </p>
-                </div>
+            {paymentMethod === 'upi_app' && (() => {
+              const modalDirectUpiUri = buildCustomerPaymentUpiUri(
+                paymentSettings.upiId || 'freshcart@upi',
+                paymentSettings.payeeName || 'FreshCart Grocery Store',
+                total,
+                generateUniquePaymentReference(),
+                typeof window !== 'undefined' ? `${window.location.origin}/#/checkout?returnFrom=upi_app` : undefined
+              );
 
-                <a
-                  href={`upi://pay?pa=${encodeURIComponent(paymentSettings.upiId || 'freshcart@upi')}&pn=${encodeURIComponent(paymentSettings.payeeName || 'FreshCart Grocery Store')}&cu=INR`}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-bold hover:bg-[#00873a] transition-all shadow-md cursor-pointer"
+              return (
+                <div
+                  id="checkout-direct-upi-section"
+                  className="p-4 rounded-2xl bg-white/35 backdrop-blur-md border border-white/50 space-y-3 text-center"
                 >
-                  <Smartphone className="w-4 h-4" />
-                  <span>{t('payNow') || 'PAY NOW'}</span>
-                </a>
-              </div>
-            )}
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-[#565e74] uppercase tracking-wider block">
+                      {t('payDirectUpi') || 'DIRECT UPI APP PAYMENT'}
+                    </span>
+                    <p className="text-[12px] text-[#565e74]">
+                      Launch Google Pay, PhonePe, Paytm, or BHIM to pay directly.
+                    </p>
+                  </div>
+
+                  <a
+                    href={modalDirectUpiUri}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-bold hover:bg-[#00873a] transition-all shadow-md cursor-pointer"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>{t('payNow') || 'PAY NOW'}</span>
+                  </a>
+                </div>
+              );
+            })()}
 
             {/* Order Items Review */}
             <div className="bg-white/25 backdrop-blur-xs p-3 rounded-xl border border-white/45 space-y-1.5">

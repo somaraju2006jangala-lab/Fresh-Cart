@@ -1671,7 +1671,10 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
     createdAt: orderData.createdAt || orderData.created_at || new Date().toISOString(),
   };
 
-  const existIdx = inMemoryOrders.findIndex((o) => o.id === orderId || o.order_id === orderId);
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  const existIdx = inMemoryOrders.findIndex(
+    (o) => o.id === orderId || o.order_id === orderId || o.id === altId || o.order_id === altId
+  );
   if (existIdx >= 0) {
     inMemoryOrders[existIdx] = { ...inMemoryOrders[existIdx], ...normalizedOrder };
   } else {
@@ -1709,7 +1712,17 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
       );
     }
 
-    // 2. Insert or update order
+    // 2. Check existing order ID to resolve canonical order_id (handling #FC-XXXX vs FC-XXXX)
+    let canonicalOrderId = orderId;
+    const [existingOrders] = (await connection.query(
+      `SELECT order_id FROM orders WHERE order_id IN (?, ?) LIMIT 1`,
+      [orderId, altId]
+    )) as any;
+    if (existingOrders && existingOrders.length > 0) {
+      canonicalOrderId = existingOrders[0].order_id;
+    }
+
+    // Insert or update order
     await connection.query(
       `INSERT INTO orders (order_id, customer_id, customer_name, email, mobile, delivery_address, subtotal, discount, total, coupon_code, status, payment_id, payment_method, payment_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1718,7 +1731,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
          delivery_address = VALUES(delivery_address),
          payment_status = VALUES(payment_status)`,
       [
-        orderId,
+        canonicalOrderId,
         customerId,
         customerName,
         email || null,
@@ -1737,7 +1750,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
 
     // 3. Insert order items if present
     if (Array.isArray(orderData.items) && orderData.items.length > 0) {
-      await connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
+      await connection.query('DELETE FROM order_items WHERE order_id IN (?, ?)', [orderId, altId]);
 
       for (const item of orderData.items) {
         const prod = item.product || item;
@@ -1751,22 +1764,30 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
         await connection.query(
           `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit, price, subtotal)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [orderId, prodId, prodTitle, qty, unit, price, itemSubtotal]
+          [canonicalOrderId, prodId, prodTitle, qty, unit, price, itemSubtotal]
         );
       }
     }
 
-    // 4. Create/update payments record (Razorpay ready)
+    // 4. Create/update payments record (preserve existing payment_id to prevent duplicates)
+    const [existingPayments] = (await connection.query(
+      `SELECT payment_id FROM payments WHERE order_id IN (?, ?) LIMIT 1`,
+      [orderId, altId]
+    )) as any;
+    const effectivePaymentId = existingPayments && existingPayments.length > 0 ? existingPayments[0].payment_id : paymentId;
+
     await connection.query(
       `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
        VALUES (?, ?, ?, ?, ?, ?, 'INR')
        ON DUPLICATE KEY UPDATE
-         payment_status = VALUES(payment_status)`,
+         payment_status = VALUES(payment_status),
+         payment_method = VALUES(payment_method),
+         amount = VALUES(amount)`,
       [
-        paymentId,
-        orderId,
+        effectivePaymentId,
+        canonicalOrderId,
         customerId,
-        paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
+        paymentMethod || 'COD',
         paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
         total,
       ]
@@ -1960,7 +1981,10 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
     return rows;
   } catch (err: any) {
     console.warn('[MySQL] Error querying orders:', err?.message);
-    return [];
+    const filtered = customerId && customerId.trim()
+      ? inMemoryOrders.filter((o) => o.customerId === customerId.trim() || o.customer_id === customerId.trim())
+      : [...inMemoryOrders];
+    return filtered;
   }
 }
 
