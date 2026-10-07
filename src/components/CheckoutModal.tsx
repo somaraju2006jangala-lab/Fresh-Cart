@@ -192,6 +192,40 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setShowQrUpiFallback(true);
   };
 
+  /**
+   * QR Double-Tap Payment Trigger:
+   * Uses the existing QR payment architecture rather than forcing a direct UPI deep-link intent.
+   * This allows PhonePe, Google Pay, Paytm, and BHIM to process the payment as a normal QR payment.
+   */
+  const handleQrDoubleTapPayment = () => {
+    const now = Date.now();
+    if (now - lastLaunchTimeRef.current < 1500) {
+      return;
+    }
+    lastLaunchTimeRef.current = now;
+
+    const orderIdToUse = placedOrderId || '#FC-MODAL';
+    try {
+      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
+      sessionStorage.setItem('freshcart_active_checkout_payment_ref', modalTxnRef);
+      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_qr');
+    } catch {}
+
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      console.log('[FreshCart QR Payment Double-Tap - Modal]', {
+        orderId: orderIdToUse,
+        amount: total.toFixed(2),
+        paymentMethod: 'UPI / QR Payment',
+        mode: 'QR_PAYMENT_FLOW',
+      });
+    }
+
+    setIsQrLaunchingUpi(true);
+    setTimeout(() => setIsQrLaunchingUpi(false), 2000);
+
+    setShowQrUpiFallback(true);
+  };
+
   const launchExistingUpiIntent = handleLaunchUpiDeepLink;
 
   // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
@@ -236,7 +270,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
-  const handleQrPointerUp = (e: React.PointerEvent, upiUri: string) => {
+  const handleQrPointerUp = (e: React.PointerEvent, _upiUri: string) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -259,7 +293,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         longPressTriggeredRef.current = false;
         lastTapTimeRef.current = 0;
         pointerStartPosRef.current = null;
-        launchExistingUpiIntent(upiUri);
+        handleQrDoubleTapPayment();
         return;
       }
     }
@@ -268,9 +302,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Mobile / Touch double-tap detection
       const timeSinceLastTap = now - lastTapTimeRef.current;
       if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
-        // Double-tap detected!
+        // Double-tap detected! Trigger existing QR payment experience only once
         lastTapTimeRef.current = 0;
-        handleLaunchUpiDeepLink(upiUri);
+        handleQrDoubleTapPayment();
       } else {
         // Single tap -> record timestamp, do nothing
         lastTapTimeRef.current = now;
@@ -279,9 +313,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Desktop mouse pointer double-click detection
       const timeSinceLastClick = now - lastMouseClickTimeRef.current;
       if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
-        // Double-click detected!
+        // Double-click detected! Trigger existing QR payment experience only once
         lastMouseClickTimeRef.current = 0;
-        handleLaunchUpiDeepLink(upiUri);
+        handleQrDoubleTapPayment();
       } else {
         // Single click -> record timestamp, do nothing
         lastMouseClickTimeRef.current = now;
@@ -302,9 +336,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   // Native DOM Double-click on desktop
-  const handleQrDoubleClick = (e: React.MouseEvent, upiUri: string) => {
+  const handleQrDoubleClick = (e: React.MouseEvent, _upiUri: string) => {
     e.preventDefault();
-    handleLaunchUpiDeepLink(upiUri);
+    handleQrDoubleTapPayment();
   };
   const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
   const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);

@@ -542,6 +542,100 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     startBoundedStatusPolling(orderIdToUse, checkoutTxnRef);
   };
 
+  /**
+   * QR Double-Tap Payment Trigger:
+   * Uses the existing QR payment architecture rather than forcing a direct UPI deep-link intent.
+   * This allows PhonePe, Google Pay, Paytm, and BHIM to process the payment as a normal QR payment
+   * without triggering PhonePe's security/risk decline for web-initiated direct intents.
+   */
+  const handleQrDoubleTapPayment = async () => {
+    if (total <= 0) {
+      console.warn('[FreshCart QR Payment] Prevented: Order amount must be greater than 0.');
+      return;
+    }
+    const cleanUpiId = (paymentSettings.upiId || 'freshcart@upi').trim();
+    if (!cleanUpiId) {
+      console.warn('[FreshCart QR Payment] Prevented: Admin UPI ID is missing.');
+      return;
+    }
+
+    const now = Date.now();
+    // Guard against duplicate triggers within 1500ms (triggers only once)
+    if (now - lastLaunchTimeRef.current < 1500) {
+      return;
+    }
+    lastLaunchTimeRef.current = now;
+
+    const orderIdToUse = placedOrderId || draftOrderId;
+
+    // Pre-save order context in sessionStorage and backend
+    try {
+      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
+      sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);
+      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_qr');
+    } catch {}
+
+    setPlacedOrderId(orderIdToUse);
+    setOrderNumber(orderIdToUse.replace('#FC-', ''));
+
+    const customerPhone = currentUser?.phone?.trim() || '';
+    const pendingOrder: CustomerOrder = {
+      id: orderIdToUse,
+      customerId: currentUser?.id || 'guest_user',
+      customerName: currentUser?.name || 'Guest Customer',
+      customerEmail: currentUser?.email,
+      customerPhone: customerPhone || undefined,
+      deliveryAddress: address,
+      deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
+      estimatedDeliveryTime: 'Awaiting payment verification',
+      items: [...items],
+      subtotal,
+      discount,
+      total,
+      couponCode: appliedCoupon || undefined,
+      status: 'PAYMENT VERIFICATION PENDING',
+      createdAt: new Date().toISOString(),
+      paymentMethod: 'UPI / QR Payment',
+      paymentStatus: 'PENDING',
+      paymentVerificationStatus: submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED',
+      paymentProof: submittedProof || undefined,
+    };
+    addOrder(pendingOrder);
+
+    // Sync to MySQL backend asynchronously
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
+      },
+      body: JSON.stringify({
+        ...pendingOrder,
+        paymentId: checkoutTxnRef,
+      }),
+    }).catch(() => {});
+
+    // Safe development-only debug logging
+    if (typeof window !== 'undefined') {
+      console.log('[FreshCart QR Payment Double-Tap]', {
+        orderId: orderIdToUse,
+        amount: total.toFixed(2),
+        paymentMethod: 'UPI / QR Payment',
+        mode: 'QR_PAYMENT_FLOW',
+      });
+    }
+
+    // Trigger visual feedback on QR container
+    setIsQrLaunchingUpi(true);
+    setTimeout(() => setIsQrLaunchingUpi(false), 2000);
+
+    // Activate existing QR payment fallback & guidance notice
+    setShowQrUpiFallback(true);
+
+    // Start bounded payment status verification polling with backend
+    startBoundedStatusPolling(orderIdToUse, checkoutTxnRef);
+  };
+
   const launchExistingUpiIntent = handleLaunchUpiDeepLink;
 
   // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
@@ -586,7 +680,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
-  const handleQrPointerUp = (e: React.PointerEvent, upiUri?: string) => {
+  const handleQrPointerUp = (e: React.PointerEvent, _upiUri?: string) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -605,22 +699,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
     if (isTouch) {
       // 1. Touch device long-press handling: hold duration >= 650ms (or timer marked ready)
-      // Launch UPI Intent directly from the valid user gesture event (pointerup)!
       if (longPressTriggeredRef.current || holdDuration >= 650) {
         longPressTriggeredRef.current = false;
         lastTapTimeRef.current = 0;
         pointerStartPosRef.current = null;
-        handleLaunchUpiDeepLink(upiUri);
+        handleQrDoubleTapPayment();
         return;
       }
 
       // 2. Mobile / Touch double-tap detection
       const timeSinceLastTap = now - lastTapTimeRef.current;
       if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
-        // Double-tap detected!
+        // Double-tap detected! Trigger existing QR payment experience only once
         lastTapTimeRef.current = 0;
         pointerStartPosRef.current = null;
-        handleLaunchUpiDeepLink(upiUri);
+        handleQrDoubleTapPayment();
       } else {
         // Single tap -> record timestamp, do nothing
         lastTapTimeRef.current = now;
@@ -629,9 +722,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       // Desktop mouse pointer double-click detection
       const timeSinceLastClick = now - lastMouseClickTimeRef.current;
       if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
-        // Double-click detected!
+        // Double-click detected! Trigger existing QR payment experience only once
         lastMouseClickTimeRef.current = 0;
-        handleLaunchUpiDeepLink(upiUri);
+        handleQrDoubleTapPayment();
       } else {
         // Single click -> record timestamp, do nothing
         lastMouseClickTimeRef.current = now;
@@ -652,9 +745,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   // Native DOM Double-click on desktop
-  const handleQrDoubleClick = (e: React.MouseEvent, upiUri?: string) => {
+  const handleQrDoubleClick = (e: React.MouseEvent, _upiUri?: string) => {
     e.preventDefault();
-    handleLaunchUpiDeepLink(upiUri);
+    handleQrDoubleTapPayment();
   };
 
   const handleDirectUpiClick = (e: React.MouseEvent) => {
