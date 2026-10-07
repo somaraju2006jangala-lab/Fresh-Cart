@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
@@ -15,6 +15,7 @@ import {
   decodeUpiPayload,
   verifyQrPayloadDecodable,
   generateUniquePaymentReference,
+  openUPIPayment,
 } from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
@@ -126,52 +127,161 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return () => clearInterval(interval);
   }, [otpExpiresAt, orderHandoverOtp]);
 
-  // QR Code UPI Deep Link & Tap / Long-press Interaction State
+  // QR Code UPI Deep Link & Multi-Gesture (Double-Tap, Double-Click, Long-Press) State
   const [isQrLaunchingUpi, setIsQrLaunchingUpi] = useState(false);
   const [showQrUpiFallback, setShowQrUpiFallback] = useState(false);
-  const longPressTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTriggeredRef = useRef<boolean>(false);
+  const pointerStartTimeRef = useRef<number>(0);
+  const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const hasMovedSignificantlyRef = useRef<boolean>(false);
 
-  const isMobileClient = () => {
-    if (typeof navigator === 'undefined') return false;
-    return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-  };
+  const lastTapTimeRef = useRef<number>(0);
+  const lastMouseClickTimeRef = useRef<number>(0);
+  const lastLaunchTimeRef = useRef<number>(0);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleLaunchUpiDeepLink = (upiUri: string) => {
-    if (isQrLaunchingUpi) return;
+    if (!upiUri) return;
+    const now = Date.now();
+    // Guard against duplicate launches within 1500ms
+    if (now - lastLaunchTimeRef.current < 1500) {
+      return;
+    }
+    lastLaunchTimeRef.current = now;
+
     setIsQrLaunchingUpi(true);
     setTimeout(() => setIsQrLaunchingUpi(false), 2500);
 
-    if (isMobileClient()) {
-      try {
-        window.location.href = upiUri;
-        setTimeout(() => {
-          setShowQrUpiFallback(true);
-        }, 1500);
-      } catch {
-        setShowQrUpiFallback(true);
-      }
-    } else {
-      // Desktop behavior:
-      // Do not force navigation to an unsupported payment application.
-      // Keep the QR available for scanning with a mobile phone.
-      setShowQrUpiFallback(true);
-    }
+    // Synchronously launch the UPI deep link directly in the user gesture
+    openUPIPayment(upiUri);
+    setShowQrUpiFallback(true);
   };
 
-  const handleQrPointerDown = (upiUri: string) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-    }
-    longPressTimerRef.current = setTimeout(() => {
-      handleLaunchUpiDeepLink(upiUri);
-    }, 450);
-  };
+  // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
+  const handleQrPointerDown = (e: React.PointerEvent, upiUri: string) => {
+    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
+    pointerStartTimeRef.current = Date.now();
+    hasMovedSignificantlyRef.current = false;
+    longPressTriggeredRef.current = false;
 
-  const handleQrPointerUpOrCancel = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+
+    const isTouch = e.pointerType === 'touch';
+    if (isTouch) {
+      longPressTimerRef.current = setTimeout(() => {
+        if (!hasMovedSignificantlyRef.current) {
+          longPressTriggeredRef.current = true;
+          handleLaunchUpiDeepLink(upiUri);
+        }
+      }, 700);
+    }
+  };
+
+  // If user moves finger > 25px (page scroll), cancel long-press
+  const handleQrPointerMove = (e: React.PointerEvent) => {
+    if (!pointerStartPosRef.current) return;
+    const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
+    const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
+    if (dx > 25 || dy > 25) {
+      hasMovedSignificantlyRef.current = true;
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
+  const handleQrPointerUp = (e: React.PointerEvent, upiUri: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    const holdDuration = Date.now() - pointerStartTimeRef.current;
+    const isTouch = e.pointerType === 'touch';
+
+    // Touch device long-press release handling
+    if (isTouch) {
+      if (longPressTriggeredRef.current) {
+        // Already launched by timer
+        longPressTriggeredRef.current = false;
+        lastTapTimeRef.current = 0;
+        pointerStartPosRef.current = null;
+        return;
+      }
+
+      // If held for >= 680ms without significant movement, launch synchronously in user gesture
+      if (!hasMovedSignificantlyRef.current && holdDuration >= 680) {
+        longPressTriggeredRef.current = true;
+        lastTapTimeRef.current = 0;
+        pointerStartPosRef.current = null;
+        handleLaunchUpiDeepLink(upiUri);
+        return;
+      }
+    }
+
+    // If finger dragged significantly (scrolling), cancel tap/click gesture
+    if (hasMovedSignificantlyRef.current) {
+      pointerStartPosRef.current = null;
+      return;
+    }
+
+    const now = Date.now();
+
+    if (isTouch) {
+      // Mobile / Touch double-tap detection
+      const timeSinceLastTap = now - lastTapTimeRef.current;
+      if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
+        // Double-tap detected!
+        lastTapTimeRef.current = 0;
+        handleLaunchUpiDeepLink(upiUri);
+      } else {
+        // Single tap -> record timestamp, do nothing
+        lastTapTimeRef.current = now;
+      }
+    } else {
+      // Desktop mouse pointer double-click detection
+      const timeSinceLastClick = now - lastMouseClickTimeRef.current;
+      if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
+        // Double-click detected!
+        lastMouseClickTimeRef.current = 0;
+        handleLaunchUpiDeepLink(upiUri);
+      } else {
+        // Single click -> record timestamp, do nothing
+        lastMouseClickTimeRef.current = now;
+      }
+    }
+
+    pointerStartPosRef.current = null;
+  };
+
+  const handleQrPointerCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressTriggeredRef.current = false;
+    pointerStartPosRef.current = null;
+    hasMovedSignificantlyRef.current = false;
+  };
+
+  // Native DOM Double-click on desktop
+  const handleQrDoubleClick = (e: React.MouseEvent, upiUri: string) => {
+    e.preventDefault();
+    handleLaunchUpiDeepLink(upiUri);
   };
 
 
@@ -657,21 +767,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           data-testid="checkout-payment-qr-container"
                           role="button"
                           tabIndex={0}
-                          aria-label={`UPI Payment QR Code. Click to open UPI app or scan to pay ${formatINR(total)}`}
+                          aria-label={`UPI Payment QR Code. Double-tap, double-click, or long-press to open UPI app, or scan to pay ${formatINR(total)}`}
                           data-upi-uri={checkoutUpiUri}
-                          onPointerDown={() => handleQrPointerDown(checkoutUpiUri)}
-                          onPointerUp={handleQrPointerUpOrCancel}
-                          onPointerLeave={handleQrPointerUpOrCancel}
-                          onPointerCancel={handleQrPointerUpOrCancel}
-                          onClick={() => handleLaunchUpiDeepLink(checkoutUpiUri)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleLaunchUpiDeepLink(checkoutUpiUri);
-                            }
-                          }}
+                          onPointerDown={(e) => handleQrPointerDown(e, checkoutUpiUri)}
+                          onPointerMove={handleQrPointerMove}
+                          onPointerUp={(e) => handleQrPointerUp(e, checkoutUpiUri)}
+                          onPointerCancel={handleQrPointerCancel}
+                          onDoubleClick={(e) => handleQrDoubleClick(e, checkoutUpiUri)}
+                          onClick={() => {}}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ touchAction: 'pan-y', WebkitTouchCallout: 'none', userSelect: 'none' }}
                           className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border-2 border-white/90 hover:border-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer active:scale-98 select-none group relative"
-                          title="Click to open UPI app or scan to pay"
+                          title="Double-click, double-tap, or long-press to open UPI app (or scan with camera)"
                         >
                           <img
                             id="checkout-payment-qr-img"
@@ -687,7 +794,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             data-upi-tr={upiValidation.decoded?.tr}
                             data-qr-decodable={qrScan?.decodable ? "true" : "false"}
                             alt={`UPI Payment QR Code for ${formatINR(total)}`}
-                            className="w-36 h-36 sm:w-40 sm:h-40 object-contain pointer-events-none"
+                            className="w-36 h-36 sm:w-40 sm:h-40 object-contain pointer-events-none select-none"
+                            draggable={false}
+                            onDragStart={(e) => e.preventDefault()}
                           />
                         </div>
 

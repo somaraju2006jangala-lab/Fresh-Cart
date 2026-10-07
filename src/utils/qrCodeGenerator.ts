@@ -174,6 +174,21 @@ export function buildMerchantUpiUri(upiId: string, payeeName: string): string {
 }
 
 /**
+ * Synchronously navigates to the given UPI deep-link URI within a user gesture.
+ * Directly launches compatible installed UPI payment applications (Google Pay, PhonePe, Paytm, BHIM).
+ */
+export function openUPIPayment(upiUri: string): boolean {
+  if (!upiUri || typeof window === 'undefined') return false;
+  try {
+    window.location.href = upiUri;
+    return true;
+  } catch (err) {
+    console.error('Failed to launch UPI deep link URI:', err);
+    return false;
+  }
+}
+
+/**
  * Generates an ISO/IEC 18004 standards-compliant boolean matrix for the given text.
  * Uses QRCode Model 2 with Error Correction Level M and optimal mask evaluation.
  */

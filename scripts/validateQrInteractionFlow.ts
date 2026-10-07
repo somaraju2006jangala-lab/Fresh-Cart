@@ -21,12 +21,20 @@ async function validateQrInteractionFlow() {
   const checkoutPagePath = path.resolve(__dirname, '../src/components/CheckoutPage.tsx');
   const checkoutPageCode = fs.readFileSync(checkoutPagePath, 'utf-8');
 
-  // Must have tap/click and long-press support
+  // Must have double-tap, double-click, and long-press (600-800ms) handlers
   assert.ok(
     checkoutPageCode.includes('handleQrPointerDown') &&
-      checkoutPageCode.includes('handleQrPointerUpOrCancel') &&
+      checkoutPageCode.includes('handleQrPointerMove') &&
+      checkoutPageCode.includes('handleQrPointerUp') &&
+      checkoutPageCode.includes('handleQrDoubleClick') &&
       checkoutPageCode.includes('handleLaunchUpiDeepLink'),
-    'CheckoutPage must implement tap and long-press pointer event handling'
+    'CheckoutPage must implement double-tap, double-click, and long-press pointer/mouse event handling'
+  );
+
+  // Must have 600-800ms long-press timer
+  assert.ok(
+    checkoutPageCode.includes('700') || checkoutPageCode.includes('600') || checkoutPageCode.includes('800'),
+    'CheckoutPage must implement 600-800ms long press duration'
   );
 
   // Must have container with role="button" or interactive container
@@ -43,11 +51,23 @@ async function validateQrInteractionFlow() {
     'CheckoutPage must NOT have "📱 Pay with UPI App" button inside QR section'
   );
 
-  // QR container itself must be the clickable payment action triggering handleLaunchUpiDeepLink
+  // Single click must NOT trigger UPI launch (prevent default or empty action)
   assert.ok(
-    checkoutPageCode.includes('onClick={() => handleLaunchUpiDeepLink(checkoutUpiUri)}') ||
-      checkoutPageCode.includes('onClick={() => handleLaunchUpiDeepLink('),
-    'QR container itself must trigger UPI deep link on click/tap'
+    checkoutPageCode.includes('onClick={(e) => e.preventDefault()}') ||
+      checkoutPageCode.includes('onClick='),
+    'Single click on QR must not launch UPI app'
+  );
+
+  // Double-click handler must be bound to onDoubleClick
+  assert.ok(
+    checkoutPageCode.includes('onDoubleClick='),
+    'Double-click handler must be bound on QR container'
+  );
+
+  // Must use openUPIPayment to launch the deep link synchronously
+  assert.ok(
+    checkoutPageCode.includes('openUPIPayment(upiUri)'),
+    'CheckoutPage must call openUPIPayment to launch deep link'
   );
 
   // Must contain exact fallback message required:
@@ -85,8 +105,11 @@ async function validateQrInteractionFlow() {
 
   assert.ok(
     checkoutModalCode.includes('handleQrPointerDown') &&
+      checkoutModalCode.includes('handleQrPointerMove') &&
+      checkoutModalCode.includes('handleQrPointerUp') &&
+      checkoutModalCode.includes('handleQrDoubleClick') &&
       checkoutModalCode.includes('handleLaunchUpiDeepLink'),
-    'CheckoutModal must implement tap and long-press pointer event handling'
+    'CheckoutModal must implement double-tap, double-click, and long-press pointer event handling'
   );
   assert.ok(
     !checkoutModalCode.includes('modal-qr-pay-with-upi-app-btn'),
