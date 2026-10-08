@@ -35,10 +35,12 @@ import {
   KeyRound,
   Percent,
   Truck,
+  CreditCard,
 } from 'lucide-react';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
+import { fetchUpiSettings, saveUpiSettings, isValidUpiId } from '../services/paymentService';
 
 export interface ParsedHistoryPeriod {
   type: 'all' | 'relative';
@@ -208,7 +210,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings'>('inventory');
 
   // Customizable Delivery Charges Rules State
   const [rules, setRules] = useState<DeliveryChargeRule[]>(() => {
@@ -453,6 +455,65 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const selectedOtpOrder = selectedOtpOrderId
     ? customerOrders.find((o) => o.id === selectedOtpOrderId)
     : null;
+
+  // UPI Payment Configuration State
+  const [upiIdInput, setUpiIdInput] = useState('');
+  const [merchantNameInput, setMerchantNameInput] = useState('');
+  const [upiSaveSuccess, setUpiSaveSuccess] = useState<string | null>(null);
+  const [upiSaveError, setUpiSaveError] = useState<string | null>(null);
+  const [isSavingUpi, setIsSavingUpi] = useState(false);
+
+  useEffect(() => {
+    fetchUpiSettings().then((s) => {
+      if (s) {
+        setUpiIdInput(s.upiId || '');
+        setMerchantNameInput(s.merchantName || '');
+      }
+    });
+  }, []);
+
+  const handleSaveUpiSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpiSaveSuccess(null);
+    setUpiSaveError(null);
+
+    const trimmedId = upiIdInput.trim();
+    const trimmedName = merchantNameInput.trim();
+
+    if (!trimmedId) {
+      setUpiSaveError('Please enter a valid UPI ID (e.g. riya.bakery@sbi).');
+      return;
+    }
+
+    if (!isValidUpiId(trimmedId)) {
+      setUpiSaveError('Invalid UPI ID format. Please enter a valid handle (e.g. riya.bakery@sbi, merchant@upi).');
+      return;
+    }
+
+    if (!trimmedName) {
+      setUpiSaveError('Please enter a Merchant / Business Name.');
+      return;
+    }
+
+    setIsSavingUpi(true);
+    try {
+      const res = await saveUpiSettings({
+        upiId: trimmedId,
+        merchantName: trimmedName,
+        enabled: true,
+      });
+
+      if (res.success) {
+        setUpiSaveSuccess('UPI payment settings saved successfully!');
+      } else {
+        setUpiSaveError(res.error || 'Failed to save UPI settings.');
+      }
+    } catch (err: any) {
+      setUpiSaveError(err?.message || 'Error saving UPI settings.');
+    } finally {
+      setIsSavingUpi(false);
+    }
+  };
 
   const customCategories = Array.from(
     new Set(products.map((p) => p.category))
@@ -857,6 +918,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Truck className="w-4 h-4" />
             <span>{t('tabSettings') || 'Delivery Charges'}</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-payment-settings"
+            onClick={() => setActiveTab('payment-settings')}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'payment-settings'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>UPI Settings</span>
           </button>
         </div>
 
@@ -2587,6 +2661,98 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 );
               })()}
             </div>
+          </div>
+        )}
+
+        {/* Tab 6: UPI Payment Settings */}
+        {activeTab === 'payment-settings' && (
+          <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl p-5 sm:p-6 space-y-6">
+            <div className="pb-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[18px] font-bold text-white font-display flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-[#10b981]" />
+                  <span>UPI Payment Configuration</span>
+                </h3>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">
+                  Configure direct merchant UPI ID and Business Name for checkout QR codes and mobile payments.
+                </p>
+              </div>
+            </div>
+
+            {/* Notification Banners */}
+            {upiSaveSuccess && (
+              <div
+                id="admin-upi-save-success"
+                className="p-3 bg-emerald-950/40 text-emerald-300 rounded-xl text-[13px] font-semibold border border-emerald-500/30 flex items-center gap-2 animate-fadeIn backdrop-blur-md"
+              >
+                <CheckCircle className="w-4 h-4 shrink-0 text-[#10b981]" />
+                <span>{upiSaveSuccess}</span>
+              </div>
+            )}
+
+            {upiSaveError && (
+              <div
+                id="admin-upi-save-error"
+                className="p-3 bg-rose-950/40 text-rose-300 rounded-xl text-[13px] font-semibold border border-rose-500/30 flex items-center gap-2 backdrop-blur-md"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 text-[#f87171]" />
+                <span>{upiSaveError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveUpiSettings} className="space-y-4 max-w-xl">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  UPI ID (VPA) <span className="text-emerald-400">*</span>
+                </label>
+                <input
+                  id="admin-upi-id-input"
+                  type="text"
+                  value={upiIdInput}
+                  onChange={(e) => setUpiIdInput(e.target.value)}
+                  placeholder="e.g. riya.bakery@sbi"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Must be a valid UPI handle (e.g. riya.bakery@sbi, merchant@upi).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Merchant / Business Name <span className="text-emerald-400">*</span>
+                </label>
+                <input
+                  id="admin-merchant-name-input"
+                  type="text"
+                  value={merchantNameInput}
+                  onChange={(e) => setMerchantNameInput(e.target.value)}
+                  placeholder="e.g. Riya Bakery"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  id="admin-save-upi-btn"
+                  disabled={isSavingUpi}
+                  className="px-6 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white rounded-xl text-sm font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSavingUpi ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Save</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>

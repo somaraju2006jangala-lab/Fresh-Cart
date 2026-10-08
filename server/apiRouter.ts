@@ -42,6 +42,9 @@ import {
   deleteCouponInDb,
   getSettingsFromDb,
   saveSettingsToDb,
+  getUpiPaymentSettingsFromDb,
+  saveUpiPaymentSettingsToDb,
+  createUpiPaymentAttemptInDb,
 } from './db.ts';
 
 ensureEnvLoaded();
@@ -1161,6 +1164,180 @@ apiRouter.post('/api/settings', async (req: Request, res: Response) => {
     sendJson(res, 200, { success: true, settings });
   } catch (err: any) {
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to save settings.' });
+  }
+});
+
+// =============================================================================
+// UPI PAYMENT SETTINGS & INITIATION ENDPOINTS
+// =============================================================================
+
+const UPI_ID_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/;
+
+/**
+ * GET /api/payment-settings/upi
+ * Retrieves Admin-configured UPI settings from MySQL backend.
+ */
+apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_req: Request, res: Response) => {
+  try {
+    const settings = await getUpiPaymentSettingsFromDb();
+    sendJson(res, 200, {
+      success: true,
+      settings: settings || {
+        upiId: 'riya.bakery@sbi',
+        merchantName: 'Riya Bakery',
+        enabled: true,
+      },
+    });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to fetch UPI payment settings.' });
+  }
+});
+
+/**
+ * POST /api/payment-settings/upi
+ * Saves or updates Admin UPI settings in MySQL database.
+ */
+apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (req: Request, res: Response) => {
+  try {
+    const { upiId, merchantName, enabled } = req.body || {};
+    const trimmedId = typeof upiId === 'string' ? upiId.trim() : '';
+    const trimmedName = typeof merchantName === 'string' ? merchantName.trim() : '';
+
+    if (!trimmedId) {
+      sendJson(res, 400, { success: false, error: 'UPI ID is required.' });
+      return;
+    }
+
+    if (!UPI_ID_REGEX.test(trimmedId)) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Invalid UPI ID format. Please provide a valid handle (e.g. riya.bakery@sbi, merchant@upi).',
+      });
+      return;
+    }
+
+    if (!trimmedName) {
+      sendJson(res, 400, { success: false, error: 'Merchant / Business Name is required.' });
+      return;
+    }
+
+    const saved = await saveUpiPaymentSettingsToDb({
+      upiId: trimmedId,
+      merchantName: trimmedName,
+      enabled: enabled !== false,
+    });
+
+    if (!saved) {
+      sendJson(res, 500, { success: false, error: 'Failed to save UPI settings to database.' });
+      return;
+    }
+
+    sendJson(res, 200, {
+      success: true,
+      settings: {
+        upiId: trimmedId,
+        merchantName: trimmedName,
+        enabled: enabled !== false,
+      },
+    });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save UPI settings.' });
+  }
+});
+
+/**
+ * POST /api/payments/initiate-upi
+ * Creates and stores a UPI payment attempt record before opening UPI intent or generating QR.
+ */
+apiRouter.post(['/api/payments/initiate-upi', '/payments/initiate-upi'], async (req: Request, res: Response) => {
+  try {
+    const { orderId, customerId, amount, upiId, merchantName, transactionRef } = req.body || {};
+
+    const trimmedOrderId = typeof orderId === 'string' ? orderId.trim() : '';
+    const trimmedTransactionRef = typeof transactionRef === 'string' ? transactionRef.trim() : '';
+    const parsedAmount = Number(amount);
+
+    if (!trimmedOrderId) {
+      sendJson(res, 400, { success: false, error: 'orderId is required.' });
+      return;
+    }
+
+    if (!trimmedTransactionRef) {
+      sendJson(res, 400, { success: false, error: 'transactionRef is required.' });
+      return;
+    }
+
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      sendJson(res, 400, { success: false, error: 'A valid checkout amount greater than 0 is required.' });
+      return;
+    }
+
+    // Resolve UPI settings if not supplied in body
+    let finalUpiId = typeof upiId === 'string' ? upiId.trim() : '';
+    let finalMerchantName = typeof merchantName === 'string' ? merchantName.trim() : '';
+
+    if (!finalUpiId || !finalMerchantName) {
+      const dbSettings = await getUpiPaymentSettingsFromDb();
+      if (!finalUpiId) finalUpiId = dbSettings.upiId;
+      if (!finalMerchantName) finalMerchantName = dbSettings.merchantName;
+    }
+
+    if (!finalUpiId || !UPI_ID_REGEX.test(finalUpiId)) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'UPI payment is currently unavailable. Please try another payment method.',
+      });
+      return;
+    }
+
+    const formattedAmount = parsedAmount.toFixed(2);
+    const createdAt = new Date().toISOString();
+
+    // 1. Store payment attempt record in MySQL
+    const saved = await createUpiPaymentAttemptInDb({
+      paymentId: `PAY-${trimmedTransactionRef}`,
+      orderId: trimmedOrderId,
+      customerId: customerId || 'guest',
+      amount: parsedAmount,
+      upiId: finalUpiId,
+      merchantName: finalMerchantName,
+      paymentMethod: 'UPI',
+      transactionRef: trimmedTransactionRef,
+      paymentStatus: 'INITIATED',
+    });
+
+    if (!saved) {
+      sendJson(res, 500, { success: false, error: 'Failed to record payment attempt.' });
+      return;
+    }
+
+    // 2. Generate clean, properly URL-encoded UPI URI
+    const pa = encodeURIComponent(finalUpiId);
+    const pn = encodeURIComponent(finalMerchantName);
+    const am = encodeURIComponent(formattedAmount);
+    const cu = 'INR';
+    const tr = encodeURIComponent(trimmedTransactionRef);
+    const upiUri = `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tr=${tr}`;
+
+    sendJson(res, 200, {
+      success: true,
+      payment: {
+        paymentId: `PAY-${trimmedTransactionRef}`,
+        orderId: trimmedOrderId,
+        customerId: customerId || 'guest',
+        amount: parsedAmount,
+        formattedAmount,
+        upiId: finalUpiId,
+        merchantName: finalMerchantName,
+        paymentMethod: 'UPI',
+        transactionRef: trimmedTransactionRef,
+        createdAt,
+        paymentStatus: 'INITIATED',
+      },
+      upiUri,
+    });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to initiate UPI payment.' });
   }
 });
 

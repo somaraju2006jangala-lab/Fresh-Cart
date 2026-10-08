@@ -660,6 +660,23 @@ export async function initializeDatabase(): Promise<void> {
     // Ignore if column already exists
   }
 
+  // Ensure payments table supports UPI payment method and transaction details
+  try {
+    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(32) NOT NULL DEFAULT "COD"');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(32) NOT NULL DEFAULT "PENDING"');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN transaction_ref VARCHAR(128) NULL AFTER currency');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN upi_id VARCHAR(256) NULL AFTER transaction_ref');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN upi_merchant_name VARCHAR(256) NULL AFTER upi_id');
+  } catch {}
+
   // Seed default data if tables are empty
   await seedInitialDataIfDbEmpty();
 }
@@ -1690,18 +1707,19 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
       }
     }
 
-    // 4. Create/update payments record (Razorpay ready)
+    // 4. Create/update payments record (Razorpay / UPI ready)
     await connection.query(
       `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
        VALUES (?, ?, ?, ?, ?, ?, 'INR')
        ON DUPLICATE KEY UPDATE
+         payment_method = VALUES(payment_method),
          payment_status = VALUES(payment_status)`,
       [
         paymentId,
         orderId,
         customerId,
-        paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
-        paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
+        paymentMethod === 'UPI' ? 'UPI' : (paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD'),
+        paymentStatus === 'PAID' ? 'PAID' : (paymentStatus === 'PAYMENT_ATTEMPTED' ? 'PAYMENT_ATTEMPTED' : 'PENDING'),
         total,
       ]
     );
@@ -2156,3 +2174,128 @@ export async function saveSettingsToDb(settings: any): Promise<boolean> {
     return false;
   }
 }
+
+// -----------------------------------------------------------------------------
+// UPI PAYMENT SETTINGS & TRANSACTION OPERATIONS
+// -----------------------------------------------------------------------------
+
+export interface UpiConfigData {
+  upiId: string;
+  merchantName: string;
+  enabled: boolean;
+  updatedAt?: string;
+}
+
+export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
+  const pool = getPool();
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
+      ['upi_settings']
+    );
+    if (rows.length === 0) {
+      return {
+        upiId: 'riya.bakery@sbi',
+        merchantName: 'Riya Bakery',
+        enabled: true,
+      };
+    }
+    const val = typeof rows[0].setting_value === 'string'
+      ? JSON.parse(rows[0].setting_value)
+      : rows[0].setting_value;
+    return {
+      upiId: val?.upiId || 'riya.bakery@sbi',
+      merchantName: val?.merchantName || 'Riya Bakery',
+      enabled: val?.enabled !== false,
+      updatedAt: val?.updatedAt,
+    };
+  } catch (err: any) {
+    console.warn('[MySQL] Error reading UPI settings from DB:', err?.message);
+    return {
+      upiId: 'riya.bakery@sbi',
+      merchantName: 'Riya Bakery',
+      enabled: true,
+    };
+  }
+}
+
+export async function saveUpiPaymentSettingsToDb(settings: {
+  upiId: string;
+  merchantName: string;
+  enabled?: boolean;
+}): Promise<boolean> {
+  const pool = getPool();
+  try {
+    const dataToSave = {
+      upiId: settings.upiId.trim(),
+      merchantName: settings.merchantName.trim(),
+      enabled: settings.enabled !== false,
+      updatedAt: new Date().toISOString(),
+    };
+    await pool.query(
+      `INSERT INTO app_settings (setting_key, setting_value)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+      ['upi_settings', JSON.stringify(dataToSave)]
+    );
+    return true;
+  } catch (err: any) {
+    console.error('[MySQL] Error saving UPI settings to DB:', err?.message);
+    return false;
+  }
+}
+
+export async function createUpiPaymentAttemptInDb(paymentData: {
+  paymentId: string;
+  orderId: string;
+  customerId: string;
+  amount: number;
+  upiId: string;
+  merchantName: string;
+  paymentMethod: string;
+  transactionRef: string;
+  paymentStatus: string;
+}): Promise<boolean> {
+  const pool = getPool();
+  const paymentId = paymentData.paymentId || `PAY-${paymentData.transactionRef}`;
+  const orderId = paymentData.orderId;
+  const customerId = paymentData.customerId || 'guest';
+  const amount = Number(paymentData.amount) || 0;
+  const upiId = paymentData.upiId;
+  const merchantName = paymentData.merchantName;
+  const paymentMethod = 'UPI';
+  const transactionRef = paymentData.transactionRef;
+  const paymentStatus = paymentData.paymentStatus || 'INITIATED';
+
+  try {
+    await pool.query(
+      `INSERT INTO payments (
+         payment_id, order_id, customer_id, payment_method, payment_status,
+         amount, currency, transaction_ref, upi_id, upi_merchant_name
+       )
+       VALUES (?, ?, ?, ?, ?, ?, 'INR', ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         payment_status = VALUES(payment_status),
+         amount = VALUES(amount),
+         transaction_ref = VALUES(transaction_ref),
+         upi_id = VALUES(upi_id),
+         upi_merchant_name = VALUES(upi_merchant_name)`,
+      [
+        paymentId,
+        orderId,
+        customerId,
+        paymentMethod,
+        paymentStatus,
+        amount,
+        transactionRef,
+        upiId,
+        merchantName,
+      ]
+    );
+    return true;
+  } catch (err: any) {
+    console.error('[MySQL] Error recording UPI payment attempt:', err?.message);
+    return false;
+  }
+}
+

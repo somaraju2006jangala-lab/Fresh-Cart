@@ -121,3 +121,25 @@ export interface DeliveryChargeRule {
   minOrderAmount: number;
   deliveryCharge: number; // 0 indicates FREE delivery
 }
+
+export interface UpiPaymentSettings {
+  upiId: string;
+  merchantName: string;
+  enabled: boolean;
+  updatedAt?: string;
+}
+
+export interface UpiPaymentRecord {
+  paymentId: string;
+  orderId: string;
+  customerId: string;
+  amount: number;
+  currency: string;
+  upiId: string;
+  merchantName: string;
+  paymentMethod: string;
+  transactionRef: string;
+  createdAt: string;
+  paymentStatus: string;
+}
+
