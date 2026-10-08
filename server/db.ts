@@ -2277,10 +2277,14 @@ export async function saveSettingsToDb(settings: any): Promise<boolean> {
 
 export interface UpiConfigData {
   upiId: string;
+  upi_id?: string;
   merchantName: string;
+  merchant_name?: string;
   enabled: boolean;
   updatedAt?: string;
+  updated_at?: string;
   qrCodeUrl?: string;
+  qr_code_url?: string;
 }
 
 export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData | null> {
@@ -2290,19 +2294,29 @@ export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData | nul
     }
     const pool = getPool();
 
-    // 1. Try reading from payment_settings table first
+    // 1. Try reading from payment_settings table first, prioritizing latest updated active record
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, upi_id, merchant_name, enabled, qr_code_url, updated_at FROM payment_settings ORDER BY id ASC LIMIT 1'
+        'SELECT id, upi_id, merchant_name, enabled, qr_code_url, updated_at FROM payment_settings ORDER BY updated_at DESC, id DESC LIMIT 1'
       );
-      if (rows.length > 0 && rows[0].upi_id) {
-        return {
-          upiId: String(rows[0].upi_id).trim(),
-          merchantName: String(rows[0].merchant_name || 'FreshCart Store').trim(),
-          enabled: rows[0].enabled === 1 || rows[0].enabled === true,
-          qrCodeUrl: rows[0].qr_code_url ? String(rows[0].qr_code_url) : undefined,
-          updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : undefined,
-        };
+      if (rows.length > 0) {
+        const row = rows[0];
+        const upiId = String(row.upi_id || row.upiId || '').trim();
+        const merchantName = String(row.merchant_name || row.merchantName || 'FreshCart Store').trim();
+        const isEnabled = row.enabled !== 0 && row.enabled !== '0' && row.enabled !== false && row.enabled !== 'false';
+        if (upiId) {
+          return {
+            upiId,
+            upi_id: upiId,
+            merchantName,
+            merchant_name: merchantName,
+            enabled: isEnabled,
+            qrCodeUrl: row.qr_code_url ? String(row.qr_code_url) : undefined,
+            qr_code_url: row.qr_code_url ? String(row.qr_code_url) : undefined,
+            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+          };
+        }
       }
     } catch (tblErr: any) {
       console.warn('[MySQL] Notice querying payment_settings table:', tblErr?.message);
@@ -2317,18 +2331,25 @@ export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData | nul
       const val = typeof appRows[0].setting_value === 'string'
         ? JSON.parse(appRows[0].setting_value)
         : appRows[0].setting_value;
-      if (val?.upiId) {
+      const upiId = String(val?.upiId || val?.upi_id || '').trim();
+      const merchantName = String(val?.merchantName || val?.merchant_name || 'FreshCart Store').trim();
+      const isEnabled = val?.enabled !== false && val?.enabled !== 0 && val?.enabled !== '0' && val?.enabled !== 'false';
+      if (upiId) {
         return {
-          upiId: String(val.upiId).trim(),
-          merchantName: String(val.merchantName || 'FreshCart Store').trim(),
-          enabled: val.enabled !== false,
-          qrCodeUrl: val.qrCodeUrl || undefined,
-          updatedAt: val.updatedAt,
+          upiId,
+          upi_id: upiId,
+          merchantName,
+          merchant_name: merchantName,
+          enabled: isEnabled,
+          qrCodeUrl: val.qrCodeUrl || val.qr_code_url || undefined,
+          qr_code_url: val.qrCodeUrl || val.qr_code_url || undefined,
+          updatedAt: val.updatedAt || val.updated_at,
+          updated_at: val.updatedAt || val.updated_at,
         };
       }
     }
   } catch (err: any) {
-    console.warn('[MySQL] Error reading UPI settings from DB:', err?.message);
+    console.error('[MySQL Error] Error reading UPI settings from DB:', err?.message || err);
   }
 
   return null;

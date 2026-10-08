@@ -1177,76 +1177,138 @@ const UPI_ID_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/;
  * GET /api/payment-settings/upi
  * Retrieves Admin-configured UPI settings from MySQL backend.
  */
-apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_req: Request, res: Response) => {
-  try {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const settings = await getUpiPaymentSettingsFromDb();
-    sendJson(res, 200, {
-      success: true,
-      settings: settings || null,
-    });
-  } catch (err: any) {
-    console.error('[API] Error fetching UPI settings:', err);
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to fetch UPI payment settings.' });
+apiRouter.get(
+  [
+    '/api/payment-settings/upi',
+    '/payment-settings/upi',
+    '/api/payment-settings',
+    '/payment-settings',
+    '/api/upi/settings',
+    '/api/upi-settings',
+  ],
+  async (_req: Request, res: Response) => {
+    try {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      const settings = await getUpiPaymentSettingsFromDb();
+      if (!settings || !settings.upiId) {
+        sendJson(res, 200, {
+          success: true,
+          settings: null,
+          upiId: '',
+          upi_id: '',
+          merchantName: '',
+          merchant_name: '',
+          enabled: false,
+        });
+        return;
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        settings,
+        upiId: settings.upiId,
+        upi_id: settings.upiId,
+        merchantName: settings.merchantName,
+        merchant_name: settings.merchantName,
+        enabled: settings.enabled,
+        qrCodeUrl: settings.qrCodeUrl,
+        qr_code_url: settings.qrCodeUrl,
+        updatedAt: settings.updatedAt,
+        updated_at: settings.updatedAt,
+      });
+    } catch (err: any) {
+      console.error('[API] Error fetching UPI settings from MySQL:', err);
+      sendJson(res, 500, {
+        success: false,
+        error: err?.message || 'Failed to fetch UPI payment settings from database.',
+        details: err?.code || undefined,
+      });
+    }
   }
-});
+);
 
 /**
  * POST /api/payment-settings/upi
  * Saves or updates Admin UPI settings in MySQL database.
  */
-apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (req: Request, res: Response) => {
-  try {
-    const { upiId, merchantName, enabled, qrCodeUrl } = req.body || {};
+apiRouter.post(
+  [
+    '/api/payment-settings/upi',
+    '/payment-settings/upi',
+    '/api/payment-settings',
+    '/payment-settings',
+    '/api/upi/settings',
+    '/api/upi-settings',
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const rawUpiId = body.upiId !== undefined ? body.upiId : body.upi_id;
+      const rawMerchantName = body.merchantName !== undefined ? body.merchantName : body.merchant_name;
+      const { enabled, qrCodeUrl, qr_code_url } = body;
 
-    if (upiId === undefined || upiId === null) {
-      sendJson(res, 400, { success: false, error: 'UPI ID is required.' });
-      return;
-    }
-    const trimmedId = typeof upiId === 'string' ? upiId.trim() : '';
-    if (!trimmedId) {
-      sendJson(res, 400, { success: false, error: 'UPI ID cannot be empty.' });
-      return;
-    }
+      if (rawUpiId === undefined || rawUpiId === null) {
+        sendJson(res, 400, { success: false, error: 'UPI ID is required.' });
+        return;
+      }
+      const trimmedId = typeof rawUpiId === 'string' ? rawUpiId.trim() : '';
+      if (!trimmedId) {
+        sendJson(res, 400, { success: false, error: 'UPI ID cannot be empty.' });
+        return;
+      }
 
-    if (!UPI_ID_REGEX.test(trimmedId)) {
-      sendJson(res, 400, {
-        success: false,
-        error: 'Invalid UPI ID format. Please provide a valid handle (e.g. riya.bakery@sbi, merchant@upi).',
+      if (!UPI_ID_REGEX.test(trimmedId)) {
+        sendJson(res, 400, {
+          success: false,
+          error: 'Invalid UPI ID format. Please provide a valid handle (e.g. example@upi, merchant@upi).',
+        });
+        return;
+      }
+
+      if (rawMerchantName === undefined || rawMerchantName === null) {
+        sendJson(res, 400, { success: false, error: 'Merchant / Business Name is required.' });
+        return;
+      }
+      const trimmedName = typeof rawMerchantName === 'string' ? rawMerchantName.trim() : '';
+      if (!trimmedName) {
+        sendJson(res, 400, { success: false, error: 'Merchant / Business Name cannot be empty.' });
+        return;
+      }
+
+      const effectiveQr = typeof qrCodeUrl === 'string' && qrCodeUrl.trim().length > 0
+        ? qrCodeUrl.trim()
+        : typeof qr_code_url === 'string' && qr_code_url.trim().length > 0
+        ? qr_code_url.trim()
+        : undefined;
+
+      const savedSettings = await saveUpiPaymentSettingsToDb({
+        upiId: trimmedId,
+        merchantName: trimmedName,
+        enabled: enabled !== false,
+        qrCodeUrl: effectiveQr,
       });
-      return;
-    }
 
-    if (merchantName === undefined || merchantName === null) {
-      sendJson(res, 400, { success: false, error: 'Merchant / Business Name is required.' });
-      return;
+      sendJson(res, 200, {
+        success: true,
+        settings: savedSettings,
+        upiId: savedSettings.upiId,
+        upi_id: savedSettings.upiId,
+        merchantName: savedSettings.merchantName,
+        merchant_name: savedSettings.merchantName,
+        enabled: savedSettings.enabled,
+      });
+    } catch (err: any) {
+      console.error('[API] Error saving UPI settings to database:', err);
+      sendJson(res, 500, {
+        success: false,
+        error: err?.message || 'Failed to save UPI settings to database.',
+        details: err?.code || undefined,
+      });
     }
-    const trimmedName = typeof merchantName === 'string' ? merchantName.trim() : '';
-    if (!trimmedName) {
-      sendJson(res, 400, { success: false, error: 'Merchant / Business Name cannot be empty.' });
-      return;
-    }
-
-    const savedSettings = await saveUpiPaymentSettingsToDb({
-      upiId: trimmedId,
-      merchantName: trimmedName,
-      enabled: enabled !== false,
-      qrCodeUrl: typeof qrCodeUrl === 'string' && qrCodeUrl.trim().length > 0 ? qrCodeUrl.trim() : undefined,
-    });
-
-    sendJson(res, 200, {
-      success: true,
-      settings: savedSettings,
-    });
-  } catch (err: any) {
-    console.error('[API] Error saving UPI settings to database:', err);
-    sendJson(res, 500, {
-      success: false,
-      error: err?.message || 'Failed to save UPI settings to database.',
-      details: err?.code || undefined,
-    });
   }
-});
+);
 
 /**
  * POST /api/payments/initiate-upi

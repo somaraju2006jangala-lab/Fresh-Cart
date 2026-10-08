@@ -106,14 +106,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Load Admin UPI settings on mount and whenever selecting UPI payment
   useEffect(() => {
+    let isCurrent = true;
     setIsLoadingUpiSettings(true);
     fetchUpiSettings()
       .then((settings) => {
-        setUpiSettings(settings);
+        if (isCurrent) {
+          setUpiSettings(settings);
+        }
+      })
+      .catch((err) => {
+        console.error('[Checkout UPI] Failed to load UPI settings from backend:', err);
+        if (isCurrent) {
+          setUpiSettings(null);
+        }
       })
       .finally(() => {
-        setIsLoadingUpiSettings(false);
+        if (isCurrent) {
+          setIsLoadingUpiSettings(false);
+        }
       });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [paymentMethod]);
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -149,25 +164,31 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Final total already displayed to the customer at checkout
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  // Validate Admin UPI configuration
+  // Validate Admin UPI configuration with support for dual property names
+  const rawUpiId = String(upiSettings?.upiId || upiSettings?.upi_id || '').trim();
+  const effectiveMerchantName = String(
+    upiSettings?.merchantName || upiSettings?.merchant_name || 'FreshCart Store'
+  ).trim();
+
   const isUpiValid = Boolean(
     upiSettings &&
-      upiSettings.enabled &&
-      upiSettings.upiId &&
-      isValidUpiId(upiSettings.upiId)
+      upiSettings.enabled !== false &&
+      upiSettings.enabled !== (0 as any) &&
+      rawUpiId &&
+      isValidUpiId(rawUpiId)
   );
 
   // Generate dynamic, fully URL-encoded UPI URI
   const upiUri = useMemo(() => {
-    if (!isUpiValid || !upiSettings?.upiId || total <= 0) {
+    if (!isUpiValid || !rawUpiId) {
       return '';
     }
     return buildUpiUri({
-      upiId: upiSettings.upiId,
-      merchantName: upiSettings.merchantName || 'FreshCart Store',
-      amount: total,
+      upiId: rawUpiId,
+      merchantName: effectiveMerchantName,
+      amount: total > 0 ? total : undefined,
     });
-  }, [isUpiValid, upiSettings, total]);
+  }, [isUpiValid, rawUpiId, effectiveMerchantName, total]);
 
   // Generate Desktop QR Code from the EXACT same UPI URI
   useEffect(() => {
@@ -194,13 +215,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           });
 
         // Automatically register payment attempt in database when customer selects UPI
-        if (!paymentAttemptCreated && upiSettings?.upiId) {
+        if (!paymentAttemptCreated && rawUpiId) {
           initiateUpiPayment({
             orderId: rawOrderId,
             customerId: currentUser?.id || 'guest_user',
             amount: total,
-            upiId: upiSettings.upiId,
-            merchantName: upiSettings.merchantName || 'FreshCart Store',
+            upiId: rawUpiId,
+            merchantName: effectiveMerchantName,
             transactionRef: transactionRef,
           }).then((res) => {
             if (res.success) {
@@ -222,7 +243,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     rawOrderId,
     currentUser?.id,
     total,
-    upiSettings,
+    rawUpiId,
+    effectiveMerchantName,
     transactionRef,
     paymentAttemptCreated,
   ]);
@@ -517,7 +539,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <div
                   id="checkout-payment-upi-opt"
                   data-testid="checkout-payment-upi-opt"
-                  onClick={() => setPaymentMethod('upi')}
+                  onClick={() => {
+                    setPaymentMethod('upi');
+                    setIsLoadingUpiSettings(true);
+                    fetchUpiSettings()
+                      .then((s) => {
+                        setUpiSettings(s);
+                      })
+                      .catch((err) => {
+                        console.error('[Checkout UPI] Fetch error on selection:', err);
+                      })
+                      .finally(() => {
+                        setIsLoadingUpiSettings(false);
+                      });
+                  }}
                   className={`p-4 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between ${
                     paymentMethod === 'upi'
                       ? 'checkout-card-selected'
@@ -590,10 +625,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             Payee Merchant
                           </p>
                           <p className="text-sm font-bold text-white">
-                            {upiSettings?.merchantName || 'FreshCart Store'}
+                            {effectiveMerchantName}
                           </p>
                           <p className="text-xs text-slate-400 tabular-nums">
-                            {upiSettings?.upiId}
+                            {rawUpiId}
                           </p>
                         </div>
                         <div className="sm:text-right">

@@ -124,10 +124,14 @@ export interface DeliveryChargeRule {
 
 export interface UpiPaymentSettings {
   upiId: string;
+  upi_id?: string;
   merchantName: string;
+  merchant_name?: string;
   enabled: boolean;
   updatedAt?: string;
+  updated_at?: string;
   qrCodeUrl?: string;
+  qr_code_url?: string;
 }
 
 export interface UpiPaymentRecord {

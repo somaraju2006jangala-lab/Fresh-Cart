@@ -47,19 +47,56 @@ export function buildUpiUri(params: {
 export async function fetchUpiSettings(): Promise<UpiPaymentSettings | null> {
   try {
     const res = await fetch('/api/payment-settings/upi', {
-      headers: { credentials: 'omit', 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.success) {
-        return data.settings || null;
-      }
-    }
-  } catch (err) {
-    console.warn('[UPI] Error fetching UPI settings from API:', err);
-  }
 
-  return null;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error(`[UPI API Error] Failed to fetch UPI settings from backend (HTTP ${res.status}):`, errText);
+      return null;
+    }
+
+    const data = await res.json();
+    if (!data || data.success === false) {
+      console.error('[UPI API Error] Backend returned unsuccessful response:', data?.error || data);
+      return null;
+    }
+
+    const raw = data.settings || data.data || data;
+    if (!raw) {
+      console.warn('[UPI API] Empty settings returned from backend.');
+      return null;
+    }
+
+    const upiId = String(raw.upiId || raw.upi_id || '').trim();
+    const merchantName = String(raw.merchantName || raw.merchant_name || 'FreshCart Store').trim();
+    const isEnabled = raw.enabled !== false && raw.enabled !== 0 && raw.enabled !== 'false' && raw.enabled !== '0';
+
+    if (!upiId) {
+      console.warn('[UPI API] No active UPI ID found in database settings.');
+      return null;
+    }
+
+    return {
+      upiId,
+      upi_id: upiId,
+      merchantName,
+      merchant_name: merchantName,
+      enabled: isEnabled,
+      qrCodeUrl: raw.qrCodeUrl || raw.qr_code_url,
+      qr_code_url: raw.qrCodeUrl || raw.qr_code_url,
+      updatedAt: raw.updatedAt || raw.updated_at,
+      updated_at: raw.updatedAt || raw.updated_at,
+    };
+  } catch (err: any) {
+    console.error('[UPI API Error] Network or runtime exception while fetching UPI settings:', err?.message || err);
+    return null;
+  }
 }
 
 /**
