@@ -41,6 +41,7 @@ interface CheckoutPageProps {
   onRemoveCoupon?: () => void;
   deliveryCharges?: number;
   deliveryRules?: DeliveryChargeRule[];
+  initialUpiSettings?: UpiPaymentSettings;
   onBackToCart: () => void;
   onNavigateToDashboard?: () => void;
   onNavigateToStorefront?: () => void;
@@ -58,6 +59,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   coupons = [],
   deliveryCharges = 40,
   deliveryRules,
+  initialUpiSettings,
   onBackToCart,
   onNavigateToDashboard,
   onNavigateToStorefront,
@@ -81,10 +83,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [upiSubOption, setUpiSubOption] = useState<'qr' | 'direct'>('qr');
 
   // Authoritative Admin UPI configuration
-  const [upiSettings, setUpiSettings] = useState<UpiPaymentSettings | null>(() =>
-    getStoredUpiSettings()
-  );
-  const [isLoadingUpiSettings, setIsLoadingUpiSettings] = useState<boolean>(false);
+  const [upiSettings, setUpiSettings] = useState<UpiPaymentSettings | null>(() => {
+    if (initialUpiSettings && initialUpiSettings.upiId && initialUpiSettings.merchantName) {
+      return initialUpiSettings;
+    }
+    return getStoredUpiSettings();
+  });
+  const [hasFetchedUpiSettings, setHasFetchedUpiSettings] = useState<boolean>(() => {
+    return Boolean(initialUpiSettings?.upiId && initialUpiSettings?.merchantName);
+  });
+  const [isLoadingUpiSettings, setIsLoadingUpiSettings] = useState<boolean>(() => {
+    return !Boolean(initialUpiSettings?.upiId && initialUpiSettings?.merchantName);
+  });
 
   // Helper to fetch latest authoritative UPI settings from MySQL backend
   const loadUpiSettings = useCallback(async () => {
@@ -98,6 +108,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       console.warn('Failed to load UPI settings in Checkout:', err);
     } finally {
       setIsLoadingUpiSettings(false);
+      setHasFetchedUpiSettings(true);
     }
   }, []);
 
@@ -163,6 +174,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     };
   }, [loadUpiSettings]);
 
+  // Synchronize with initialUpiSettings prop updates from parent
+  useEffect(() => {
+    if (initialUpiSettings && initialUpiSettings.upiId && initialUpiSettings.merchantName) {
+      setUpiSettings(initialUpiSettings);
+      setIsLoadingUpiSettings(false);
+      setHasFetchedUpiSettings(true);
+    }
+  }, [initialUpiSettings]);
+
   // Recalculate financial breakdown
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
@@ -202,7 +222,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Dynamic app-agnostic UPI URI construction:
   // upi://pay?pa={Admin UPI ID}&pn={Admin Merchant Name}&am={Exact Final Total}&cu=INR&tr={Stable Reference}
-  const isUpiConfigured = Boolean(upiSettings?.upiId && upiSettings.enabled);
+  const isUpiConfigured = Boolean(
+    upiSettings?.upiId?.trim() &&
+    upiSettings?.merchantName?.trim() &&
+    upiSettings.enabled !== false
+  );
   const upiId = upiSettings?.upiId || '';
   const merchantName = upiSettings?.merchantName || '';
   const upiUri = isUpiConfigured
@@ -681,7 +705,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               {/* UPI Payment Container: Shown when UPI Payment is selected */}
               {selectedPaymentMethod === 'upi' && (
                 <div id="checkout-upi-container" className="space-y-4 max-w-xl animate-fadeIn">
-                  {isLoadingUpiSettings && !isUpiConfigured ? (
+                  {(!hasFetchedUpiSettings || isLoadingUpiSettings) && !isUpiConfigured ? (
                     /* Loading state while querying latest backend configuration */
                     <div className="checkout-subpanel rounded-xl p-4 text-xs text-slate-300 flex items-center gap-3">
                       <span className="w-4 h-4 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin shrink-0" />

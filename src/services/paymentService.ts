@@ -16,11 +16,19 @@ export function getStoredUpiSettings(): UpiPaymentSettings {
     const raw = localStorage.getItem(STORAGE_UPI_SETTINGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.upiId === 'string' && parsed.upiId.trim().length > 0) {
+      if (
+        parsed &&
+        typeof parsed.upiId === 'string' &&
+        parsed.upiId.trim().length > 0 &&
+        typeof parsed.merchantName === 'string' &&
+        parsed.merchantName.trim().length > 0
+      ) {
+        const upiId = parsed.upiId.trim();
+        const merchantName = parsed.merchantName.trim();
         return {
-          upiId: parsed.upiId.trim(),
-          merchantName: (parsed.merchantName || '').trim(),
-          enabled: parsed.enabled !== false && Boolean(parsed.upiId.trim()),
+          upiId,
+          merchantName,
+          enabled: parsed.enabled !== false,
           updatedAt: parsed.updatedAt,
         };
       }
@@ -60,7 +68,11 @@ export async function fetchUpiSettings(): Promise<UpiPaymentSettings> {
       if (data?.success && data?.settings) {
         const upiId = String(data.settings.upiId || '').trim();
         const merchantName = String(data.settings.merchantName || '').trim();
-        const isConfigured = Boolean(upiId && data.settings.enabled !== false);
+        const isConfigured = Boolean(
+          upiId.length > 0 &&
+          merchantName.length > 0 &&
+          data.settings.enabled !== false
+        );
         const settings: UpiPaymentSettings = {
           upiId,
           merchantName,

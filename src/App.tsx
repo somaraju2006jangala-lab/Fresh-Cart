@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem, InventoryLog, ViewType, Coupon, CustomerOrder, DeliveryChargeRule } from './types';
+import { Product, CartItem, InventoryLog, ViewType, Coupon, CustomerOrder, DeliveryChargeRule, UpiPaymentSettings } from './types';
 import { INITIAL_PRODUCTS, INITIAL_INVENTORY_LOGS } from './data/products';
 import { INITIAL_COUPONS } from './data/coupons';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getCustomerOrders, updateOrderStatus, deleteCustomerOrder } from './services/authService';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { getStoredSettings, fetchServerSettings, updateServerSettings } from './services/settingsService';
+import { fetchUpiSettings, getStoredUpiSettings } from './services/paymentService';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CategoryGrid } from './components/CategoryGrid';
@@ -268,6 +269,37 @@ function FreshCartStore() {
     setDeliveryCharges(newCharge);
     await updateServerSettings({ deliveryCharges: newCharge });
   };
+
+  // Authoritative Admin UPI Payment Settings
+  const [upiSettings, setUpiSettings] = useState<UpiPaymentSettings>(() => {
+    return getStoredUpiSettings();
+  });
+
+  useEffect(() => {
+    fetchUpiSettings().then((s) => {
+      if (s) {
+        setUpiSettings(s);
+      }
+    });
+
+    const handleUpiUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<UpiPaymentSettings>;
+      if (customEvent?.detail) {
+        setUpiSettings(customEvent.detail);
+      } else {
+        fetchUpiSettings().then((s) => {
+          if (s) setUpiSettings(s);
+        });
+      }
+    };
+
+    window.addEventListener('freshcart_upi_settings_updated', handleUpiUpdated);
+    window.addEventListener('storage', handleUpiUpdated);
+    return () => {
+      window.removeEventListener('freshcart_upi_settings_updated', handleUpiUpdated);
+      window.removeEventListener('storage', handleUpiUpdated);
+    };
+  }, []);
 
   // Synchronize URL Hash routing with currentView and enforce route protection
   useEffect(() => {
@@ -883,6 +915,7 @@ function FreshCartStore() {
               coupons={coupons}
               deliveryCharges={deliveryCharges}
               deliveryRules={deliveryRules}
+              initialUpiSettings={upiSettings}
               onBackToCart={() => navigateToView('cart')}
               onNavigateToDashboard={() => navigateToView('dashboard')}
               onNavigateToStorefront={() => navigateToView('storefront')}
