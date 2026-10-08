@@ -36,9 +36,9 @@
 /* ==========================================================================
    GLOBAL TRANSPARENT VISUAL DESIGN
    - Main surfaces, panels, tables, and content containers are transparent
-   - The underlying organic black liquid crystal and orbital particle background
-     remains 100% visible throughout the entire website
-   - No heavy glass blurs or opaque panels obscuring the liquid canvas
+   - The underlying white particle background remains 100% visible throughout
+     the entire website
+   - No heavy glass blurs or opaque panels obscuring the canvas
    - Subtle crystal borders provide clean separation of sections
    - Text is high contrast, crisp, and readable
    - Buttons, badges, and controls are visually distinct and interactive
@@ -410,6 +410,7 @@ body.bg-\[\#f1f5f9\] {
 }
 
 /* Global full-viewport background layer */
+#global-particle-background,
 #global-black-liquid-background {
   position: fixed !important;
   top: 0 !important;
