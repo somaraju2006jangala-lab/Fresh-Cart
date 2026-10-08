@@ -127,6 +127,7 @@ export interface UpiPaymentSettings {
   merchantName: string;
   enabled: boolean;
   updatedAt?: string;
+  qrCodeUrl?: string;
 }
 
 export interface UpiPaymentRecord {

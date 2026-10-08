@@ -36,11 +36,13 @@ import {
   Percent,
   Truck,
   CreditCard,
+  QrCode,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
 import { getCustomerPhoneForOrder } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
-import { fetchUpiSettings, saveUpiSettings, isValidUpiId } from '../services/paymentService';
+import { fetchUpiSettings, saveUpiSettings, isValidUpiId, buildUpiUri } from '../services/paymentService';
 
 export interface ParsedHistoryPeriod {
   type: 'all' | 'relative';
@@ -459,6 +461,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // UPI Payment Configuration State
   const [upiIdInput, setUpiIdInput] = useState('');
   const [merchantNameInput, setMerchantNameInput] = useState('');
+  const [adminQrPreviewUrl, setAdminQrPreviewUrl] = useState<string>('');
+  const [adminQrPreviewUri, setAdminQrPreviewUri] = useState<string>('');
+  const [isAdminQrGenerating, setIsAdminQrGenerating] = useState<boolean>(false);
   const [upiSaveSuccess, setUpiSaveSuccess] = useState<string | null>(null);
   const [upiSaveError, setUpiSaveError] = useState<string | null>(null);
   const [isSavingUpi, setIsSavingUpi] = useState(false);
@@ -468,9 +473,51 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       if (s) {
         setUpiIdInput(s.upiId || '');
         setMerchantNameInput(s.merchantName || '');
+        if (s.qrCodeUrl) {
+          setAdminQrPreviewUrl(s.qrCodeUrl);
+        }
       }
     });
   }, []);
+
+  // Generate live UPI QR preview whenever UPI ID or Merchant Name changes
+  useEffect(() => {
+    const trimmedId = upiIdInput.trim();
+    const trimmedName = merchantNameInput.trim() || 'FreshCart Store';
+
+    if (trimmedId && isValidUpiId(trimmedId)) {
+      setIsAdminQrGenerating(true);
+      const previewUri = buildUpiUri({
+        upiId: trimmedId,
+        merchantName: trimmedName,
+      });
+      setAdminQrPreviewUri(previewUri);
+
+      QRCode.toDataURL(previewUri, {
+        width: 220,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        color: {
+          dark: '#050c18',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => {
+          setAdminQrPreviewUrl(url);
+          setIsAdminQrGenerating(false);
+        })
+        .catch((err) => {
+          console.error('[Admin UPI] Error generating preview QR:', err);
+          setAdminQrPreviewUrl('');
+          setAdminQrPreviewUri('');
+          setIsAdminQrGenerating(false);
+        });
+    } else {
+      setAdminQrPreviewUrl('');
+      setAdminQrPreviewUri('');
+      setIsAdminQrGenerating(false);
+    }
+  }, [upiIdInput, merchantNameInput]);
 
   const handleSaveUpiSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -481,12 +528,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     const trimmedName = merchantNameInput.trim();
 
     if (!trimmedId) {
-      setUpiSaveError('Please enter a valid UPI ID (e.g. riya.bakery@sbi).');
+      setUpiSaveError('Please enter a valid UPI ID (e.g. example@upi).');
       return;
     }
 
     if (!isValidUpiId(trimmedId)) {
-      setUpiSaveError('Invalid UPI ID format. Please enter a valid handle (e.g. riya.bakery@sbi, merchant@upi).');
+      setUpiSaveError('Invalid UPI ID format. Please enter a valid handle (e.g. example@upi, riya.bakery@sbi).');
       return;
     }
 
@@ -497,18 +544,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
     setIsSavingUpi(true);
     try {
+      let qrDataUrlToSave = adminQrPreviewUrl;
+      if (!qrDataUrlToSave) {
+        const previewUri = buildUpiUri({
+          upiId: trimmedId,
+          merchantName: trimmedName,
+        });
+        qrDataUrlToSave = await QRCode.toDataURL(previewUri, {
+          width: 240,
+          margin: 2,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#050c18', light: '#ffffff' },
+        });
+      }
+
       const res = await saveUpiSettings({
         upiId: trimmedId,
         merchantName: trimmedName,
         enabled: true,
+        qrCodeUrl: qrDataUrlToSave,
       });
 
       if (res.success) {
         if (res.settings) {
           setUpiIdInput(res.settings.upiId || trimmedId);
           setMerchantNameInput(res.settings.merchantName || trimmedName);
+          if (res.settings.qrCodeUrl) {
+            setAdminQrPreviewUrl(res.settings.qrCodeUrl);
+          }
         }
-        setUpiSaveSuccess('UPI payment settings saved successfully!');
+        setUpiSaveSuccess('UPI payment settings and QR configuration saved successfully!');
       } else {
         setUpiSaveError(res.error || 'Failed to save UPI settings.');
       }
@@ -2704,59 +2769,117 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             )}
 
-            <form onSubmit={handleSaveUpiSettings} className="space-y-4 max-w-xl">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  UPI ID (VPA) <span className="text-emerald-400">*</span>
-                </label>
-                <input
-                  id="admin-upi-id-input"
-                  type="text"
-                  value={upiIdInput}
-                  onChange={(e) => setUpiIdInput(e.target.value)}
-                  placeholder="e.g. riya.bakery@sbi"
-                  className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Must be a valid UPI handle (e.g. riya.bakery@sbi, merchant@upi).
-                </p>
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Form Controls (Left Column) */}
+              <form onSubmit={handleSaveUpiSettings} className="space-y-4 lg:col-span-7">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    UPI ID (VPA) <span className="text-emerald-400">*</span>
+                  </label>
+                  <input
+                    id="admin-upi-id-input"
+                    type="text"
+                    value={upiIdInput}
+                    onChange={(e) => setUpiIdInput(e.target.value)}
+                    placeholder="e.g. example@upi"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Must be a valid UPI handle (e.g. example@upi, riya.bakery@sbi).
+                  </p>
+                </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Merchant / Business Name <span className="text-emerald-400">*</span>
-                </label>
-                <input
-                  id="admin-merchant-name-input"
-                  type="text"
-                  value={merchantNameInput}
-                  onChange={(e) => setMerchantNameInput(e.target.value)}
-                  placeholder="e.g. Riya Bakery"
-                  className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Merchant / Business Name <span className="text-emerald-400">*</span>
+                  </label>
+                  <input
+                    id="admin-merchant-name-input"
+                    type="text"
+                    value={merchantNameInput}
+                    onChange={(e) => setMerchantNameInput(e.target.value)}
+                    placeholder="e.g. FreshCart Store"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  id="admin-save-upi-btn"
-                  disabled={isSavingUpi}
-                  className="px-6 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white rounded-xl text-sm font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isSavingUpi ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Saving...</span>
-                    </>
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    id="admin-save-upi-btn"
+                    disabled={isSavingUpi}
+                    className="px-6 py-2.5 bg-[#006b2c] hover:bg-[#00873a] text-white rounded-xl text-sm font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSavingUpi ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* QR Preview Card (Right Column) */}
+              <div
+                id="admin-upi-qr-preview-panel"
+                className="lg:col-span-5 bg-black/30 border border-white/15 rounded-2xl p-5 flex flex-col items-center justify-center text-center space-y-3 backdrop-blur-md"
+              >
+                <div className="flex items-center justify-between w-full pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2 text-white font-bold text-xs uppercase tracking-wider">
+                    <QrCode className="w-4 h-4 text-emerald-400" />
+                    <span>UPI QR Code Preview</span>
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Live Preview
+                  </span>
+                </div>
+
+                <div className="p-3 bg-white rounded-2xl shadow-xl border border-white/20 min-w-[200px] min-h-[200px] flex items-center justify-center">
+                  {isAdminQrGenerating ? (
+                    <div className="w-48 h-48 flex items-center justify-center bg-slate-100 rounded-xl">
+                      <span className="w-6 h-6 border-2 border-slate-400 border-t-slate-800 rounded-full animate-spin" />
+                    </div>
+                  ) : adminQrPreviewUrl ? (
+                    <img
+                      id="admin-upi-qr-preview-image"
+                      data-upi-uri={adminQrPreviewUri}
+                      src={adminQrPreviewUrl}
+                      alt="UPI QR Code Preview"
+                      className="w-48 h-48 rounded-xl object-contain select-none"
+                    />
                   ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>Save</span>
-                    </>
+                    <div className="w-48 h-48 flex flex-col items-center justify-center bg-slate-100 rounded-xl text-slate-400 text-center p-3">
+                      <QrCode className="w-10 h-10 text-slate-300 mb-2" />
+                      <span className="text-[11px] font-medium leading-tight text-slate-500">
+                        Enter a valid UPI ID to generate the live QR preview
+                      </span>
+                    </div>
                   )}
-                </button>
+                </div>
+
+                {upiIdInput.trim() && (
+                  <div className="text-center space-y-0.5 w-full">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">
+                      Configured UPI ID
+                    </p>
+                    <p className="text-xs font-mono font-bold text-emerald-400 break-all">
+                      {upiIdInput.trim()}
+                    </p>
+                    {merchantNameInput.trim() && (
+                      <p className="text-[11px] text-slate-300">
+                        Merchant: {merchantNameInput.trim()}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-            </form>
+            </div>
           </div>
         )}
       </div>

@@ -1183,11 +1183,7 @@ apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_re
     const settings = await getUpiPaymentSettingsFromDb();
     sendJson(res, 200, {
       success: true,
-      settings: settings || {
-        upiId: 'riya.bakery@sbi',
-        merchantName: 'Riya Bakery',
-        enabled: true,
-      },
+      settings: settings || null,
     });
   } catch (err: any) {
     console.error('[API] Error fetching UPI settings:', err);
@@ -1201,7 +1197,7 @@ apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_re
  */
 apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (req: Request, res: Response) => {
   try {
-    const { upiId, merchantName, enabled } = req.body || {};
+    const { upiId, merchantName, enabled, qrCodeUrl } = req.body || {};
 
     if (upiId === undefined || upiId === null) {
       sendJson(res, 400, { success: false, error: 'UPI ID is required.' });
@@ -1235,6 +1231,7 @@ apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (re
       upiId: trimmedId,
       merchantName: trimmedName,
       enabled: enabled !== false,
+      qrCodeUrl: typeof qrCodeUrl === 'string' && qrCodeUrl.trim().length > 0 ? qrCodeUrl.trim() : undefined,
     });
 
     sendJson(res, 200, {
@@ -1284,8 +1281,13 @@ apiRouter.post(['/api/payments/initiate-upi', '/payments/initiate-upi'], async (
 
     if (!finalUpiId || !finalMerchantName) {
       const dbSettings = await getUpiPaymentSettingsFromDb();
-      if (!finalUpiId) finalUpiId = dbSettings.upiId;
-      if (!finalMerchantName) finalMerchantName = dbSettings.merchantName;
+      if (dbSettings) {
+        if (!finalUpiId) finalUpiId = dbSettings.upiId;
+        if (!finalMerchantName) finalMerchantName = dbSettings.merchantName;
+      }
+    }
+    if (!finalMerchantName) {
+      finalMerchantName = 'FreshCart Store';
     }
 
     if (!finalUpiId || !UPI_ID_REGEX.test(finalUpiId)) {

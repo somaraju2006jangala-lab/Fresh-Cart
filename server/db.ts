@@ -724,6 +724,7 @@ export async function initializeDatabase(): Promise<void> {
       upi_id VARCHAR(255) NOT NULL,
       merchant_name VARCHAR(255) NOT NULL,
       enabled TINYINT(1) NOT NULL DEFAULT 1,
+      qr_code_url MEDIUMTEXT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_payment_settings_upi (upi_id)
@@ -743,6 +744,9 @@ export async function initializeDatabase(): Promise<void> {
   } catch {}
   try {
     await currentPool.query('ALTER TABLE payment_settings ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payment_settings ADD COLUMN qr_code_url MEDIUMTEXT NULL');
   } catch {}
 
   // Ensure otp_records has otp_code column if the table already existed from an earlier schema
@@ -2276,9 +2280,10 @@ export interface UpiConfigData {
   merchantName: string;
   enabled: boolean;
   updatedAt?: string;
+  qrCodeUrl?: string;
 }
 
-export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
+export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData | null> {
   try {
     if (!isConnected) {
       await connectMySql().catch(() => {});
@@ -2288,13 +2293,14 @@ export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
     // 1. Try reading from payment_settings table first
     try {
       const [rows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, upi_id, merchant_name, enabled, updated_at FROM payment_settings ORDER BY id ASC LIMIT 1'
+        'SELECT id, upi_id, merchant_name, enabled, qr_code_url, updated_at FROM payment_settings ORDER BY id ASC LIMIT 1'
       );
       if (rows.length > 0 && rows[0].upi_id) {
         return {
           upiId: String(rows[0].upi_id).trim(),
           merchantName: String(rows[0].merchant_name || 'FreshCart Store').trim(),
           enabled: rows[0].enabled === 1 || rows[0].enabled === true,
+          qrCodeUrl: rows[0].qr_code_url ? String(rows[0].qr_code_url) : undefined,
           updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : undefined,
         };
       }
@@ -2314,8 +2320,9 @@ export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
       if (val?.upiId) {
         return {
           upiId: String(val.upiId).trim(),
-          merchantName: String(val.merchantName || 'Riya Bakery').trim(),
+          merchantName: String(val.merchantName || 'FreshCart Store').trim(),
           enabled: val.enabled !== false,
+          qrCodeUrl: val.qrCodeUrl || undefined,
           updatedAt: val.updatedAt,
         };
       }
@@ -2324,17 +2331,14 @@ export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
     console.warn('[MySQL] Error reading UPI settings from DB:', err?.message);
   }
 
-  return {
-    upiId: 'riya.bakery@sbi',
-    merchantName: 'Riya Bakery',
-    enabled: true,
-  };
+  return null;
 }
 
 export async function saveUpiPaymentSettingsToDb(settings: {
   upiId: string;
   merchantName: string;
   enabled?: boolean;
+  qrCodeUrl?: string;
 }): Promise<UpiConfigData> {
   if (!settings || typeof settings !== 'object') {
     throw new Error('Invalid UPI settings payload provided.');
@@ -2377,6 +2381,7 @@ export async function saveUpiPaymentSettingsToDb(settings: {
     upi_id VARCHAR(255) NOT NULL,
     merchant_name VARCHAR(255) NOT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
+    qr_code_url MEDIUMTEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_payment_settings_upi (upi_id)
@@ -2391,14 +2396,15 @@ export async function saveUpiPaymentSettingsToDb(settings: {
 
   // UPSERT: insert or update ensuring single active UPI configuration
   await pool.query(
-    `INSERT INTO payment_settings (id, upi_id, merchant_name, enabled, updated_at)
-     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `INSERT INTO payment_settings (id, upi_id, merchant_name, enabled, qr_code_url, updated_at)
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON DUPLICATE KEY UPDATE
        upi_id = VALUES(upi_id),
        merchant_name = VALUES(merchant_name),
        enabled = VALUES(enabled),
+       qr_code_url = VALUES(qr_code_url),
        updated_at = CURRENT_TIMESTAMP`,
-    [targetId, trimmedId, trimmedName, isEnabled ? 1 : 0]
+    [targetId, trimmedId, trimmedName, isEnabled ? 1 : 0, settings.qrCodeUrl || null]
   );
 
   // Guarantee exactly one active row by removing any extraneous rows
@@ -2408,7 +2414,7 @@ export async function saveUpiPaymentSettingsToDb(settings: {
 
   // Immediately read the saved settings from MySQL payment_settings table
   const [readRows] = await pool.query<RowDataPacket[]>(
-    'SELECT id, upi_id, merchant_name, enabled, updated_at FROM payment_settings WHERE id = ? LIMIT 1',
+    'SELECT id, upi_id, merchant_name, enabled, qr_code_url, updated_at FROM payment_settings WHERE id = ? LIMIT 1',
     [targetId]
   );
 
@@ -2420,6 +2426,7 @@ export async function saveUpiPaymentSettingsToDb(settings: {
     upiId: String(readRows[0].upi_id).trim(),
     merchantName: String(readRows[0].merchant_name).trim(),
     enabled: readRows[0].enabled === 1 || readRows[0].enabled === true,
+    qrCodeUrl: readRows[0].qr_code_url ? String(readRows[0].qr_code_url) : undefined,
     updatedAt: readRows[0].updated_at ? new Date(readRows[0].updated_at).toISOString() : new Date().toISOString(),
   };
 

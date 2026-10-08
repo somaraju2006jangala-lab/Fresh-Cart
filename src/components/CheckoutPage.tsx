@@ -104,13 +104,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   }, [currentUser]);
 
-  // Load Admin UPI settings on mount
+  // Load Admin UPI settings on mount and whenever selecting UPI payment
   useEffect(() => {
-    fetchUpiSettings().then((settings) => {
-      setUpiSettings(settings);
-      setIsLoadingUpiSettings(false);
-    });
-  }, []);
+    setIsLoadingUpiSettings(true);
+    fetchUpiSettings()
+      .then((settings) => {
+        setUpiSettings(settings);
+      })
+      .finally(() => {
+        setIsLoadingUpiSettings(false);
+      });
+  }, [paymentMethod]);
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
@@ -162,47 +166,54 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       upiId: upiSettings.upiId,
       merchantName: upiSettings.merchantName || 'FreshCart Store',
       amount: total,
-      transactionRef: transactionRef,
     });
-  }, [isUpiValid, upiSettings, total, transactionRef]);
+  }, [isUpiValid, upiSettings, total]);
 
   // Generate Desktop QR Code from the EXACT same UPI URI
   useEffect(() => {
-    if (paymentMethod === 'upi' && upiUri && isUpiValid) {
-      setIsQrGenerating(true);
-      QRCode.toDataURL(upiUri, {
-        width: 240,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-        color: {
-          dark: '#050c18',
-          light: '#ffffff',
-        },
-      })
-        .then((url) => {
-          setQrCodeDataUrl(url);
-          setIsQrGenerating(false);
+    if (paymentMethod === 'upi') {
+      if (upiUri && isUpiValid) {
+        setIsQrGenerating(true);
+        QRCode.toDataURL(upiUri, {
+          width: 240,
+          margin: 2,
+          errorCorrectionLevel: 'M',
+          color: {
+            dark: '#050c18',
+            light: '#ffffff',
+          },
         })
-        .catch((err) => {
-          console.error('[UPI] Error generating QR code:', err);
-          setIsQrGenerating(false);
-        });
+          .then((url) => {
+            setQrCodeDataUrl(url);
+            setIsQrGenerating(false);
+          })
+          .catch((err) => {
+            console.error('[UPI] Error generating QR code:', err);
+            setQrCodeDataUrl('');
+            setIsQrGenerating(false);
+          });
 
-      // Automatically register payment attempt in database when customer selects UPI
-      if (!paymentAttemptCreated && upiSettings?.upiId) {
-        initiateUpiPayment({
-          orderId: rawOrderId,
-          customerId: currentUser?.id || 'guest_user',
-          amount: total,
-          upiId: upiSettings.upiId,
-          merchantName: upiSettings.merchantName || 'FreshCart Store',
-          transactionRef: transactionRef,
-        }).then((res) => {
-          if (res.success) {
-            setPaymentAttemptCreated(true);
-          }
-        });
+        // Automatically register payment attempt in database when customer selects UPI
+        if (!paymentAttemptCreated && upiSettings?.upiId) {
+          initiateUpiPayment({
+            orderId: rawOrderId,
+            customerId: currentUser?.id || 'guest_user',
+            amount: total,
+            upiId: upiSettings.upiId,
+            merchantName: upiSettings.merchantName || 'FreshCart Store',
+            transactionRef: transactionRef,
+          }).then((res) => {
+            if (res.success) {
+              setPaymentAttemptCreated(true);
+            }
+          });
+        }
+      } else {
+        setQrCodeDataUrl('');
+        setIsQrGenerating(false);
       }
+    } else {
+      setQrCodeDataUrl('');
     }
   }, [
     paymentMethod,
@@ -567,7 +578,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     >
                       <AlertCircle className="w-5 h-5 shrink-0 text-amber-400" />
                       <span>
-                        UPI payment is currently unavailable. Please try another payment method.
+                        UPI payment is currently unavailable.
                       </span>
                     </div>
                   ) : (
@@ -595,8 +606,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         </div>
                       </div>
 
-                      {/* DESKTOP VIEW: Clean Non-Interactive QR Code */}
-                      <div className="hidden sm:flex flex-col items-center justify-center space-y-3 py-2">
+                      {/* Clean Non-Interactive QR Code */}
+                      <div className="flex flex-col items-center justify-center space-y-3 py-2">
                         <div className="p-3 bg-white rounded-2xl shadow-xl border border-white/20">
                           {isQrGenerating || !qrCodeDataUrl ? (
                             <div className="w-48 h-48 flex items-center justify-center bg-slate-100 rounded-xl">
@@ -605,6 +616,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           ) : (
                             <img
                               id="checkout-upi-qr-image"
+                              data-upi-uri={upiUri}
                               src={qrCodeDataUrl}
                               alt="Scan QR code with UPI app"
                               className="w-48 h-48 rounded-xl object-contain pointer-events-none select-none"
@@ -617,7 +629,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             Scan this QR code with your UPI app
                           </p>
                           <p className="text-xs text-slate-400 max-w-sm">
-                            The customer should scan it using Google Pay, PhonePe, Paytm, BHIM, or another compatible UPI app.
+                            Scan using Google Pay, PhonePe, Paytm, BHIM, or another compatible UPI app.
                           </p>
                         </div>
                       </div>

@@ -263,8 +263,10 @@ CREATE TABLE IF NOT EXISTS payment_settings (
   upi_id VARCHAR(255) NOT NULL,
   merchant_name VARCHAR(255) NOT NULL,
   enabled TINYINT(1) NOT NULL DEFAULT 1,
+  qr_code_url MEDIUMTEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_payment_settings_upi (upi_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 

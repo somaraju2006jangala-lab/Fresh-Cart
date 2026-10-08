@@ -18,16 +18,21 @@ export function isValidUpiId(upiId: string | undefined | null): boolean {
 export function buildUpiUri(params: {
   upiId: string;
   merchantName: string;
-  amount: number | string;
+  amount?: number | string;
   transactionRef?: string;
 }): string {
   const pa = encodeURIComponent((params.upiId || '').trim());
   const pn = encodeURIComponent((params.merchantName || '').trim());
-  const formattedAmount = Number(params.amount || 0).toFixed(2);
-  const am = encodeURIComponent(formattedAmount);
   const cu = 'INR';
 
-  let uri = `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}`;
+  let uri = `upi://pay?pa=${pa}&pn=${pn}`;
+
+  if (params.amount !== undefined && params.amount !== null && Number(params.amount) > 0) {
+    const formattedAmount = Number(params.amount).toFixed(2);
+    uri += `&am=${encodeURIComponent(formattedAmount)}`;
+  }
+
+  uri += `&cu=${cu}`;
 
   if (params.transactionRef && params.transactionRef.trim().length > 0) {
     uri += `&tr=${encodeURIComponent(params.transactionRef.trim())}`;
@@ -39,26 +44,22 @@ export function buildUpiUri(params: {
 /**
  * Fetches current Admin UPI configuration from backend.
  */
-export async function fetchUpiSettings(): Promise<UpiPaymentSettings> {
+export async function fetchUpiSettings(): Promise<UpiPaymentSettings | null> {
   try {
     const res = await fetch('/api/payment-settings/upi', {
-      headers: { credentials: 'omit', 'Cache-Control': 'no-cache' },
+      headers: { credentials: 'omit', 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
     if (res.ok) {
       const data = await res.json();
-      if (data?.success && data?.settings) {
-        return data.settings;
+      if (data?.success) {
+        return data.settings || null;
       }
     }
   } catch (err) {
-    console.warn('[UPI] Error fetching UPI settings from API, using defaults:', err);
+    console.warn('[UPI] Error fetching UPI settings from API:', err);
   }
 
-  return {
-    upiId: 'riya.bakery@sbi',
-    merchantName: 'Riya Bakery',
-    enabled: true,
-  };
+  return null;
 }
 
 /**
@@ -68,6 +69,7 @@ export async function saveUpiSettings(settings: {
   upiId: string;
   merchantName: string;
   enabled?: boolean;
+  qrCodeUrl?: string;
 }): Promise<{ success: boolean; settings?: UpiPaymentSettings; error?: string }> {
   try {
     const res = await fetch('/api/payment-settings/upi', {
