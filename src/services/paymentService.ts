@@ -16,11 +16,11 @@ export function getStoredUpiSettings(): UpiPaymentSettings {
     const raw = localStorage.getItem(STORAGE_UPI_SETTINGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.upiId === 'string') {
+      if (parsed && typeof parsed.upiId === 'string' && parsed.upiId.trim().length > 0) {
         return {
           upiId: parsed.upiId.trim(),
           merchantName: (parsed.merchantName || '').trim(),
-          enabled: parsed.enabled !== false,
+          enabled: parsed.enabled !== false && Boolean(parsed.upiId.trim()),
           updatedAt: parsed.updatedAt,
         };
       }
@@ -44,17 +44,27 @@ export function storeUpiSettingsLocally(settings: UpiPaymentSettings): void {
 
 /**
  * Fetches authoritative UPI payment settings from the backend API.
+ * Uses cache-busting to guarantee the latest MySQL configuration is retrieved.
  */
 export async function fetchUpiSettings(): Promise<UpiPaymentSettings> {
   try {
-    const res = await fetch('/api/payment-settings/upi');
+    const res = await fetch(`/api/payment-settings/upi?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.success && data?.settings) {
+        const upiId = String(data.settings.upiId || '').trim();
+        const merchantName = String(data.settings.merchantName || '').trim();
+        const isConfigured = Boolean(upiId && data.settings.enabled !== false);
         const settings: UpiPaymentSettings = {
-          upiId: String(data.settings.upiId || '').trim(),
-          merchantName: String(data.settings.merchantName || '').trim(),
-          enabled: data.settings.enabled !== false && Boolean(data.settings.upiId),
+          upiId,
+          merchantName,
+          enabled: isConfigured,
           updatedAt: data.settings.updatedAt,
         };
         storeUpiSettingsLocally(settings);
@@ -69,6 +79,7 @@ export async function fetchUpiSettings(): Promise<UpiPaymentSettings> {
 
 /**
  * Saves UPI settings to backend API and updates local cache.
+ * Dispatches a window event so customer checkout views update immediately.
  */
 export async function saveUpiSettings(params: {
   upiId: string;
@@ -77,7 +88,10 @@ export async function saveUpiSettings(params: {
   try {
     const res = await fetch('/api/payment-settings/upi', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
       body: JSON.stringify({
         upiId: params.upiId.trim(),
         merchantName: params.merchantName.trim(),
@@ -94,12 +108,17 @@ export async function saveUpiSettings(params: {
     }
 
     const saved: UpiPaymentSettings = {
-      upiId: data.settings.upiId,
-      merchantName: data.settings.merchantName,
-      enabled: data.settings.enabled !== false,
+      upiId: String(data.settings.upiId || '').trim(),
+      merchantName: String(data.settings.merchantName || '').trim(),
+      enabled: data.settings.enabled !== false && Boolean(data.settings.upiId),
       updatedAt: data.settings.updatedAt,
     };
     storeUpiSettingsLocally(saved);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('freshcart_upi_settings_updated', { detail: saved })
+      );
+    }
     return { success: true, settings: saved };
   } catch (err: any) {
     return {

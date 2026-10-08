@@ -237,15 +237,7 @@ CREATE TABLE IF NOT EXISTS payments (
   INDEX idx_payments_order_id (order_id),
   INDEX idx_payments_customer_id (customer_id),
   INDEX idx_payments_status (payment_status),
-  INDEX idx_payments_transaction_ref (transaction_ref),
-  CONSTRAINT fk_payments_order
-    FOREIGN KEY (order_id) REFERENCES orders (order_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE,
-  CONSTRAINT fk_payments_customer
-    FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
+  INDEX idx_payments_transaction_ref (transaction_ref)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------

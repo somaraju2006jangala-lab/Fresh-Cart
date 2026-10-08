@@ -84,6 +84,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [upiSettings, setUpiSettings] = useState<UpiPaymentSettings | null>(() =>
     getStoredUpiSettings()
   );
+  const [isLoadingUpiSettings, setIsLoadingUpiSettings] = useState<boolean>(false);
+
+  // Helper to fetch latest authoritative UPI settings from MySQL backend
+  const loadUpiSettings = useCallback(async () => {
+    setIsLoadingUpiSettings(true);
+    try {
+      const s = await fetchUpiSettings();
+      if (s) {
+        setUpiSettings(s);
+      }
+    } catch (err) {
+      console.warn('Failed to load UPI settings in Checkout:', err);
+    } finally {
+      setIsLoadingUpiSettings(false);
+    }
+  }, []);
 
   // Stable Order & Transaction Reference for this payment attempt
   // Generated ONCE on component mount so it never regenerates on React re-renders!
@@ -125,12 +141,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   }, [currentUser]);
 
-  // Fetch authoritative latest UPI settings on mount and when entering checkout
+  // Fetch authoritative latest UPI settings on mount and listen for real-time updates
   useEffect(() => {
-    fetchUpiSettings().then((s) => {
-      if (s) setUpiSettings(s);
-    });
-  }, []);
+    loadUpiSettings();
+
+    const handleSettingsUpdated = (e?: any) => {
+      if (e?.detail) {
+        setUpiSettings(e.detail);
+        setIsLoadingUpiSettings(false);
+      } else {
+        loadUpiSettings();
+      }
+    };
+
+    window.addEventListener('freshcart_upi_settings_updated', handleSettingsUpdated);
+    window.addEventListener('storage', handleSettingsUpdated);
+
+    return () => {
+      window.removeEventListener('freshcart_upi_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('storage', handleSettingsUpdated);
+    };
+  }, [loadUpiSettings]);
 
   // Recalculate financial breakdown
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -601,7 +632,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <div
                   id="checkout-payment-upi-opt"
                   data-testid="checkout-payment-upi-opt"
-                  onClick={() => setSelectedPaymentMethod('upi')}
+                  onClick={() => {
+                    setSelectedPaymentMethod('upi');
+                    loadUpiSettings();
+                  }}
                   className={`p-4 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between ${
                     selectedPaymentMethod === 'upi'
                       ? 'checkout-card-selected'
@@ -647,17 +681,32 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               {/* UPI Payment Container: Shown when UPI Payment is selected */}
               {selectedPaymentMethod === 'upi' && (
                 <div id="checkout-upi-container" className="space-y-4 max-w-xl animate-fadeIn">
-                  {!isUpiConfigured ? (
+                  {isLoadingUpiSettings && !isUpiConfigured ? (
+                    /* Loading state while querying latest backend configuration */
+                    <div className="checkout-subpanel rounded-xl p-4 text-xs text-slate-300 flex items-center gap-3">
+                      <span className="w-4 h-4 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin shrink-0" />
+                      <span>Loading authoritative UPI configuration from backend...</span>
+                    </div>
+                  ) : !isUpiConfigured ? (
                     /* Notice when no UPI ID is configured in Admin */
                     <div
                       id="checkout-upi-unavailable-notice"
                       data-testid="checkout-upi-unavailable-notice"
-                      className="checkout-subpanel rounded-xl p-4 text-xs text-amber-300 border border-amber-500/30 flex items-center gap-3"
+                      className="checkout-subpanel rounded-xl p-4 text-xs text-amber-300 border border-amber-500/30 flex items-center justify-between gap-3"
                     >
-                      <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
-                      <span>
-                        UPI payment is currently unavailable. Please configure a UPI ID in Admin Payment Settings.
-                      </span>
+                      <div className="flex items-center gap-2.5">
+                        <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+                        <span>
+                          UPI payment is currently unavailable. Please configure a UPI ID in Admin Payment Settings.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={loadUpiSettings}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 underline font-semibold shrink-0 cursor-pointer"
+                      >
+                        Refresh
+                      </button>
                     </div>
                   ) : (
                     /* Configured UPI Payment Experience */

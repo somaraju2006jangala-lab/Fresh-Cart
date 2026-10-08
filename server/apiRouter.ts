@@ -1178,10 +1178,15 @@ apiRouter.post('/api/settings', async (req: Request, res: Response) => {
 
 /**
  * GET /api/payment-settings/upi
- * Retrieves current Admin-configured UPI settings.
+ * Retrieves current Admin-configured UPI settings from MySQL backend.
  */
-apiRouter.get('/api/payment-settings/upi', async (_req: Request, res: Response) => {
+apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_req: Request, res: Response) => {
   try {
+    if (res.setHeader) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
     const config = await getUpiConfig();
     sendJson(res, 200, {
       success: true,
@@ -1200,7 +1205,7 @@ apiRouter.get('/api/payment-settings/upi', async (_req: Request, res: Response) 
  * POST /api/payment-settings/upi
  * Saves or updates Admin UPI settings in MySQL database.
  */
-apiRouter.post('/api/payment-settings/upi', async (req: Request, res: Response) => {
+apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (req: Request, res: Response) => {
   try {
     const { upiId, merchantName, enabled } = req.body || {};
     const result = await saveUpiConfig(upiId, merchantName, enabled !== false);
@@ -1220,7 +1225,7 @@ apiRouter.post('/api/payment-settings/upi', async (req: Request, res: Response) 
  * POST /api/payments/initiate-upi
  * Initiates an app-agnostic UPI payment attempt with stable transaction reference.
  */
-apiRouter.post('/api/payments/initiate-upi', async (req: Request, res: Response) => {
+apiRouter.post(['/api/payments/initiate-upi', '/payments/initiate-upi'], async (req: Request, res: Response) => {
   try {
     const { orderId, customerId, subtotal, discount, deliveryCharges, total, transactionRef, items } =
       req.body || {};
