@@ -43,6 +43,14 @@ import {
   getSettingsFromDb,
   saveSettingsToDb,
 } from './db.ts';
+import {
+  getUpiConfig,
+  saveUpiConfig,
+  initiateUpiPayment,
+  verifyUpiPayment,
+  adminUpdatePaymentStatus,
+  listRecentPayments,
+} from './upiPaymentService.ts';
 
 ensureEnvLoaded();
 
@@ -1161,6 +1169,173 @@ apiRouter.post('/api/settings', async (req: Request, res: Response) => {
     sendJson(res, 200, { success: true, settings });
   } catch (err: any) {
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to save settings.' });
+  }
+});
+
+// =============================================================================
+// UPI PAYMENT SYSTEM API ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /api/payment-settings/upi
+ * Retrieves current Admin-configured UPI settings.
+ */
+apiRouter.get('/api/payment-settings/upi', async (_req: Request, res: Response) => {
+  try {
+    const config = await getUpiConfig();
+    sendJson(res, 200, {
+      success: true,
+      settings: config || {
+        upiId: '',
+        merchantName: '',
+        enabled: false,
+      },
+    });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to fetch UPI payment settings.' });
+  }
+});
+
+/**
+ * POST /api/payment-settings/upi
+ * Saves or updates Admin UPI settings in MySQL database.
+ */
+apiRouter.post('/api/payment-settings/upi', async (req: Request, res: Response) => {
+  try {
+    const { upiId, merchantName, enabled } = req.body || {};
+    const result = await saveUpiConfig(upiId, merchantName, enabled !== false);
+
+    if (!result.success) {
+      sendJson(res, 400, { success: false, error: result.error });
+      return;
+    }
+
+    sendJson(res, 200, { success: true, settings: result.config });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save UPI settings.' });
+  }
+});
+
+/**
+ * POST /api/payments/initiate-upi
+ * Initiates an app-agnostic UPI payment attempt with stable transaction reference.
+ */
+apiRouter.post('/api/payments/initiate-upi', async (req: Request, res: Response) => {
+  try {
+    const { orderId, customerId, subtotal, discount, deliveryCharges, total, transactionRef, items } =
+      req.body || {};
+
+    const auth = extractAuthCustomer(req);
+    const resolvedCustomerId = auth.customerId || customerId || 'guest';
+
+    const result = await initiateUpiPayment({
+      orderId,
+      customerId: resolvedCustomerId,
+      subtotal: Number(subtotal) || 0,
+      discount: Number(discount) || 0,
+      deliveryCharges: Number(deliveryCharges) || 0,
+      total: Number(total) || 0,
+      transactionRef,
+      items,
+    });
+
+    if (!result.success) {
+      sendJson(res, 400, {
+        success: false,
+        error: result.error,
+        code: result.code,
+      });
+      return;
+    }
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to initiate UPI payment.' });
+  }
+});
+
+/**
+ * POST /api/payments/verify
+ * Verifies payment status with backend payment provider layer.
+ */
+apiRouter.post('/api/payments/verify', async (req: Request, res: Response) => {
+  try {
+    const { orderId, transactionRef, amount, action } = req.body || {};
+
+    if (!transactionRef && !orderId) {
+      sendJson(res, 400, {
+        success: false,
+        error: 'Transaction reference or Order ID is required for verification.',
+      });
+      return;
+    }
+
+    const result = await verifyUpiPayment({
+      orderId,
+      transactionRef,
+      amount: amount !== undefined ? Number(amount) : undefined,
+      action: action || 'check',
+    });
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to verify payment status.' });
+  }
+});
+
+/**
+ * GET /api/payments/status/:ref
+ * Checks payment status for a specific transaction reference.
+ */
+apiRouter.get('/api/payments/status/:ref', async (req: Request, res: Response) => {
+  try {
+    const transactionRef = decodeURIComponent(req.params.ref);
+    const result = await verifyUpiPayment({
+      transactionRef,
+      action: 'check',
+    });
+
+    sendJson(res, 200, result);
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to retrieve payment status.' });
+  }
+});
+
+/**
+ * GET /api/payments/recent
+ * Returns recent payment attempts for Admin inspection.
+ */
+apiRouter.get('/api/payments/recent', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const payments = await listRecentPayments(limit);
+    sendJson(res, 200, { success: true, payments });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to list recent payments.' });
+  }
+});
+
+/**
+ * POST /api/payments/admin-status
+ * Allows Admin to manually mark or verify payment status.
+ */
+apiRouter.post('/api/payments/admin-status', async (req: Request, res: Response) => {
+  try {
+    const { transactionRef, status, notes } = req.body || {};
+    if (!transactionRef || !status) {
+      sendJson(res, 400, { success: false, error: 'Transaction reference and status are required.' });
+      return;
+    }
+
+    const result = await adminUpdatePaymentStatus(transactionRef, status, notes);
+    if (!result.success) {
+      sendJson(res, 400, { success: false, error: result.error });
+      return;
+    }
+
+    sendJson(res, 200, { success: true, transactionRef, status });
+  } catch (err: any) {
+    sendJson(res, 500, { success: false, error: err?.message || 'Failed to update payment status.' });
   }
 });
 

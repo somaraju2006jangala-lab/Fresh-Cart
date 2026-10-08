@@ -213,17 +213,20 @@ CREATE TABLE IF NOT EXISTS inventory_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table: payments (Prepared for Future Razorpay Integration)
+-- Table: payments (Supports COD, UPI, and Digital Payments)
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS payments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   payment_id VARCHAR(64) NOT NULL UNIQUE,
   order_id VARCHAR(64) NOT NULL,
   customer_id VARCHAR(64) NOT NULL,
-  payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
-  payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
+  payment_method VARCHAR(32) NOT NULL DEFAULT 'COD',
+  payment_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
   amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+  transaction_ref VARCHAR(128) NULL,
+  upi_id VARCHAR(255) NULL,
+  upi_merchant_name VARCHAR(255) NULL,
   razorpay_order_id VARCHAR(100) NULL,
   razorpay_payment_id VARCHAR(100) NULL,
   razorpay_signature VARCHAR(255) NULL,
@@ -234,6 +237,7 @@ CREATE TABLE IF NOT EXISTS payments (
   INDEX idx_payments_order_id (order_id),
   INDEX idx_payments_customer_id (customer_id),
   INDEX idx_payments_status (payment_status),
+  INDEX idx_payments_transaction_ref (transaction_ref),
   CONSTRAINT fk_payments_order
     FOREIGN KEY (order_id) REFERENCES orders (order_id)
     ON DELETE CASCADE

@@ -385,4 +385,10 @@ export const en = {
   invalidPercentageError: 'Please enter a valid percentage number.',
   negativePercentageError: 'Percentage cannot be negative.',
   maxPercentageError: 'Percentage cannot exceed 100%.',
+  payUpi: 'UPI Payment',
+  payWithQr: 'Pay with QR Code',
+  payDirectUpi: 'Pay Directly via UPI App',
+  openUpiApps: 'Open UPI Apps',
+  scanUsingUpi: 'Scan using any UPI app',
+  tabPaymentSettings: 'Payment Settings',
 };
