@@ -1,7 +1,5 @@
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 
 let pool: Pool | null = null;
 let isConnected = false;
@@ -618,13 +616,10 @@ export async function initializeDatabase(): Promise<void> {
       payment_id VARCHAR(64) NOT NULL UNIQUE,
       order_id VARCHAR(64) NOT NULL,
       customer_id VARCHAR(64) NOT NULL,
-      payment_method VARCHAR(32) NOT NULL DEFAULT 'COD',
-      payment_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+      payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
+      payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
       amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       currency VARCHAR(10) NOT NULL DEFAULT 'INR',
-      transaction_ref VARCHAR(128) NULL,
-      upi_id VARCHAR(255) NULL,
-      upi_merchant_name VARCHAR(255) NULL,
       razorpay_order_id VARCHAR(100) NULL,
       razorpay_payment_id VARCHAR(100) NULL,
       razorpay_signature VARCHAR(255) NULL,
@@ -635,7 +630,14 @@ export async function initializeDatabase(): Promise<void> {
       INDEX idx_payments_order_id (order_id),
       INDEX idx_payments_customer_id (customer_id),
       INDEX idx_payments_status (payment_status),
-      INDEX idx_payments_transaction_ref (transaction_ref)
+      CONSTRAINT fk_payments_order
+        FOREIGN KEY (order_id) REFERENCES orders (order_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+      CONSTRAINT fk_payments_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
     `CREATE TABLE IF NOT EXISTS app_settings (
@@ -654,45 +656,6 @@ export async function initializeDatabase(): Promise<void> {
   // Ensure otp_records has otp_code column if the table already existed from an earlier schema
   try {
     await currentPool.query('ALTER TABLE otp_records ADD COLUMN otp_code VARCHAR(16) NULL AFTER customer_id');
-  } catch {
-    // Ignore if column already exists
-  }
-
-  // Safe migrations for payments table
-  try {
-    await currentPool.query('ALTER TABLE payments DROP FOREIGN KEY fk_payments_customer');
-  } catch {
-    // Ignore
-  }
-  try {
-    await currentPool.query('ALTER TABLE payments DROP FOREIGN KEY fk_payments_order');
-  } catch {
-    // Ignore
-  }
-
-  // Ensure payments table columns support flexible payment methods, statuses, and transaction references
-  try {
-    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(32) NOT NULL DEFAULT "COD"');
-  } catch {
-    // Ignore
-  }
-  try {
-    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(32) NOT NULL DEFAULT "PENDING"');
-  } catch {
-    // Ignore
-  }
-  try {
-    await currentPool.query('ALTER TABLE payments ADD COLUMN transaction_ref VARCHAR(128) NULL AFTER currency');
-  } catch {
-    // Ignore if column already exists
-  }
-  try {
-    await currentPool.query('ALTER TABLE payments ADD COLUMN upi_id VARCHAR(255) NULL AFTER transaction_ref');
-  } catch {
-    // Ignore if column already exists
-  }
-  try {
-    await currentPool.query('ALTER TABLE payments ADD COLUMN upi_merchant_name VARCHAR(255) NULL AFTER upi_id');
   } catch {
     // Ignore if column already exists
   }
@@ -1727,37 +1690,19 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
       }
     }
 
-    // 4. Create/update payments record
-    const paymentMethodUpper = String(paymentMethod).toUpperCase();
-    const normalizedMethod = paymentMethodUpper.includes('UPI')
-      ? 'UPI'
-      : paymentMethodUpper === 'RAZORPAY'
-      ? 'RAZORPAY'
-      : 'COD';
-    const normalizedStatus = String(paymentStatus).toUpperCase();
-    const transactionRef = orderData.transactionRef || orderData.transaction_ref || null;
-    const upiId = orderData.upiId || orderData.upi_id || null;
-    const upiMerchantName = orderData.merchantName || orderData.upi_merchant_name || null;
-
+    // 4. Create/update payments record (Razorpay ready)
     await connection.query(
-      `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency, transaction_ref, upi_id, upi_merchant_name)
-       VALUES (?, ?, ?, ?, ?, ?, 'INR', ?, ?, ?)
+      `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
+       VALUES (?, ?, ?, ?, ?, ?, 'INR')
        ON DUPLICATE KEY UPDATE
-         payment_status = VALUES(payment_status),
-         payment_method = VALUES(payment_method),
-         transaction_ref = COALESCE(VALUES(transaction_ref), payments.transaction_ref),
-         upi_id = COALESCE(VALUES(upi_id), payments.upi_id),
-         upi_merchant_name = COALESCE(VALUES(upi_merchant_name), payments.upi_merchant_name)`,
+         payment_status = VALUES(payment_status)`,
       [
         paymentId,
         orderId,
         customerId,
-        normalizedMethod,
-        normalizedStatus,
+        paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
+        paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
         total,
-        transactionRef,
-        upiId,
-        upiMerchantName,
       ]
     );
 
@@ -2176,383 +2121,38 @@ export async function deleteCouponInDb(code: string): Promise<boolean> {
 }
 
 // -----------------------------------------------------------------------------
-// APP SETTINGS OPERATIONS & LOCAL PERSISTENCE FALLBACK
+// APP SETTINGS OPERATIONS
 // -----------------------------------------------------------------------------
 
-function getLocalFallbackSettings(): any {
-  try {
-    const filePath = path.resolve(process.cwd(), '.data', 'app_settings.json');
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    }
-  } catch {
-    // ignore
-  }
-  return {};
-}
-
-function saveLocalFallbackSettings(updates: any): void {
-  try {
-    const dirPath = path.resolve(process.cwd(), '.data');
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-    const filePath = path.join(dirPath, 'app_settings.json');
-    const current = getLocalFallbackSettings();
-    const merged = { ...current, ...updates };
-    fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf-8');
-  } catch {
-    // ignore
-  }
-}
-
-function getLocalFallbackPayments(): any[] {
-  try {
-    const filePath = path.resolve(process.cwd(), '.data', 'payments_store.json');
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    }
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-function saveLocalFallbackPayment(record: any): void {
-  try {
-    const dirPath = path.resolve(process.cwd(), '.data');
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-    const filePath = path.join(dirPath, 'payments_store.json');
-    const list = getLocalFallbackPayments();
-    const idx = list.findIndex(
-      (p: any) =>
-        p.payment_id === record.payment_id ||
-        (record.transaction_ref && p.transaction_ref === record.transaction_ref) ||
-        (record.order_id && p.order_id === record.order_id)
-    );
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], ...record, updated_at: new Date().toISOString() };
-    } else {
-      list.unshift({ ...record, created_at: record.created_at || new Date().toISOString() });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(list, null, 2), 'utf-8');
-  } catch {
-    // ignore
-  }
-}
-
-export async function getSettingFromDb(key: string): Promise<any | null> {
+export async function getSettingsFromDb(): Promise<any | null> {
   const pool = getPool();
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
-      [key]
+      ['delivery_settings']
     );
-    if (rows.length > 0) {
-      return typeof rows[0].setting_value === 'string'
-        ? JSON.parse(rows[0].setting_value)
-        : rows[0].setting_value;
-    }
+    if (rows.length === 0) return null;
+    return typeof rows[0].setting_value === 'string'
+      ? JSON.parse(rows[0].setting_value)
+      : rows[0].setting_value;
   } catch (err: any) {
-    console.warn(`[MySQL] Error reading setting "${key}" from DB:`, err?.message);
+    console.warn('[MySQL] Error reading settings from DB:', err?.message);
+    return null;
   }
-
-  // Fallback to local store
-  const local = getLocalFallbackSettings();
-  if (key === 'delivery_settings') {
-    return local.deliveryChargeRules
-      ? { deliveryChargeRules: local.deliveryChargeRules, deliveryCharges: local.deliveryCharges }
-      : null;
-  }
-  return local[key] || null;
 }
 
-export async function saveSettingToDb(key: string, value: any): Promise<boolean> {
-  let savedToDb = false;
+export async function saveSettingsToDb(settings: any): Promise<boolean> {
   const pool = getPool();
   try {
     await pool.query(
       `INSERT INTO app_settings (setting_key, setting_value)
        VALUES (?, ?)
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-      [key, JSON.stringify(value)]
+      ['delivery_settings', JSON.stringify(settings)]
     );
-    savedToDb = true;
+    return true;
   } catch (err: any) {
-    console.warn(`[MySQL] Error saving setting "${key}" to DB:`, err?.message);
+    console.error('[MySQL] Error saving settings to DB:', err?.message);
+    return false;
   }
-
-  // Also save to local fallback for seamless resilience
-  saveLocalFallbackSettings({ [key]: value });
-  return savedToDb || true;
-}
-
-export async function getSettingsFromDb(): Promise<any | null> {
-  return getSettingFromDb('delivery_settings');
-}
-
-export async function saveSettingsToDb(settings: any): Promise<boolean> {
-  return saveSettingToDb('delivery_settings', settings);
-}
-
-export async function getUpiPaymentSettingsFromDb(): Promise<{
-  upiId: string;
-  merchantName: string;
-  enabled: boolean;
-  updatedAt?: string;
-} | null> {
-  return getSettingFromDb('upi_payment_settings');
-}
-
-export async function saveUpiPaymentSettingsToDb(settings: {
-  upiId: string;
-  merchantName: string;
-  enabled?: boolean;
-}): Promise<boolean> {
-  const data = {
-    upiId: String(settings.upiId || '').trim(),
-    merchantName: String(settings.merchantName || '').trim(),
-    enabled: settings.enabled !== false,
-    updatedAt: new Date().toISOString(),
-  };
-  return saveSettingToDb('upi_payment_settings', data);
-}
-
-// -----------------------------------------------------------------------------
-// PAYMENTS & INVENTORY VERIFICATION OPERATIONS
-// -----------------------------------------------------------------------------
-
-export async function createOrUpdatePaymentRecord(paymentData: {
-  paymentId: string;
-  orderId: string;
-  customerId: string;
-  paymentMethod: string;
-  paymentStatus: string;
-  amount: number;
-  currency?: string;
-  transactionRef?: string;
-  upiId?: string;
-  upiMerchantName?: string;
-}): Promise<boolean> {
-  const pool = getPool();
-  const paymentId = paymentData.paymentId;
-  const orderId = paymentData.orderId;
-  const customerId = paymentData.customerId || 'guest';
-  const paymentMethod = paymentData.paymentMethod || 'UPI';
-  const paymentStatus = paymentData.paymentStatus || 'PENDING';
-  const amount = Number(paymentData.amount) || 0;
-  const currency = paymentData.currency || 'INR';
-  const transactionRef = paymentData.transactionRef || null;
-  const upiId = paymentData.upiId || null;
-  const upiMerchantName = paymentData.upiMerchantName || null;
-
-  let savedToDb = false;
-  try {
-    await pool.query(
-      `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency, transaction_ref, upi_id, upi_merchant_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         payment_status = VALUES(payment_status),
-         payment_method = VALUES(payment_method),
-         amount = VALUES(amount),
-         transaction_ref = COALESCE(VALUES(transaction_ref), payments.transaction_ref),
-         upi_id = COALESCE(VALUES(upi_id), payments.upi_id),
-         upi_merchant_name = COALESCE(VALUES(upi_merchant_name), payments.upi_merchant_name)`,
-      [
-        paymentId,
-        orderId,
-        customerId,
-        paymentMethod,
-        paymentStatus,
-        amount,
-        currency,
-        transactionRef,
-        upiId,
-        upiMerchantName,
-      ]
-    );
-    savedToDb = true;
-  } catch (err: any) {
-    console.warn('[MySQL] Error upserting payment record in DB:', err?.message);
-  }
-
-  // Persist locally as fallback
-  saveLocalFallbackPayment({
-    payment_id: paymentId,
-    order_id: orderId,
-    customer_id: customerId,
-    payment_method: paymentMethod,
-    payment_status: paymentStatus,
-    amount,
-    currency,
-    transaction_ref: transactionRef,
-    upi_id: upiId,
-    upi_merchant_name: upiMerchantName,
-  });
-
-  return savedToDb || true;
-}
-
-export async function findPaymentByTransactionRef(transactionRef: string): Promise<any | null> {
-  if (!transactionRef) return null;
-  const pool = getPool();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT * FROM payments WHERE transaction_ref = ? LIMIT 1',
-      [transactionRef]
-    );
-    if (rows.length > 0) return rows[0];
-  } catch (err: any) {
-    console.warn('[MySQL] Error querying payment by transaction_ref:', err?.message);
-  }
-
-  // Fallback to local store
-  const list = getLocalFallbackPayments();
-  return list.find((p: any) => p.transaction_ref === transactionRef) || null;
-}
-
-export async function findPaymentByOrderId(orderId: string): Promise<any | null> {
-  if (!orderId) return null;
-  const pool = getPool();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT * FROM payments WHERE order_id = ? ORDER BY id DESC LIMIT 1',
-      [orderId]
-    );
-    if (rows.length > 0) return rows[0];
-  } catch (err: any) {
-    console.warn('[MySQL] Error querying payment by order_id:', err?.message);
-  }
-
-  // Fallback to local store
-  const list = getLocalFallbackPayments();
-  return list.find((p: any) => p.order_id === orderId) || null;
-}
-
-export async function updatePaymentStatusInDb(
-  refOrId: string,
-  status: string,
-  extra?: { paidAt?: string; razorpayPaymentId?: string; razorpaySignature?: string }
-): Promise<boolean> {
-  const pool = getPool();
-  const normalizedStatus = status.toUpperCase();
-  const paidAt = normalizedStatus === 'PAID' ? new Date() : null;
-
-  let updatedInDb = false;
-  try {
-    await pool.query(
-      `UPDATE payments
-       SET payment_status = ?,
-           paid_at = COALESCE(?, paid_at),
-           razorpay_payment_id = COALESCE(?, razorpay_payment_id),
-           razorpay_signature = COALESCE(?, razorpay_signature)
-       WHERE transaction_ref = ? OR payment_id = ? OR order_id = ?`,
-      [
-        normalizedStatus,
-        paidAt,
-        extra?.razorpayPaymentId || null,
-        extra?.razorpaySignature || null,
-        refOrId,
-        refOrId,
-        refOrId,
-      ]
-    );
-    updatedInDb = true;
-  } catch (err: any) {
-    console.warn('[MySQL] Error updating payment status:', err?.message);
-  }
-
-  // Update in local fallback
-  const list = getLocalFallbackPayments();
-  const found = list.find(
-    (p: any) => p.transaction_ref === refOrId || p.payment_id === refOrId || p.order_id === refOrId
-  );
-  if (found) {
-    found.payment_status = normalizedStatus;
-    if (normalizedStatus === 'PAID') found.paid_at = new Date().toISOString();
-    found.updated_at = new Date().toISOString();
-    saveLocalFallbackPayment(found);
-  }
-
-  return updatedInDb || true;
-}
-
-/**
- * Deducts inventory in MySQL for the items in an order idempotently.
- * Ensures that if this order was already processed, inventory is NOT deducted twice.
- */
-export async function deductInventoryForOrder(
-  orderId: string
-): Promise<{ success: boolean; alreadyDeducted?: boolean }> {
-  const pool = getPool();
-  try {
-    // 1. Check if an inventory log already exists for this orderId
-    const [existingLogs] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM inventory_logs WHERE notes LIKE ? LIMIT 1',
-      [`%${orderId}%`]
-    );
-
-    if (existingLogs && existingLogs.length > 0) {
-      return { success: true, alreadyDeducted: true };
-    }
-
-    // 2. Query items for this order
-    const [orderItems] = await pool.query<RowDataPacket[]>(
-      'SELECT product_id, quantity, product_name FROM order_items WHERE order_id = ?',
-      [orderId]
-    );
-
-    if (!orderItems || orderItems.length === 0) {
-      return { success: true, alreadyDeducted: false };
-    }
-
-    // 3. Update stock and create inventory log for each item
-    for (const item of orderItems) {
-      const prodId = item.product_id;
-      const qty = Math.max(1, Number(item.quantity) || 1);
-
-      const [prodRows] = await pool.query<RowDataPacket[]>(
-        'SELECT quantity FROM products WHERE product_id = ? LIMIT 1',
-        [prodId]
-      );
-
-      const prevQty = prodRows.length > 0 ? Number(prodRows[0].quantity) || 0 : 0;
-      const newQty = Math.max(0, prevQty - qty);
-
-      await pool.query(
-        'UPDATE products SET quantity = ? WHERE product_id = ?',
-        [newQty, prodId]
-      );
-
-      await pool.query(
-        `INSERT INTO inventory_logs (product_id, previous_quantity, new_quantity, change_quantity, action, notes, operator)
-         VALUES (?, ?, ?, ?, 'SALE', ?, 'UPI Payment System')`,
-        [prodId, prevQty, newQty, -qty, `UPI Purchase Order #${orderId}`]
-      );
-    }
-
-    return { success: true, alreadyDeducted: false };
-  } catch (err: any) {
-    console.warn('[MySQL] Error deducting inventory for order:', err?.message);
-    return { success: true, alreadyDeducted: false };
-  }
-}
-
-export async function listRecentPaymentsFromDb(limit = 20): Promise<any[]> {
-  const pool = getPool();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT * FROM payments ORDER BY id DESC LIMIT ?',
-      [Math.max(1, limit)]
-    );
-    if (rows && rows.length > 0) return rows;
-  } catch (err: any) {
-    console.warn('[MySQL] Error listing recent payments from DB:', err?.message);
-  }
-
-  // Fallback to local store
-  const list = getLocalFallbackPayments();
-  return list.slice(0, limit);
 }

@@ -387,10 +387,4 @@ export const hi: typeof en = {
   invalidPercentageError: 'कृपया एक मान्य प्रतिशत संख्या दर्ज करें।',
   negativePercentageError: 'प्रतिशत ऋणात्मक नहीं हो सकता।',
   maxPercentageError: 'प्रतिशत 100% से अधिक नहीं हो सकता।',
-  payUpi: 'यूपीआई भुगतान',
-  payWithQr: 'क्यूआर कोड से भुगतान करें',
-  payDirectUpi: 'सीधे यूपीआई ऐप से भुगतान करें',
-  openUpiApps: 'यूपीआई ऐप्स खोलें',
-  scanUsingUpi: 'किसी भी यूपीआई ऐप से स्कैन करें',
-  tabPaymentSettings: 'भुगतान सेटिंग्स',
 };

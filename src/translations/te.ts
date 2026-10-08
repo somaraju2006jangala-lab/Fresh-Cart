@@ -387,10 +387,4 @@ export const te: typeof en = {
   invalidPercentageError: 'దయచేసి సరైన శాతం సంఖ్యను నమోదు చేయండి.',
   negativePercentageError: 'శాతం రుణాత్మకం కాకూడదు.',
   maxPercentageError: 'శాతం 100% మించకూడదు.',
-  payUpi: 'యూపీఐ చెల్లింపు',
-  payWithQr: 'క్యూఆర్ కోడ్‌తో చెల్లించండి',
-  payDirectUpi: 'నేరుగా యూపీఐ యాప్ ద్వారా చెల్లించండి',
-  openUpiApps: 'యూపీఐ యాప్‌లను తెరవండి',
-  scanUsingUpi: 'ఏదైనా యూపీఐ యాప్‌తో స్కాన్ చేయండి',
-  tabPaymentSettings: 'చెల్లింపు సెట్టింగ్‌లు',
 };
