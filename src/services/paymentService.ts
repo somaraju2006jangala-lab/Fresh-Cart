@@ -75,11 +75,19 @@ export async function saveUpiSettings(settings: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
-    const data = await res.json();
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      // response might not be JSON
+    }
     if (res.ok && data?.success) {
       return { success: true, settings: data.settings };
     }
-    return { success: false, error: data?.error || 'Failed to save UPI settings.' };
+    return {
+      success: false,
+      error: data?.error || (res.status !== 200 ? `Failed to save UPI settings (Status ${res.status}).` : 'Failed to save UPI settings.'),
+    };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Network error saving UPI settings.' };
   }

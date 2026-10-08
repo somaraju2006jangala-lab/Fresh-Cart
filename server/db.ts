@@ -1,5 +1,8 @@
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
 
 let pool: Pool | null = null;
 let isConnected = false;
@@ -18,6 +21,55 @@ let lastMySqlError: {
     | 'UNKNOWN';
   timestamp: string;
 } | null = null;
+
+/**
+ * Automatically launches local mysqld daemon if stopped on development machine.
+ */
+async function tryAutoStartLocalMySql(): Promise<boolean> {
+  if (isProductionEnv()) return false;
+
+  const mysqldBin = '/usr/local/mysql/bin/mysqld';
+  const dataDir = path.resolve(process.cwd(), '.data/mysql');
+
+  if (!fs.existsSync(mysqldBin) || !fs.existsSync(dataDir)) {
+    return false;
+  }
+
+  console.log('[MySQL Auto-Start] Local MySQL not running. Starting local mysqld daemon with .data/mysql...');
+  try {
+    const child = spawn(
+      mysqldBin,
+      [`--datadir=${dataDir}`, '--port=3306', '--bind-address=127.0.0.1'],
+      {
+        detached: true,
+        stdio: 'ignore',
+      }
+    );
+    child.unref();
+
+    for (let i = 0; i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      try {
+        const testConn = await mysql.createConnection({
+          host: '127.0.0.1',
+          port: 3306,
+          user: process.env.MYSQL_USER || 'admin',
+          password: process.env.MYSQL_PASSWORD || 'Admin@12345',
+          connectTimeout: 800,
+        });
+        await testConn.ping();
+        await testConn.end();
+        console.log('[MySQL Auto-Start] Local mysqld started successfully.');
+        return true;
+      } catch {
+        // Continue polling
+      }
+    }
+  } catch (err: any) {
+    console.warn('[MySQL Auto-Start] Could not spawn local mysqld:', err?.message);
+  }
+  return false;
+}
 
 /**
  * Returns true if running in Vercel or production environment.
@@ -340,7 +392,26 @@ export async function connectMySql(): Promise<boolean> {
   connectionPromise = (async () => {
     try {
       const currentPool = getPool();
-      const connection = await currentPool.getConnection();
+      let connection: PoolConnection | null = null;
+      try {
+        connection = await currentPool.getConnection();
+      } catch (connErr: any) {
+        if (
+          !isProd &&
+          (config.host === '127.0.0.1' || config.host === 'localhost') &&
+          (connErr?.code === 'ECONNREFUSED' || connErr?.message?.includes('ECONNREFUSED'))
+        ) {
+          const autoStarted = await tryAutoStartLocalMySql();
+          if (autoStarted) {
+            connection = await currentPool.getConnection();
+          } else {
+            throw connErr;
+          }
+        } else {
+          throw connErr;
+        }
+      }
+
       try {
         await connection.ping();
       } finally {
@@ -647,11 +718,32 @@ export async function initializeDatabase(): Promise<void> {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_settings_key (setting_key)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    `CREATE TABLE IF NOT EXISTS payment_settings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      upi_id VARCHAR(255) NOT NULL,
+      merchant_name VARCHAR(255) NOT NULL,
+      enabled TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_payment_settings_upi (upi_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
   ];
 
   for (const sql of tableStatements) {
     await currentPool.query(sql);
   }
+
+  // Ensure payment_settings table columns exist safely if table pre-existed
+  try {
+    await currentPool.query('ALTER TABLE payment_settings ADD COLUMN upi_id VARCHAR(255) NOT NULL');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payment_settings ADD COLUMN merchant_name VARCHAR(255) NOT NULL');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payment_settings ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1');
+  } catch {}
 
   // Ensure otp_records has otp_code column if the table already existed from an earlier schema
   try {
@@ -2187,62 +2279,163 @@ export interface UpiConfigData {
 }
 
 export async function getUpiPaymentSettingsFromDb(): Promise<UpiConfigData> {
-  const pool = getPool();
   try {
-    const [rows] = await pool.query<RowDataPacket[]>(
+    if (!isConnected) {
+      await connectMySql().catch(() => {});
+    }
+    const pool = getPool();
+
+    // 1. Try reading from payment_settings table first
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        'SELECT id, upi_id, merchant_name, enabled, updated_at FROM payment_settings ORDER BY id ASC LIMIT 1'
+      );
+      if (rows.length > 0 && rows[0].upi_id) {
+        return {
+          upiId: String(rows[0].upi_id).trim(),
+          merchantName: String(rows[0].merchant_name || 'FreshCart Store').trim(),
+          enabled: rows[0].enabled === 1 || rows[0].enabled === true,
+          updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : undefined,
+        };
+      }
+    } catch (tblErr: any) {
+      console.warn('[MySQL] Notice querying payment_settings table:', tblErr?.message);
+    }
+
+    // 2. Fallback to app_settings if payment_settings is empty
+    const [appRows] = await pool.query<RowDataPacket[]>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
       ['upi_settings']
     );
-    if (rows.length === 0) {
-      return {
-        upiId: 'riya.bakery@sbi',
-        merchantName: 'Riya Bakery',
-        enabled: true,
-      };
+    if (appRows.length > 0 && appRows[0].setting_value) {
+      const val = typeof appRows[0].setting_value === 'string'
+        ? JSON.parse(appRows[0].setting_value)
+        : appRows[0].setting_value;
+      if (val?.upiId) {
+        return {
+          upiId: String(val.upiId).trim(),
+          merchantName: String(val.merchantName || 'Riya Bakery').trim(),
+          enabled: val.enabled !== false,
+          updatedAt: val.updatedAt,
+        };
+      }
     }
-    const val = typeof rows[0].setting_value === 'string'
-      ? JSON.parse(rows[0].setting_value)
-      : rows[0].setting_value;
-    return {
-      upiId: val?.upiId || 'riya.bakery@sbi',
-      merchantName: val?.merchantName || 'Riya Bakery',
-      enabled: val?.enabled !== false,
-      updatedAt: val?.updatedAt,
-    };
   } catch (err: any) {
     console.warn('[MySQL] Error reading UPI settings from DB:', err?.message);
-    return {
-      upiId: 'riya.bakery@sbi',
-      merchantName: 'Riya Bakery',
-      enabled: true,
-    };
   }
+
+  return {
+    upiId: 'riya.bakery@sbi',
+    merchantName: 'Riya Bakery',
+    enabled: true,
+  };
 }
 
 export async function saveUpiPaymentSettingsToDb(settings: {
   upiId: string;
   merchantName: string;
   enabled?: boolean;
-}): Promise<boolean> {
+}): Promise<UpiConfigData> {
+  if (!settings || typeof settings !== 'object') {
+    throw new Error('Invalid UPI settings payload provided.');
+  }
+
+  const rawUpiId = settings.upiId;
+  const rawMerchantName = settings.merchantName;
+
+  if (rawUpiId === undefined || rawUpiId === null || typeof rawUpiId !== 'string') {
+    throw new Error('UPI ID is required and cannot be null or undefined.');
+  }
+  const trimmedId = rawUpiId.trim();
+  if (!trimmedId) {
+    throw new Error('UPI ID cannot be empty.');
+  }
+
+  if (rawMerchantName === undefined || rawMerchantName === null || typeof rawMerchantName !== 'string') {
+    throw new Error('Merchant / Business Name is required and cannot be null or undefined.');
+  }
+  const trimmedName = rawMerchantName.trim();
+  if (!trimmedName) {
+    throw new Error('Merchant / Business Name cannot be empty.');
+  }
+
+  const isEnabled = settings.enabled !== false;
+
+  // Ensure connection is established before saving
+  if (!isConnected) {
+    const connected = await connectMySql();
+    if (!connected) {
+      throw new Error(lastMySqlError?.message || 'MySQL database connection is not available.');
+    }
+  }
+
   const pool = getPool();
+
+  // Safely ensure payment_settings table exists
+  await pool.query(`CREATE TABLE IF NOT EXISTS payment_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    upi_id VARCHAR(255) NOT NULL,
+    merchant_name VARCHAR(255) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_payment_settings_upi (upi_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
+  // Check for existing record to support both first-time save and updating existing settings
+  const [existingRows] = await pool.query<RowDataPacket[]>(
+    'SELECT id FROM payment_settings ORDER BY id ASC LIMIT 1'
+  );
+
+  const targetId = existingRows.length > 0 ? Number(existingRows[0].id) : 1;
+
+  // UPSERT: insert or update ensuring single active UPI configuration
+  await pool.query(
+    `INSERT INTO payment_settings (id, upi_id, merchant_name, enabled, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       upi_id = VALUES(upi_id),
+       merchant_name = VALUES(merchant_name),
+       enabled = VALUES(enabled),
+       updated_at = CURRENT_TIMESTAMP`,
+    [targetId, trimmedId, trimmedName, isEnabled ? 1 : 0]
+  );
+
+  // Guarantee exactly one active row by removing any extraneous rows
+  if (existingRows.length > 1) {
+    await pool.query('DELETE FROM payment_settings WHERE id != ?', [targetId]);
+  }
+
+  // Immediately read the saved settings from MySQL payment_settings table
+  const [readRows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, upi_id, merchant_name, enabled, updated_at FROM payment_settings WHERE id = ? LIMIT 1',
+    [targetId]
+  );
+
+  if (readRows.length === 0) {
+    throw new Error('Could not retrieve saved UPI settings from database.');
+  }
+
+  const savedRecord: UpiConfigData = {
+    upiId: String(readRows[0].upi_id).trim(),
+    merchantName: String(readRows[0].merchant_name).trim(),
+    enabled: readRows[0].enabled === 1 || readRows[0].enabled === true,
+    updatedAt: readRows[0].updated_at ? new Date(readRows[0].updated_at).toISOString() : new Date().toISOString(),
+  };
+
+  // Mirror to app_settings ('upi_settings') for backwards compatibility
   try {
-    const dataToSave = {
-      upiId: settings.upiId.trim(),
-      merchantName: settings.merchantName.trim(),
-      enabled: settings.enabled !== false,
-      updatedAt: new Date().toISOString(),
-    };
     await pool.query(
       `INSERT INTO app_settings (setting_key, setting_value)
        VALUES (?, ?)
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-      ['upi_settings', JSON.stringify(dataToSave)]
+      ['upi_settings', JSON.stringify(savedRecord)]
     );
-    return true;
-  } catch (err: any) {
-    console.error('[MySQL] Error saving UPI settings to DB:', err?.message);
-    return false;
+  } catch (mirrorErr: any) {
+    console.warn('[MySQL] Mirror update to app_settings failed:', mirrorErr?.message);
   }
+
+  return savedRecord;
 }
 
 export async function createUpiPaymentAttemptInDb(paymentData: {

@@ -504,6 +504,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       });
 
       if (res.success) {
+        if (res.settings) {
+          setUpiIdInput(res.settings.upiId || trimmedId);
+          setMerchantNameInput(res.settings.merchantName || trimmedName);
+        }
         setUpiSaveSuccess('UPI payment settings saved successfully!');
       } else {
         setUpiSaveError(res.error || 'Failed to save UPI settings.');

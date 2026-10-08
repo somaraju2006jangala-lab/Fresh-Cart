@@ -1179,6 +1179,7 @@ const UPI_ID_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/;
  */
 apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_req: Request, res: Response) => {
   try {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const settings = await getUpiPaymentSettingsFromDb();
     sendJson(res, 200, {
       success: true,
@@ -1189,6 +1190,7 @@ apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_re
       },
     });
   } catch (err: any) {
+    console.error('[API] Error fetching UPI settings:', err);
     sendJson(res, 500, { success: false, error: err?.message || 'Failed to fetch UPI payment settings.' });
   }
 });
@@ -1200,11 +1202,14 @@ apiRouter.get(['/api/payment-settings/upi', '/payment-settings/upi'], async (_re
 apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (req: Request, res: Response) => {
   try {
     const { upiId, merchantName, enabled } = req.body || {};
-    const trimmedId = typeof upiId === 'string' ? upiId.trim() : '';
-    const trimmedName = typeof merchantName === 'string' ? merchantName.trim() : '';
 
-    if (!trimmedId) {
+    if (upiId === undefined || upiId === null) {
       sendJson(res, 400, { success: false, error: 'UPI ID is required.' });
+      return;
+    }
+    const trimmedId = typeof upiId === 'string' ? upiId.trim() : '';
+    if (!trimmedId) {
+      sendJson(res, 400, { success: false, error: 'UPI ID cannot be empty.' });
       return;
     }
 
@@ -1216,32 +1221,33 @@ apiRouter.post(['/api/payment-settings/upi', '/payment-settings/upi'], async (re
       return;
     }
 
-    if (!trimmedName) {
+    if (merchantName === undefined || merchantName === null) {
       sendJson(res, 400, { success: false, error: 'Merchant / Business Name is required.' });
       return;
     }
+    const trimmedName = typeof merchantName === 'string' ? merchantName.trim() : '';
+    if (!trimmedName) {
+      sendJson(res, 400, { success: false, error: 'Merchant / Business Name cannot be empty.' });
+      return;
+    }
 
-    const saved = await saveUpiPaymentSettingsToDb({
+    const savedSettings = await saveUpiPaymentSettingsToDb({
       upiId: trimmedId,
       merchantName: trimmedName,
       enabled: enabled !== false,
     });
 
-    if (!saved) {
-      sendJson(res, 500, { success: false, error: 'Failed to save UPI settings to database.' });
-      return;
-    }
-
     sendJson(res, 200, {
       success: true,
-      settings: {
-        upiId: trimmedId,
-        merchantName: trimmedName,
-        enabled: enabled !== false,
-      },
+      settings: savedSettings,
     });
   } catch (err: any) {
-    sendJson(res, 500, { success: false, error: err?.message || 'Failed to save UPI settings.' });
+    console.error('[API] Error saving UPI settings to database:', err);
+    sendJson(res, 500, {
+      success: false,
+      error: err?.message || 'Failed to save UPI settings to database.',
+      details: err?.code || undefined,
+    });
   }
 });
 
