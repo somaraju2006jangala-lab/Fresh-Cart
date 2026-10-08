@@ -29,7 +29,6 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { getCustomerOrderOtp, resendOrderOtp } from '../services/otpClientService';
-import { PaymentProofUpload } from './PaymentProofUpload';
 
 interface CustomerDashboardProps {
   cart: CartItem[];
@@ -61,9 +60,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       case 'Picking at Pod #104': return t('statusPicking');
       case 'Cold-Chain En Route': return t('statusColdChain');
       case 'Delivered': return t('statusDelivered');
-      case 'PAYMENT VERIFICATION PENDING': return 'Payment Verification Pending';
-      case 'REJECTED': return 'Payment Rejected';
-      case 'CONFIRMED': return 'Order Confirmed';
       default: return status;
     }
   };
@@ -107,8 +103,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     if (!currentUser?.id) return;
 
     activeOrders.forEach((order) => {
-      const isCod = order.paymentMethod?.toLowerCase().includes('cash') || order.paymentMethod === 'Cash on Delivery';
-      if (order.status === 'Picking' && !isCod && !customerOrderOtps[order.id]) {
+      if (order.status === 'Picking' && !customerOrderOtps[order.id]) {
         // Mark loading state
         setCustomerOrderOtps((prev) => ({
           ...prev,
@@ -540,36 +535,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     {/* Order Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#e5eeff]">
                       <div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
                           <span className="text-[16px] font-bold text-[#0b1c30] font-display">
                             Order {order.id.startsWith('#') ? order.id : `#${order.id}`}
                           </span>
-                          {order.paymentStatus === 'REJECTED' || order.status === 'REJECTED' ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold border border-rose-300">
-                              ✕ Payment Rejected
-                            </span>
-                          ) : order.paymentStatus === 'PENDING VERIFICATION' || order.status === 'PAYMENT VERIFICATION PENDING' ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 animate-pulse">
-                              ● Verification Pending
-                            </span>
-                          ) : order.paymentStatus === 'PAID' ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
-                              ✓ Paid
-                            </span>
-                          ) : order.paymentStatus === 'PENDING' || order.paymentStatus === 'Pending' ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200">
-                              ● Payment Pending
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
-                              ● {getStatusLabel(order.status)}
-                            </span>
-                          )}
-                          {order.status === 'CONFIRMED' && (
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
-                              ✓ Order Confirmed
-                            </span>
-                          )}
+                          <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
+                            ● {getStatusLabel(order.status)}
+                          </span>
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5 flex items-center gap-3">
                           <span>Placed: {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -583,42 +555,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       <div className="bg-[#eff4ff] px-3.5 py-1.5 rounded-xl border border-[#d3e4fe] flex items-center gap-2">
                         <Clock className="w-4 h-4 text-[#006b2c]" />
                         <span className="text-[12px] font-semibold text-[#006b2c]">
-                          {order.paymentStatus === 'PENDING VERIFICATION' || order.status === 'PAYMENT VERIFICATION PENDING'
-                            ? 'Awaiting admin verification'
-                            : (order.estimatedDeliveryTime || 'Arrival in ~20 minutes')}
+                          {order.estimatedDeliveryTime || 'Arrival in ~20 minutes'}
                         </span>
                       </div>
                     </div>
 
-                    {/* Payment Proof Verification Upload Section for Online UPI Orders */}
-                    {(order.paymentMethod?.includes('UPI') ||
-                      order.paymentStatus === 'PENDING VERIFICATION' ||
-                      order.status === 'PAYMENT VERIFICATION PENDING' ||
-                      order.paymentStatus === 'REJECTED') && (
-                      <PaymentProofUpload
-                        orderId={order.id}
-                        customerId={currentUser.id}
-                        customerToken={currentUser.token}
-                        initialProof={order.paymentProof || null}
-                        currentVerificationStatus={
-                          order.paymentStatus === 'PAID'
-                            ? 'VERIFIED'
-                            : order.paymentStatus === 'REJECTED'
-                            ? 'REJECTED'
-                            : order.paymentStatus === 'PENDING VERIFICATION' || order.status === 'PAYMENT VERIFICATION PENDING'
-                            ? 'PENDING_VERIFICATION'
-                            : 'NOT_UPLOADED'
-                        }
-                        onProofSubmitted={() => {
-                          refreshOrders();
-                        }}
-                      />
-                    )}
-
-                    {/* Order Handover OTP Section for Picking Status (Bypassed for Cash on Delivery) */}
-                    {order.status === 'Picking' &&
-                      !order.paymentMethod?.toLowerCase().includes('cash') &&
-                      order.paymentMethod !== 'Cash on Delivery' && (
+                    {/* Order Handover OTP Section for Picking Status */}
+                    {order.status === 'Picking' && (
                       <div
                         id={`order-handover-otp-${order.id.replace('#', '')}`}
                         className="p-4 sm:p-5 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2.5 shadow-xs animate-in fade-in duration-200"

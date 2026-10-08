@@ -121,9 +121,6 @@ export const te: typeof en = {
   payApplePay: '⚡ ఎక్స్‌ప్రెస్ పే',
   payCard: 'క్రెడిట్ / డెబిట్ కార్డు',
   payCod: 'క్యాష్ ఆన్ డెలివరీ (చేతికి నగదు)',
-  payDirectUpi: 'డైరెక్ట్ యూపీఐ యాప్ చెల్లింపు',
-  payWithUpiApp: 'యూపీఐ యాప్‌తో చెల్లించండి →',
-  payNow: 'ఇప్పుడే చెల్లించండి',
   orderSummary: 'ఆర్డర్ సారాంశం ({count} వస్తువులు)',
   placeOrder: 'ఆర్డర్ చేసి చెల్లించండి {total}',
   processingOrder: 'ధృవీకరించి పంపిణీ జరుగుతోంది...',
@@ -379,7 +376,6 @@ export const te: typeof en = {
 
   // Settings & Delivery Charges
   tabSettings: 'డెలివరీ ఛార్జీలు',
-  adminPaymentSettings: 'చెల్లింపు సెట్టింగ్‌లు',
   taxAndPackingSettingTitle: 'డెలివరీ ఛార్జీలు',
   taxAndPackingSettingDesc: 'కస్టమర్ ఆర్డర్‌లపై వర్తించే డెలివరీ ఛార్జీలను కాన్ఫిగర్ చేయండి.',
   taxAndPackingRateLabel: 'డెలివరీ ఛార్జీలు (₹)',

@@ -1,6 +1,5 @@
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
-import { generateQrDataUrl } from '../src/utils/qrCodeGenerator.ts';
 
 let pool: Pool | null = null;
 let isConnected = false;
@@ -617,8 +616,8 @@ export async function initializeDatabase(): Promise<void> {
       payment_id VARCHAR(64) NOT NULL UNIQUE,
       order_id VARCHAR(64) NOT NULL,
       customer_id VARCHAR(64) NOT NULL,
-      payment_method VARCHAR(64) NOT NULL DEFAULT 'COD',
-      payment_status VARCHAR(64) NOT NULL DEFAULT 'PENDING',
+      payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
+      payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
       amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       currency VARCHAR(10) NOT NULL DEFAULT 'INR',
       razorpay_order_id VARCHAR(100) NULL,
@@ -641,29 +640,6 @@ export async function initializeDatabase(): Promise<void> {
         ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-    `CREATE TABLE IF NOT EXISTS payment_proofs (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      proof_id VARCHAR(64) NOT NULL UNIQUE,
-      order_id VARCHAR(64) NOT NULL,
-      customer_id VARCHAR(64) NOT NULL,
-      payment_id VARCHAR(64) NULL,
-      file_name VARCHAR(255) NOT NULL,
-      file_type VARCHAR(64) NOT NULL,
-      file_size INT NOT NULL,
-      file_path TEXT NOT NULL,
-      file_data LONGTEXT NULL,
-      verification_status VARCHAR(32) NOT NULL DEFAULT 'PENDING_VERIFICATION',
-      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      verified_rejected_at TIMESTAMP NULL,
-      verified_rejected_by VARCHAR(100) NULL,
-      admin_notes TEXT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_proofs_order_id (order_id),
-      INDEX idx_proofs_customer_id (customer_id),
-      INDEX idx_proofs_status (verification_status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-
     `CREATE TABLE IF NOT EXISTS app_settings (
       id INT AUTO_INCREMENT PRIMARY KEY,
       setting_key VARCHAR(64) NOT NULL UNIQUE,
@@ -682,14 +658,6 @@ export async function initializeDatabase(): Promise<void> {
     await currentPool.query('ALTER TABLE otp_records ADD COLUMN otp_code VARCHAR(16) NULL AFTER customer_id');
   } catch {
     // Ignore if column already exists
-  }
-
-  // Ensure payments table columns allow arbitrary payment methods and verification statuses
-  try {
-    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(64) NOT NULL DEFAULT "COD"');
-    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(64) NOT NULL DEFAULT "PENDING"');
-  } catch {
-    // Ignore if already modified or table doesn't exist
   }
 
   // Seed default data if tables are empty
@@ -1639,49 +1607,13 @@ export async function clearCartInDb(customerId: string): Promise<boolean> {
 // ORDER OPERATIONS
 // -----------------------------------------------------------------------------
 
-export let inMemoryOrders: any[] = [];
-
 /**
  * Upserts / creates an order in MySQL, including order items and payment record.
  */
 export async function upsertOrderInDb(orderData: any): Promise<boolean> {
-  const orderId = orderData?.id || orderData?.order_id;
-  if (!orderId) return false;
-
-  const normalizedOrder = {
-    ...orderData,
-    id: orderId,
-    order_id: orderId,
-    customerId: orderData.customerId || orderData.customer_id || 'guest',
-    customerName: orderData.customerName || orderData.customer_name || 'Customer',
-    email: orderData.customerEmail || orderData.email || '',
-    mobile: orderData.customerPhone || orderData.phone || orderData.mobile || '',
-    deliveryAddress: orderData.deliveryAddress || orderData.delivery_address || 'Address on file',
-    subtotal: Math.max(0, Number(orderData.subtotal) || 0),
-    discount: Math.max(0, Number(orderData.discount) || 0),
-    total: Math.max(0, Number(orderData.total) || 0),
-    couponCode: orderData.couponCode || orderData.coupon_code || null,
-    status: orderData.status || orderData.order_status || 'Picking',
-    order_status: orderData.order_status || orderData.status || 'Picking',
-    paymentMethod: orderData.paymentMethod || orderData.payment_method || 'COD',
-    payment_method: orderData.payment_method || orderData.paymentMethod || 'COD',
-    paymentStatus: orderData.paymentStatus || orderData.payment_status || 'PENDING',
-    payment_status: orderData.payment_status || orderData.paymentStatus || 'PENDING',
-    items: orderData.items || [],
-    createdAt: orderData.createdAt || orderData.created_at || new Date().toISOString(),
-  };
-
-  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const existIdx = inMemoryOrders.findIndex(
-    (o) => o.id === orderId || o.order_id === orderId || o.id === altId || o.order_id === altId
-  );
-  if (existIdx >= 0) {
-    inMemoryOrders[existIdx] = { ...inMemoryOrders[existIdx], ...normalizedOrder };
-  } else {
-    inMemoryOrders.unshift(normalizedOrder);
-  }
-
+  if (!orderData?.id) return false;
   const pool = getPool();
+  const orderId = orderData.id;
   const customerId = orderData.customerId || 'guest';
   const customerName = orderData.customerName || 'Customer';
   const email = orderData.customerEmail || orderData.email || '';
@@ -1696,9 +1628,8 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
   const paymentStatus = orderData.paymentStatus || 'PENDING';
   const paymentId = orderData.paymentId || `PAY-${orderId.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
 
-  let connection: any = null;
+  const connection = await pool.getConnection();
   try {
-    connection = await pool.getConnection();
     await connection.beginTransaction();
 
     // 1. Ensure customer exists if customerId is provided
@@ -1712,17 +1643,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
       );
     }
 
-    // 2. Check existing order ID to resolve canonical order_id (handling #FC-XXXX vs FC-XXXX)
-    let canonicalOrderId = orderId;
-    const [existingOrders] = (await connection.query(
-      `SELECT order_id FROM orders WHERE order_id IN (?, ?) LIMIT 1`,
-      [orderId, altId]
-    )) as any;
-    if (existingOrders && existingOrders.length > 0) {
-      canonicalOrderId = existingOrders[0].order_id;
-    }
-
-    // Insert or update order
+    // 2. Insert or update order
     await connection.query(
       `INSERT INTO orders (order_id, customer_id, customer_name, email, mobile, delivery_address, subtotal, discount, total, coupon_code, status, payment_id, payment_method, payment_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1731,7 +1652,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
          delivery_address = VALUES(delivery_address),
          payment_status = VALUES(payment_status)`,
       [
-        canonicalOrderId,
+        orderId,
         customerId,
         customerName,
         email || null,
@@ -1750,7 +1671,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
 
     // 3. Insert order items if present
     if (Array.isArray(orderData.items) && orderData.items.length > 0) {
-      await connection.query('DELETE FROM order_items WHERE order_id IN (?, ?)', [orderId, altId]);
+      await connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
 
       for (const item of orderData.items) {
         const prod = item.product || item;
@@ -1764,30 +1685,22 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
         await connection.query(
           `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit, price, subtotal)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [canonicalOrderId, prodId, prodTitle, qty, unit, price, itemSubtotal]
+          [orderId, prodId, prodTitle, qty, unit, price, itemSubtotal]
         );
       }
     }
 
-    // 4. Create/update payments record (preserve existing payment_id to prevent duplicates)
-    const [existingPayments] = (await connection.query(
-      `SELECT payment_id FROM payments WHERE order_id IN (?, ?) LIMIT 1`,
-      [orderId, altId]
-    )) as any;
-    const effectivePaymentId = existingPayments && existingPayments.length > 0 ? existingPayments[0].payment_id : paymentId;
-
+    // 4. Create/update payments record (Razorpay ready)
     await connection.query(
       `INSERT INTO payments (payment_id, order_id, customer_id, payment_method, payment_status, amount, currency)
        VALUES (?, ?, ?, ?, ?, ?, 'INR')
        ON DUPLICATE KEY UPDATE
-         payment_status = VALUES(payment_status),
-         payment_method = VALUES(payment_method),
-         amount = VALUES(amount)`,
+         payment_status = VALUES(payment_status)`,
       [
-        effectivePaymentId,
-        canonicalOrderId,
+        paymentId,
+        orderId,
         customerId,
-        paymentMethod || 'COD',
+        paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD',
         paymentStatus === 'PAID' ? 'PAID' : 'PENDING',
         total,
       ]
@@ -1796,15 +1709,11 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
     await connection.commit();
     return true;
   } catch (err: any) {
-    if (connection) {
-      try { await connection.rollback(); } catch {}
-    }
-    console.warn('[MySQL] Error saving order to DB, preserved in memory:', err?.message);
-    return true;
+    await connection.rollback();
+    console.error('[MySQL] Error saving order:', err?.message);
+    return false;
   } finally {
-    if (connection) {
-      try { connection.release(); } catch {}
-    }
+    connection.release();
   }
 }
 
@@ -1855,47 +1764,9 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
     order.discount = Number(order.discount);
     order.total = Number(order.total);
 
-    // Fetch payment proof if exists
-    try {
-      const [proofRows] = await pool.query<RowDataPacket[]>(
-        `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
-                payment_id as paymentId, file_name as fileName, file_type as fileType,
-                file_size as fileSize, file_path as filePath, verification_status as verificationStatus,
-                uploaded_at as uploadedAt, verified_rejected_at as verifiedRejectedAt,
-                verified_rejected_by as verifiedRejectedBy, admin_notes as adminNotes
-         FROM payment_proofs
-         WHERE order_id IN (?, ?)
-         LIMIT 1`,
-        [orderId, altId]
-      );
-      if (proofRows.length > 0) {
-        order.paymentProof = proofRows[0];
-        order.paymentVerificationStatus = proofRows[0].verificationStatus;
-      } else {
-        order.paymentVerificationStatus = 'NOT_UPLOADED';
-      }
-    } catch {
-      const memProof = inMemoryPaymentProofs.find((p) => p.orderId === orderId || p.orderId === altId);
-      if (memProof) {
-        order.paymentProof = memProof;
-        order.paymentVerificationStatus = memProof.verificationStatus;
-      } else {
-        order.paymentVerificationStatus = 'NOT_UPLOADED';
-      }
-    }
-
     return order;
   } catch (err: any) {
     console.warn('[MySQL] Error finding order:', err?.message);
-    const memOrder = inMemoryOrders.find((o) => o.id === orderId || o.id === altId || o.order_id === orderId || o.order_id === altId);
-    if (memOrder) {
-      const memProof = inMemoryPaymentProofs.find((p) => p.orderId === orderId || p.orderId === altId);
-      return {
-        ...memOrder,
-        paymentProof: memProof || null,
-        paymentVerificationStatus: memProof?.verificationStatus || memOrder.paymentVerificationStatus || 'NOT_UPLOADED',
-      };
-    }
     return null;
   }
 }
@@ -1945,46 +1816,12 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
       ord.subtotal = Number(ord.subtotal);
       ord.discount = Number(ord.discount);
       ord.total = Number(ord.total);
-
-      // Attach proof info
-      try {
-        const altOrdId = ord.id.startsWith('#') ? ord.id.slice(1) : `#${ord.id}`;
-        const [proofRows] = await pool.query<RowDataPacket[]>(
-          `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
-                  payment_id as paymentId, file_name as fileName, file_type as fileType,
-                  file_size as fileSize, file_path as filePath, verification_status as verificationStatus,
-                  uploaded_at as uploadedAt, verified_rejected_at as verifiedRejectedAt,
-                  verified_rejected_by as verifiedRejectedBy, admin_notes as adminNotes
-           FROM payment_proofs
-           WHERE order_id IN (?, ?)
-           LIMIT 1`,
-          [ord.id, altOrdId]
-        );
-        if (proofRows.length > 0) {
-          ord.paymentProof = proofRows[0];
-          ord.paymentVerificationStatus = proofRows[0].verificationStatus;
-        } else {
-          ord.paymentVerificationStatus = 'NOT_UPLOADED';
-        }
-      } catch {
-        const altOrdId = ord.id.startsWith('#') ? ord.id.slice(1) : `#${ord.id}`;
-        const memProof = inMemoryPaymentProofs.find((p) => p.orderId === ord.id || p.orderId === altOrdId);
-        if (memProof) {
-          ord.paymentProof = memProof;
-          ord.paymentVerificationStatus = memProof.verificationStatus;
-        } else {
-          ord.paymentVerificationStatus = 'NOT_UPLOADED';
-        }
-      }
     }
 
     return rows;
   } catch (err: any) {
     console.warn('[MySQL] Error querying orders:', err?.message);
-    const filtered = customerId && customerId.trim()
-      ? inMemoryOrders.filter((o) => o.customerId === customerId.trim() || o.customer_id === customerId.trim())
-      : [...inMemoryOrders];
-    return filtered;
+    return [];
   }
 }
 
@@ -2319,554 +2156,3 @@ export async function saveSettingsToDb(settings: any): Promise<boolean> {
     return false;
   }
 }
-
-// -----------------------------------------------------------------------------
-// PAYMENT SETTINGS OPERATIONS
-// -----------------------------------------------------------------------------
-
-export interface PaymentSettingsRecord {
-  upiId: string;
-  payeeName: string;
-  qrCodeUrl?: string;
-  upiPaymentEnabled: boolean;
-  directUpiAppEnabled: boolean;
-  updatedAt?: string;
-}
-
-export const DEFAULT_PAYMENT_CONFIG: PaymentSettingsRecord = {
-  upiId: 'freshcart@upi',
-  payeeName: 'FreshCart Grocery Store',
-  qrCodeUrl: generateQrDataUrl('upi://pay?pa=freshcart@upi&pn=FreshCart%20Grocery%20Store&cu=INR'),
-  upiPaymentEnabled: true,
-  directUpiAppEnabled: true,
-  updatedAt: new Date().toISOString(),
-};
-
-let inMemoryPaymentSettings: PaymentSettingsRecord = { ...DEFAULT_PAYMENT_CONFIG };
-
-export async function getPaymentSettingsFromDb(): Promise<PaymentSettingsRecord> {
-  const pool = getPool();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
-      ['payment_settings']
-    );
-    if (rows.length > 0) {
-      const val = typeof rows[0].setting_value === 'string'
-        ? JSON.parse(rows[0].setting_value)
-        : rows[0].setting_value;
-      if (val && typeof val.upiId === 'string' && val.upiId.trim().length > 0) {
-        const result: PaymentSettingsRecord = {
-          upiId: val.upiId.trim(),
-          payeeName: val.payeeName?.trim() || 'FreshCart Grocery Store',
-          qrCodeUrl: val.qrCodeUrl || '',
-          upiPaymentEnabled: val.upiPaymentEnabled !== false,
-          directUpiAppEnabled: val.directUpiAppEnabled !== false,
-          updatedAt: val.updatedAt || new Date().toISOString(),
-        };
-        inMemoryPaymentSettings = result;
-        return result;
-      }
-    }
-  } catch (err: any) {
-    console.warn('[MySQL] Error reading payment settings from DB:', err?.message);
-  }
-
-  return inMemoryPaymentSettings;
-}
-
-export async function savePaymentSettingsToDb(settings: PaymentSettingsRecord): Promise<boolean> {
-  inMemoryPaymentSettings = { ...settings };
-  try {
-    const pool = getPool();
-    await pool.query(
-      `INSERT INTO app_settings (setting_key, setting_value)
-       VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-      ['payment_settings', JSON.stringify(settings)]
-    );
-    return true;
-  } catch (err: any) {
-    console.warn('[MySQL] Could not save payment settings to DB:', err?.message);
-    return false;
-  }
-}
-
-/**
- * Payment Proof Data & Verification Storage
- */
-export interface PaymentProofRecord {
-  id?: string;
-  orderId: string;
-  customerId: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  paymentId?: string;
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  filePath?: string;
-  fileData?: string;
-  fileUrl?: string;
-  verificationStatus: 'NOT_UPLOADED' | 'UPLOADED' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED';
-  uploadedAt?: string;
-  verifiedRejectedAt?: string;
-  verifiedRejectedBy?: string;
-  adminNotes?: string;
-  orderAmount?: number;
-  paymentMethod?: string;
-  orderDate?: string;
-}
-
-export let inMemoryPaymentProofs: PaymentProofRecord[] = [];
-
-/**
- * Saves or updates a customer payment proof record in MySQL and in-memory fallback.
- * Automatically marks order as 'PAYMENT VERIFICATION PENDING' and payment as 'PENDING VERIFICATION'.
- */
-export async function savePaymentProofInDb(proof: PaymentProofRecord): Promise<boolean> {
-  const altOrderId = proof.orderId.startsWith('#') ? proof.orderId.slice(1) : `#${proof.orderId}`;
-
-  // 1. In-memory update
-  const existingIdx = inMemoryPaymentProofs.findIndex(
-    (p) => p.orderId === proof.orderId || p.orderId === altOrderId
-  );
-  if (existingIdx >= 0) {
-    inMemoryPaymentProofs[existingIdx] = { ...inMemoryPaymentProofs[existingIdx], ...proof };
-  } else {
-    inMemoryPaymentProofs.unshift({ ...proof });
-  }
-
-  // Update in-memory order status if present
-  const memOrdIdx = inMemoryOrders.findIndex(
-    (o) => o.id === proof.orderId || o.id === altOrderId || o.order_id === proof.orderId || o.order_id === altOrderId
-  );
-  if (memOrdIdx >= 0) {
-    inMemoryOrders[memOrdIdx] = {
-      ...inMemoryOrders[memOrdIdx],
-      status: 'PAYMENT VERIFICATION PENDING',
-      order_status: 'PAYMENT VERIFICATION PENDING',
-      paymentStatus: 'PENDING VERIFICATION',
-      payment_status: 'PENDING VERIFICATION',
-      paymentVerificationStatus: proof.verificationStatus || 'PENDING_VERIFICATION',
-      paymentProof: proof,
-    };
-  }
-
-  // 2. MySQL database update
-  try {
-    const pool = getPool();
-    const [existing] = await pool.query<RowDataPacket[]>(
-      'SELECT id, proof_id FROM payment_proofs WHERE order_id IN (?, ?) LIMIT 1',
-      [proof.orderId, altOrderId]
-    );
-
-    if (existing.length > 0) {
-      await pool.query(
-        `UPDATE payment_proofs
-         SET file_name = ?,
-             file_type = ?,
-             file_size = ?,
-             file_path = ?,
-             file_data = ?,
-             verification_status = ?,
-             uploaded_at = CURRENT_TIMESTAMP,
-             verified_rejected_at = NULL,
-             verified_rejected_by = NULL,
-             admin_notes = NULL
-         WHERE order_id IN (?, ?)`,
-        [
-          proof.fileName,
-          proof.fileType,
-          proof.fileSize,
-          proof.filePath,
-          proof.fileData || null,
-          proof.verificationStatus || 'PENDING_VERIFICATION',
-          proof.orderId,
-          altOrderId,
-        ]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO payment_proofs
-         (proof_id, order_id, customer_id, payment_id, file_name, file_type, file_size, file_path, file_data, verification_status, uploaded_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        [
-          proof.id,
-          proof.orderId,
-          proof.customerId,
-          proof.paymentId || null,
-          proof.fileName,
-          proof.fileType,
-          proof.fileSize,
-          proof.filePath,
-          proof.fileData || null,
-          proof.verificationStatus || 'PENDING_VERIFICATION',
-        ]
-      );
-    }
-
-    // Update order status: PAYMENT VERIFICATION PENDING, paymentStatus: PENDING VERIFICATION
-    await pool.query(
-      `UPDATE orders
-       SET payment_status = 'PENDING VERIFICATION',
-           status = 'PAYMENT VERIFICATION PENDING'
-       WHERE order_id IN (?, ?)`,
-      [proof.orderId, altOrderId]
-    );
-
-    // Update payments table
-    await pool.query(
-      `UPDATE payments
-       SET payment_status = 'PENDING VERIFICATION'
-       WHERE order_id IN (?, ?)`,
-      [proof.orderId, altOrderId]
-    );
-
-    return true;
-  } catch (err: any) {
-    console.warn('[MySQL] Error saving payment proof to DB (in-memory updated):', err?.message);
-    return true;
-  }
-}
-
-/**
- * Retrieves the payment proof record for a specific order.
- */
-export async function getPaymentProofForOrderInDb(orderId: string): Promise<PaymentProofRecord | null> {
-  const altOrderId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT proof_id as id, order_id as orderId, customer_id as customerId,
-              payment_id as paymentId, file_name as fileName, file_type as fileType,
-              file_size as fileSize, file_path as filePath, file_data as fileData,
-              verification_status as verificationStatus, uploaded_at as uploadedAt,
-              verified_rejected_at as verifiedRejectedAt, verified_rejected_by as verifiedRejectedBy,
-              admin_notes as adminNotes
-       FROM payment_proofs
-       WHERE order_id IN (?, ?)
-       LIMIT 1`,
-      [orderId, altOrderId]
-    );
-
-    if (rows.length > 0) {
-      return rows[0] as PaymentProofRecord;
-    }
-  } catch (err: any) {
-    console.warn('[MySQL] Error fetching payment proof from DB:', err?.message);
-  }
-
-  // Fallback to in-memory store
-  const found = inMemoryPaymentProofs.find(
-    (p) => p.orderId === orderId || p.orderId === altOrderId
-  );
-  return found || null;
-}
-
-/**
- * Retrieves all submitted payment proofs for Admin Payment Verification section.
- * Includes customer info, order amount, payment method, and proof metadata.
- */
-export async function getAllPaymentProofsInDb(): Promise<PaymentProofRecord[]> {
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        p.proof_id as id,
-        p.order_id as orderId,
-        p.customer_id as customerId,
-        COALESCE(o.customer_name, c.full_name, 'Customer') as customerName,
-        COALESCE(o.mobile, c.mobile, '') as customerPhone,
-        COALESCE(o.email, c.email, '') as customerEmail,
-        p.payment_id as paymentId,
-        p.file_name as fileName,
-        p.file_type as fileType,
-        p.file_size as fileSize,
-        p.file_path as filePath,
-        p.file_data as fileData,
-        p.verification_status as verificationStatus,
-        p.uploaded_at as uploadedAt,
-        p.verified_rejected_at as verifiedRejectedAt,
-        p.verified_rejected_by as verifiedRejectedBy,
-        p.admin_notes as adminNotes,
-        COALESCE(o.total, 0) as orderAmount,
-        COALESCE(o.payment_method, 'UPI / QR Payment') as paymentMethod,
-        COALESCE(o.created_at, p.uploaded_at) as orderDate
-      FROM payment_proofs p
-      LEFT JOIN orders o ON (o.order_id = p.order_id OR CONCAT('#', o.order_id) = p.order_id OR o.order_id = CONCAT('#', p.order_id))
-      LEFT JOIN customers c ON c.customer_id = p.customer_id
-      ORDER BY p.uploaded_at DESC`
-    );
-
-    if (rows.length > 0) {
-      inMemoryPaymentProofs = rows.map((r) => ({
-        ...r,
-        orderAmount: Number(r.orderAmount),
-      })) as PaymentProofRecord[];
-      return inMemoryPaymentProofs;
-    }
-  } catch (err: any) {
-    console.warn('[MySQL] Error getting all payment proofs:', err?.message);
-  }
-
-  return inMemoryPaymentProofs;
-}
-
-/**
- * Handles Admin Verification actions: "Verify Payment" or "Reject Payment".
- * 
- * WHEN ADMIN CLICKS "VERIFY PAYMENT":
- * - payment status -> PAID
- * - order status -> CONFIRMED
- * - verification status -> VERIFIED
- * - ONLY AFTER VERIFICATION: reduce inventory/stock and record SALE in inventory logs.
- * 
- * WHEN ADMIN CLICKS "REJECT PAYMENT":
- * - payment status -> REJECTED
- * - order status -> REJECTED
- * - verification status -> REJECTED
- * - keep order from being confirmed; do NOT decrement inventory.
- */
-export async function verifyPaymentProofInDb(
-  orderId: string,
-  action: 'VERIFY' | 'REJECT',
-  adminOperator = 'Admin',
-  notes = ''
-): Promise<{
-  success: boolean;
-  verificationStatus?: string;
-  paymentStatus?: string;
-  orderStatus?: string;
-  error?: string;
-}> {
-  const altOrderId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  const nowIso = new Date().toISOString();
-
-  // 1. In-memory update
-  const memIdx = inMemoryPaymentProofs.findIndex(
-    (p) => p.orderId === orderId || p.orderId === altOrderId
-  );
-  if (memIdx >= 0) {
-    inMemoryPaymentProofs[memIdx] = {
-      ...inMemoryPaymentProofs[memIdx],
-      verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
-      verifiedRejectedAt: nowIso,
-      verifiedRejectedBy: adminOperator,
-      adminNotes: notes,
-    };
-  }
-
-  // Update in-memory order if present
-  let isAlreadyPaidInMemory = false;
-  const ordIdx = inMemoryOrders.findIndex(
-    (o) => o.id === orderId || o.id === altOrderId || o.order_id === orderId || o.order_id === altOrderId
-  );
-  if (ordIdx >= 0) {
-    isAlreadyPaidInMemory = (
-      inMemoryOrders[ordIdx].paymentStatus === 'PAID' ||
-      inMemoryOrders[ordIdx].payment_status === 'PAID'
-    );
-    inMemoryOrders[ordIdx] = {
-      ...inMemoryOrders[ordIdx],
-      status: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
-      order_status: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
-      paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
-      payment_status: action === 'VERIFY' ? 'PAID' : 'REJECTED',
-      paymentVerificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
-    };
-  }
-
-  // 2. MySQL transactional update
-  try {
-    const pool = getPool();
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      if (action === 'VERIFY') {
-        // Check existing order payment status to enforce IDEMPOTENCY
-        const [existingOrderRows] = await connection.query<RowDataPacket[]>(
-          `SELECT payment_status FROM orders WHERE order_id IN (?, ?) LIMIT 1`,
-          [orderId, altOrderId]
-        );
-        const isAlreadyPaidInDb = existingOrderRows.length > 0 && existingOrderRows[0].payment_status === 'PAID';
-
-        // Update payment_proofs
-        await connection.query(
-          `UPDATE payment_proofs
-           SET verification_status = 'VERIFIED',
-               verified_rejected_at = CURRENT_TIMESTAMP,
-               verified_rejected_by = ?,
-               admin_notes = ?
-           WHERE order_id IN (?, ?)`,
-          [adminOperator, notes || 'Verified by admin', orderId, altOrderId]
-        );
-
-        // Update orders: CONFIRMED and PAID
-        await connection.query(
-          `UPDATE orders
-           SET payment_status = 'PAID',
-               status = 'CONFIRMED'
-           WHERE order_id IN (?, ?)`,
-          [orderId, altOrderId]
-        );
-
-        // Update payments
-        await connection.query(
-          `UPDATE payments
-           SET payment_status = 'PAID',
-               paid_at = CURRENT_TIMESTAMP
-           WHERE order_id IN (?, ?)`,
-          [orderId, altOrderId]
-        );
-
-        // Deduct inventory ONLY on the first verification transition to PAID (prevents duplicate inventory deduction)
-        if (!isAlreadyPaidInDb && !isAlreadyPaidInMemory) {
-          const [items] = await connection.query<RowDataPacket[]>(
-            `SELECT product_id, quantity, product_name FROM order_items WHERE order_id IN (?, ?)`,
-            [orderId, altOrderId]
-          );
-
-          for (const it of items) {
-            const qty = Number(it.quantity) || 1;
-            const [prodRows] = await connection.query<RowDataPacket[]>(
-              `SELECT stock, title, sku FROM products WHERE product_id = ? LIMIT 1`,
-              [it.product_id]
-            );
-
-            if (prodRows.length > 0) {
-              const currentStock = Number(prodRows[0].stock) || 0;
-              const newStock = Math.max(0, currentStock - qty);
-              await connection.query(
-                `UPDATE products SET stock = ? WHERE product_id = ?`,
-                [newStock, it.product_id]
-              );
-
-              // Record inventory log audit entry
-              await connection.query(
-                `INSERT INTO inventory_logs (product_id, previous_quantity, new_quantity, change_quantity, action, notes, operator)
-                 VALUES (?, ?, ?, ?, 'SALE', ?, ?)`,
-                [
-                  it.product_id,
-                  currentStock,
-                  newStock,
-                  -qty,
-                  `Verified Payment Order (${orderId})`,
-                  adminOperator,
-                ]
-              );
-            }
-          }
-        }
-      } else {
-        // action === 'REJECT'
-        await connection.query(
-          `UPDATE payment_proofs
-           SET verification_status = 'REJECTED',
-               verified_rejected_at = CURRENT_TIMESTAMP,
-               verified_rejected_by = ?,
-               admin_notes = ?
-           WHERE order_id IN (?, ?)`,
-          [adminOperator, notes || 'Payment rejected by admin', orderId, altOrderId]
-        );
-
-        await connection.query(
-          `UPDATE orders
-           SET payment_status = 'REJECTED',
-               status = 'REJECTED'
-           WHERE order_id IN (?, ?)`,
-          [orderId, altOrderId]
-        );
-
-        await connection.query(
-          `UPDATE payments
-           SET payment_status = 'REJECTED'
-           WHERE order_id IN (?, ?)`,
-          [orderId, altOrderId]
-        );
-      }
-
-      await connection.commit();
-      return {
-        success: true,
-        verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
-        paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
-        orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
-      };
-    } catch (err: any) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
-  } catch (err: any) {
-    console.warn('[MySQL] Error verifying payment proof in DB (in-memory state updated):', err?.message);
-    return {
-      success: true,
-      verificationStatus: action === 'VERIFY' ? 'VERIFIED' : 'REJECTED',
-      paymentStatus: action === 'VERIFY' ? 'PAID' : 'REJECTED',
-      orderStatus: action === 'VERIFY' ? 'CONFIRMED' : 'REJECTED',
-    };
-  }
-}
-
-/**
- * Finds an order by its payment ID or transaction reference.
- */
-export async function findOrderByPaymentOrTransactionIdInDb(transactionId: string): Promise<any | null> {
-  if (!transactionId) return null;
-  const cleanTxn = transactionId.trim();
-
-  // 1. Direct match by order ID
-  const byOrder = await findOrderInDb(cleanTxn);
-  if (byOrder) return byOrder;
-
-  // 2. Extract base order reference if format is FC-XXXX-...
-  const fcMatch = cleanTxn.match(/^FC-([A-Za-z0-9]+)/i);
-  if (fcMatch) {
-    const candidateId = `#FC-${fcMatch[1]}`;
-    const candOrder = await findOrderInDb(candidateId);
-    if (candOrder) return candOrder;
-    const candOrder2 = await findOrderInDb(`FC-${fcMatch[1]}`);
-    if (candOrder2) return candOrder2;
-  }
-
-  // 3. Check in-memory orders
-  const mem = inMemoryOrders.find(
-    (o) =>
-      o.paymentId === cleanTxn ||
-      o.payment_id === cleanTxn ||
-      o.id === cleanTxn ||
-      o.order_id === cleanTxn
-  );
-  if (mem) return mem;
-
-  // 4. Check MySQL orders and payments table
-  const pool = getPool();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT order_id FROM orders WHERE payment_id = ? LIMIT 1`,
-      [cleanTxn]
-    );
-    if (rows.length > 0 && rows[0].order_id) {
-      return await findOrderInDb(rows[0].order_id);
-    }
-
-    const [payRows] = await pool.query<RowDataPacket[]>(
-      `SELECT order_id FROM payments WHERE payment_id = ? LIMIT 1`,
-      [cleanTxn]
-    );
-    if (payRows.length > 0 && payRows[0].order_id) {
-      return await findOrderInDb(payRows[0].order_id);
-    }
-  } catch {
-    // MySQL query error gracefully caught
-  }
-
-  return null;
-}
-
-

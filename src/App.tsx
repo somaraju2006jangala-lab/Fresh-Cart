@@ -440,129 +440,44 @@ function FreshCartStore() {
     setCart([]);
   };
 
-  // When a customer places an order:
-  // For COD: reduces available quantity immediately upon order placement.
-  // For UPI / Online methods: inventory is NOT reduced merely because customer placed order or uploaded screenshot!
-  // Inventory is ONLY reduced when Admin verifies the payment!
+  // When a customer purchases a product, reduce the available quantity accordingly
   const handleOrderPlaced = (purchasedItems: CartItem[], placedOrder?: CustomerOrder) => {
-    const isUpiOrder =
-      placedOrder?.paymentMethod === 'UPI / QR Payment' ||
-      placedOrder?.paymentMethod === 'Direct UPI App Payment' ||
-      placedOrder?.paymentMethod?.includes('UPI') ||
-      placedOrder?.status === 'PAYMENT VERIFICATION PENDING' ||
-      placedOrder?.paymentStatus === 'PENDING VERIFICATION';
+    setProducts((prev) =>
+      prev.map((p) => {
+        const purchased = purchasedItems.find((it) => it.product.id === p.id);
+        if (purchased) {
+          const newStock = Math.max(0, p.stock - purchased.quantity);
+          return { ...p, stock: newStock };
+        }
+        return p;
+      })
+    );
 
-    if (!isUpiOrder) {
-      setProducts((prev) =>
-        prev.map((p) => {
-          const purchased = purchasedItems.find((it) => it.product.id === p.id);
-          if (purchased) {
-            const newStock = Math.max(0, p.stock - purchased.quantity);
-            return { ...p, stock: newStock };
-          }
-          return p;
-        })
-      );
-
-      // Record CDC inventory audit log entries for the purchase
-      purchasedItems.forEach((it) => {
-        const remainingStock = Math.max(0, it.product.stock - it.quantity);
-        const { date, time, timestamp } = createLogTimestamp();
-        const logEntry: InventoryLog = {
-          id: `log-${Date.now()}-${it.product.id}`,
-          timestamp,
-          date,
-          time,
-          sku: it.product.sku,
-          productTitle: it.product.title,
-          changeType: 'SALE',
-          quantityChange: -it.quantity,
-          newStock: remainingStock,
-          operator: 'Customer Checkout',
-          notes: `Customer Order Purchase (${it.quantity} ${it.product.unit})`,
-        };
-        setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
-      });
-    }
+    // Record CDC inventory audit log entries for the purchase
+    purchasedItems.forEach((it) => {
+      const remainingStock = Math.max(0, it.product.stock - it.quantity);
+      const { date, time, timestamp } = createLogTimestamp();
+      const logEntry: InventoryLog = {
+        id: `log-${Date.now()}-${it.product.id}`,
+        timestamp,
+        date,
+        time,
+        sku: it.product.sku,
+        productTitle: it.product.title,
+        changeType: 'SALE',
+        quantityChange: -it.quantity,
+        newStock: remainingStock,
+        operator: 'Customer Checkout',
+        notes: `Customer Order Purchase (${it.quantity} ${it.product.unit})`,
+      };
+      setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
+    });
 
     // Update customer orders state
     if (placedOrder) {
       setCustomerOrders((prev) => [placedOrder, ...prev.filter((o) => o.id !== placedOrder.id)]);
     } else {
       setCustomerOrders(getCustomerOrders());
-    }
-  };
-
-  // Admin Payment Verification handler
-  // Only after successful verification: confirm order and reduce inventory/stock
-  const handleVerifyPaymentOrder = (orderId: string, action: 'VERIFY' | 'REJECT', notes?: string) => {
-    if (action === 'VERIFY') {
-      const targetOrder = customerOrders.find(
-        (o) => o.id === orderId || o.id === `#${orderId}` || `#${o.id}` === orderId
-      );
-
-      if (targetOrder && Array.isArray(targetOrder.items) && targetOrder.items.length > 0) {
-        // 1. Deduct stock for the items in the verified order
-        setProducts((prev) =>
-          prev.map((p) => {
-            const purchased = targetOrder.items.find((it) => it.product.id === p.id);
-            if (purchased) {
-              const newStock = Math.max(0, p.stock - purchased.quantity);
-              return { ...p, stock: newStock };
-            }
-            return p;
-          })
-        );
-
-        // 2. Record inventory SALE audit logs
-        targetOrder.items.forEach((it) => {
-          const remainingStock = Math.max(0, it.product.stock - it.quantity);
-          const { date, time, timestamp } = createLogTimestamp();
-          const logEntry: InventoryLog = {
-            id: `log-${Date.now()}-${it.product.id}`,
-            timestamp,
-            date,
-            time,
-            sku: it.product.sku,
-            productTitle: it.product.title,
-            changeType: 'SALE',
-            quantityChange: -it.quantity,
-            newStock: remainingStock,
-            operator: 'Admin Payment Verification',
-            notes: `Verified Payment Order (${orderId})${notes ? ` - ${notes}` : ''}`,
-          };
-          setInventoryLogs((prevLogs) => [logEntry, ...prevLogs]);
-        });
-      }
-
-      // 3. Update order in state to CONFIRMED and PAID
-      setCustomerOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId || o.id === `#${orderId}` || `#${o.id}` === orderId
-            ? {
-                ...o,
-                status: 'CONFIRMED',
-                paymentStatus: 'PAID',
-                paymentVerificationStatus: 'VERIFIED',
-              }
-            : o
-        )
-      );
-    } else {
-      // action === 'REJECT'
-      // Keep order from being confirmed; do NOT reduce inventory
-      setCustomerOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId || o.id === `#${orderId}` || `#${o.id}` === orderId
-            ? {
-                ...o,
-                status: 'REJECTED',
-                paymentStatus: 'REJECTED',
-                paymentVerificationStatus: 'REJECTED',
-              }
-            : o
-        )
-      );
     }
   };
 
@@ -857,7 +772,6 @@ function FreshCartStore() {
             onUpdateDeliveryCharges={handleUpdateDeliveryCharges}
             deliveryRules={deliveryRules}
             onUpdateDeliveryRules={handleUpdateDeliveryRules}
-            onVerifyPaymentOrder={handleVerifyPaymentOrder}
           />
         ) : currentView === 'login' ? (
           <LoginPage

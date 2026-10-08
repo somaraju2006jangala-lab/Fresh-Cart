@@ -1,22 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
 import { useLanguage } from '../context/LanguageContext';
 import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../services/settingsService';
-import {
-  getStoredPaymentSettings,
-  fetchServerPaymentSettings,
-  onPaymentSettingsChange,
-} from '../services/paymentSettingsService';
-import {
-  generateQrDataUrl,
-  buildCustomerPaymentUpiUri,
-  decodeUpiPayload,
-  verifyQrPayloadDecodable,
-  generateUniquePaymentReference,
-  openUPIPayment,
-} from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   X,
@@ -29,10 +16,6 @@ import {
   Tag,
   Zap,
   AlertTriangle,
-  QrCode,
-  Smartphone,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { generateOrderOtp, resendOrderOtp } from '../services/otpClientService';
 
@@ -74,272 +57,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     currentUser?.address || '742 Evergreen Terrace, Apt 4B'
   );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash'>('cash');
   const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
   const [checkoutCouponError, setCheckoutCouponError] = useState('');
 
-  // Payment Settings state
-  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getStoredPaymentSettings());
-  const [copiedUpi, setCopiedUpi] = useState(false);
-
-  // Synchronize payment settings
-  useEffect(() => {
-    fetchServerPaymentSettings().then((s) => {
-      if (s) setPaymentSettings(s);
-    });
-    return onPaymentSettingsChange((s) => {
-      setPaymentSettings(s);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchServerPaymentSettings().then((s) => {
-        if (s) setPaymentSettings(s);
-      });
-    }
-  }, [isOpen]);
-
-  const handleCopyUpi = () => {
-    const upi = paymentSettings.upiId || 'freshcart@upi';
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(upi);
-      setCopiedUpi(true);
-      setTimeout(() => setCopiedUpi(false), 2000);
-    }
-  };
-
   // Order Handover OTP States for successful order placement screen
   const [orderHandoverOtp, setOrderHandoverOtp] = useState<string | null>(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
-
-  // QR Code UPI Deep Link & Multi-Gesture (Double-Tap, Double-Click, Long-Press) State
-  const [isQrLaunchingUpi, setIsQrLaunchingUpi] = useState(false);
-  const [showQrUpiFallback, setShowQrUpiFallback] = useState(false);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const longPressTriggeredRef = useRef<boolean>(false);
-  const pointerStartTimeRef = useRef<number>(0);
-  const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const hasMovedSignificantlyRef = useRef<boolean>(false);
-
-  const lastTapTimeRef = useRef<number>(0);
-  const lastMouseClickTimeRef = useRef<number>(0);
-  const lastLaunchTimeRef = useRef<number>(0);
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
-    };
-  }, []);
-
-  const isMobileClient = () => {
-    if (typeof navigator === 'undefined') return false;
-    return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-  };
-
-  const handleLaunchUpiDeepLink = async (upiUri: string) => {
-    if (!upiUri) return;
-    const now = Date.now();
-    // Guard against duplicate launches within 1500ms
-    if (now - lastLaunchTimeRef.current < 1500) {
-      return;
-    }
-    lastLaunchTimeRef.current = now;
-
-    let upiUriToLaunch = upiUri;
-    if (paymentMethod === 'upi_app') {
-      try {
-        const intentRes = await fetch('/api/payments/create-intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: placedOrderId || '#FC-MODAL',
-            amount: total,
-            customerId: currentUser?.id || 'guest_user',
-            customerPhone: currentUser?.phone || undefined,
-            targetApp: 'phonepe',
-          }),
-        });
-        if (intentRes.ok) {
-          const intentData = await intentRes.json();
-          if (intentData.success && intentData.intentUri) {
-            upiUriToLaunch = intentData.intentUri;
-          }
-        }
-      } catch {}
-    }
-
-    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
-      console.log('[FreshCart UPI Payment Launch - Modal]', {
-        paymentMethod,
-        amount: total.toFixed(2),
-        hasUpiId: Boolean(paymentSettings.upiId),
-        uriScheme: upiUriToLaunch.substring(0, 10),
-        uriParams: upiUriToLaunch.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
-      });
-    }
-
-    setIsQrLaunchingUpi(true);
-    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
-
-    // Synchronously launch the UPI deep link directly in the user gesture
-    openUPIPayment(upiUriToLaunch);
-    setShowQrUpiFallback(true);
-  };
-
-  /**
-   * QR Double-Tap Payment Trigger:
-   * Uses the existing QR payment architecture rather than forcing a direct UPI deep-link intent.
-   * This allows PhonePe, Google Pay, Paytm, and BHIM to process the payment as a normal QR payment.
-   */
-  const handleQrDoubleTapPayment = () => {
-    const now = Date.now();
-    if (now - lastLaunchTimeRef.current < 1500) {
-      return;
-    }
-    lastLaunchTimeRef.current = now;
-
-    const orderIdToUse = placedOrderId || '#FC-MODAL';
-    try {
-      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
-      sessionStorage.setItem('freshcart_active_checkout_payment_ref', modalTxnRef);
-      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_qr');
-    } catch {}
-
-    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
-      console.log('[FreshCart QR Payment Double-Tap - Modal]', {
-        orderId: orderIdToUse,
-        amount: total.toFixed(2),
-        paymentMethod: 'UPI / QR Payment',
-        mode: 'QR_PAYMENT_FLOW',
-      });
-    }
-
-    setIsQrLaunchingUpi(true);
-    setTimeout(() => setIsQrLaunchingUpi(false), 2000);
-
-    setShowQrUpiFallback(true);
-  };
-
-  const launchExistingUpiIntent = handleLaunchUpiDeepLink;
-
-  // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
-  const handleQrPointerDown = (e: React.PointerEvent, _upiUri: string) => {
-    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
-    pointerStartTimeRef.current = Date.now();
-    hasMovedSignificantlyRef.current = false;
-    longPressTriggeredRef.current = false;
-
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const isTouch = e.pointerType === 'touch';
-    if (isTouch) {
-      longPressTimerRef.current = setTimeout(() => {
-        if (!hasMovedSignificantlyRef.current) {
-          longPressTriggeredRef.current = true;
-          try {
-            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-              navigator.vibrate(40);
-            }
-          } catch {}
-        }
-      }, 700);
-    }
-  };
-
-  // If user moves finger > 25px (page scroll), cancel long-press
-  const handleQrPointerMove = (e: React.PointerEvent) => {
-    if (!pointerStartPosRef.current) return;
-    const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
-    const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
-    if (dx > 25 || dy > 25) {
-      hasMovedSignificantlyRef.current = true;
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-    }
-  };
-
-  // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
-  const handleQrPointerUp = (e: React.PointerEvent, _upiUri: string) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const holdDuration = Date.now() - pointerStartTimeRef.current;
-    const isTouch = e.pointerType === 'touch';
-
-    // If finger dragged significantly (scrolling), cancel tap/click gesture
-    if (hasMovedSignificantlyRef.current) {
-      pointerStartPosRef.current = null;
-      return;
-    }
-
-    const now = Date.now();
-
-    // Touch device long-press release handling
-    if (isTouch) {
-      if (longPressTriggeredRef.current || holdDuration >= 650) {
-        longPressTriggeredRef.current = false;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        handleQrDoubleTapPayment();
-        return;
-      }
-    }
-
-    if (isTouch) {
-      // Mobile / Touch double-tap detection
-      const timeSinceLastTap = now - lastTapTimeRef.current;
-      if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
-        // Double-tap detected! Trigger existing QR payment experience only once
-        lastTapTimeRef.current = 0;
-        handleQrDoubleTapPayment();
-      } else {
-        // Single tap -> record timestamp, do nothing
-        lastTapTimeRef.current = now;
-      }
-    } else {
-      // Desktop mouse pointer double-click detection
-      const timeSinceLastClick = now - lastMouseClickTimeRef.current;
-      if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
-        // Double-click detected! Trigger existing QR payment experience only once
-        lastMouseClickTimeRef.current = 0;
-        handleQrDoubleTapPayment();
-      } else {
-        // Single click -> record timestamp, do nothing
-        lastMouseClickTimeRef.current = now;
-      }
-    }
-
-    pointerStartPosRef.current = null;
-  };
-
-  const handleQrPointerCancel = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressTriggeredRef.current = false;
-    pointerStartPosRef.current = null;
-    hasMovedSignificantlyRef.current = false;
-  };
-
-  // Native DOM Double-click on desktop
-  const handleQrDoubleClick = (e: React.MouseEvent, _upiUri: string) => {
-    e.preventDefault();
-    handleQrDoubleTapPayment();
-  };
   const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
   const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);
   const [placedOrderId, setPlacedOrderId] = useState<string>('');
@@ -395,25 +121,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  const modalTxnRef = useMemo(() => {
-    const activeOrderId = (placedOrderId || '#FC-MODAL').replace(/^#/, '');
-    const storageKey = `freshcart_modal_txn_ref_${activeOrderId}`;
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem(storageKey);
-        if (saved) return saved;
-      } catch {}
-    }
-    const cleanId = activeOrderId.replace(/[^a-zA-Z0-9]/g, '');
-    const ref = cleanId ? `FC-${cleanId}` : generateUniquePaymentReference();
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem(storageKey, ref);
-      } catch {}
-    }
-    return ref;
-  }, [placedOrderId]);
-
   const handleApplyCheckoutCoupon = () => {
     const code = checkoutCouponInput.trim().toUpperCase();
     if (!code) return;
@@ -445,15 +152,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       const customerPhone = currentUser?.phone?.trim() || '';
 
-      const isCod = paymentMethod === 'cash';
-      const isUpi = paymentMethod === 'upi_qr' || paymentMethod === 'upi_app';
-      const paymentMethodLabel =
-        paymentMethod === 'upi_qr'
-          ? 'UPI / QR Payment'
-          : paymentMethod === 'upi_app'
-          ? 'Direct UPI App Payment'
-          : 'Cash on Delivery';
-
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
         id: generatedOrder,
@@ -463,38 +161,33 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: '24–30 Minutes (Direct Express Pod)',
-        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : (isCod ? 'Express Cold-Chain Delivery' : 'Picking in progress'),
+        estimatedDeliveryTime: 'Picking in progress',
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : (isCod ? 'CONFIRMED' : 'Picking'),
+        status: 'Picking',
         createdAt: new Date().toISOString(),
-        paymentMethod: paymentMethodLabel,
-        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'PENDING',
+        paymentMethod: 'Cash on Delivery',
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend Order Handover OTP generation ONLY for online orders (completely bypassed for Cash on Delivery)
-      if (!isCod) {
-        try {
-          const otpRes = await generateOrderOtp(
-            generatedOrder,
-            newCustomerOrder.customerId || 'guest_user',
-            customerPhone || ''
-          );
+      // Trigger backend Order Handover OTP generation for the new order
+      try {
+        const otpRes = await generateOrderOtp(
+          generatedOrder,
+          newCustomerOrder.customerId || 'guest_user',
+          customerPhone || ''
+        );
 
-          if (otpRes.success && otpRes.otp) {
-            setOrderHandoverOtp(otpRes.otp);
-            setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
-            setIsOtpExpired(false);
-          }
-        } catch {
-          // ignore
+        if (otpRes.success && otpRes.otp) {
+          setOrderHandoverOtp(otpRes.otp);
+          setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
+          setIsOtpExpired(false);
         }
-      } else {
-        setOrderHandoverOtp(null);
+      } catch {
+        // ignore
       }
 
       setPlacedOrderId(generatedOrder);
@@ -534,13 +227,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setPlacedOrderId('');
     onClose();
   };
-
-  // External UPI app/webview embedding guard:
-  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
-  const isEmbeddedIframe = typeof window !== 'undefined' && window.self !== window.top;
-  if (isEmbeddedIframe) {
-    return null;
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1c30]/40 backdrop-blur-xs">
@@ -617,10 +303,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Banknote className="w-3.5 h-3.5 text-[#006b2c]" />
                 {t('paymentMethod')}
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  id="checkout-payment-cod-btn"
                   onClick={() => setPaymentMethod('cash')}
                   className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
                     paymentMethod === 'cash'
@@ -630,185 +315,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 >
                   {t('payCod')}
                 </button>
-
-                {paymentSettings.upiPaymentEnabled !== false && (
-                  <button
-                    type="button"
-                    id="checkout-payment-upi-qr-btn"
-                    onClick={() => setPaymentMethod('upi_qr')}
-                    className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                      paymentMethod === 'upi_qr'
-                        ? 'border-[#006b2c] bg-white/45 text-[#006b2c] ring-2 ring-[#006b2c]/20'
-                        : 'border-white/50 bg-white/25 text-[#565e74] hover:bg-white/40'
-                    }`}
-                  >
-                    UPI / QR Payment
-                  </button>
-                )}
-
-                {paymentSettings.directUpiAppEnabled && (
-                  <button
-                    type="button"
-                    id="checkout-payment-upi-app-btn"
-                    onClick={() => setPaymentMethod('upi_app')}
-                    className={`p-2.5 rounded-xl border text-center text-[12px] font-semibold transition-all cursor-pointer ${
-                      paymentMethod === 'upi_app'
-                        ? 'border-[#006b2c] bg-white/45 text-[#006b2c] ring-2 ring-[#006b2c]/20'
-                        : 'border-white/50 bg-white/25 text-[#565e74] hover:bg-white/40'
-                    }`}
-                  >
-                    {t('payDirectUpi') || 'Direct UPI App'}
-                  </button>
-                )}
               </div>
             </div>
-
-            {/* Static UPI / QR Payment Display */}
-            {paymentMethod === 'upi_qr' && (
-              <div
-                id="checkout-upi-qr-section"
-                className="p-4 rounded-2xl bg-white/35 backdrop-blur-md border border-white/50 space-y-3 text-center"
-              >
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-[#565e74] uppercase tracking-wider block">
-                    PAYMENT DETAILS
-                  </span>
-                  <div className="text-[13px] text-[#0b1c30]">
-                    <span className="text-[#565e74]">Payee: </span>
-                    <span className="font-semibold">{paymentSettings.payeeName || 'FreshCart Grocery Store'}</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5 text-[12px]">
-                    <span className="text-[#565e74]">UPI ID: </span>
-                    <span className="font-mono font-bold text-[#006b2c]">{paymentSettings.upiId || 'freshcart@upi'}</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyUpi}
-                      className="px-2 py-0.5 rounded-md bg-white border border-[#cbd5e1] text-[11px] font-semibold text-[#006b2c] hover:bg-slate-50 cursor-pointer flex items-center gap-1"
-                    >
-                      {copiedUpi ? <Check className="w-3 h-3 text-[#16a34a]" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Amount-Based Payment QR Code */}
-                {(() => {
-                  const modalUpiUri = buildCustomerPaymentUpiUri(
-                    paymentSettings.upiId || 'freshcart@upi',
-                    paymentSettings.payeeName || 'FreshCart Grocery Store',
-                    total,
-                    modalTxnRef
-                  );
-                  const upiValidation = decodeUpiPayload(modalUpiUri);
-                  const qrScan = verifyQrPayloadDecodable(modalUpiUri);
-                  const modalQrUrl = upiValidation.isValid ? generateQrDataUrl(modalUpiUri, { size: 180 }) : '';
-                  const formattedTotal = Number(total).toFixed(2);
-                  return (
-                    <div className="flex flex-col items-center space-y-3">
-                      <div
-                        id="checkout-qr-interaction-container"
-                        data-testid="checkout-qr-interaction-container"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`UPI Payment QR Code. Double-tap, double-click, or long-press to open UPI app, or scan to pay ${formatINR(total)}`}
-                        data-upi-uri={modalUpiUri}
-                        onPointerDown={(e) => handleQrPointerDown(e, modalUpiUri)}
-                        onPointerMove={handleQrPointerMove}
-                        onPointerUp={(e) => handleQrPointerUp(e, modalUpiUri)}
-                        onPointerCancel={handleQrPointerCancel}
-                        onDoubleClick={(e) => handleQrDoubleClick(e, modalUpiUri)}
-                        onClick={() => {}}
-                        onContextMenu={(e) => e.preventDefault()}
-                        style={{ touchAction: 'pan-y', WebkitTouchCallout: 'none', userSelect: 'none' }}
-                        className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-md border-2 border-[#e2e8f0] hover:border-[#006b2c] focus:outline-hidden focus:ring-2 focus:ring-[#006b2c] flex items-center justify-center cursor-pointer active:scale-98 transition-all select-none"
-                        title="Double-click, double-tap, or long-press to open UPI app (or scan with camera)"
-                      >
-                        <img
-                          id="checkout-qr-code-img"
-                          data-testid="checkout-qr-code-img"
-                          src={modalQrUrl}
-                          data-upi-uri={modalUpiUri}
-                          data-upi-id={paymentSettings.upiId || 'freshcart@upi'}
-                          data-upi-amount={formattedTotal}
-                          data-upi-pa={upiValidation.decoded?.pa}
-                          data-upi-pn={upiValidation.decoded?.pn}
-                          data-upi-am={upiValidation.decoded?.am}
-                          data-upi-cu={upiValidation.decoded?.cu}
-                          data-upi-tr={upiValidation.decoded?.tr}
-                          data-qr-decodable={qrScan?.decodable ? "true" : "false"}
-                          alt={`Merchant UPI Payment QR Code for ${formatINR(total)}`}
-                          className="w-full h-full object-contain pointer-events-none select-none"
-                          draggable={false}
-                          onDragStart={(e) => e.preventDefault()}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-[12px] font-bold text-[#006b2c] flex items-center justify-center gap-1.5">
-                          <QrCode className="w-4 h-4" />
-                          <span>SCAN QR CODE TO PAY {formatINR(total)}</span>
-                        </p>
-                        <p className="text-[11px] text-[#565e74]">
-                          Scan using Google Pay, PhonePe, Paytm, or BHIM.
-                        </p>
-                      </div>
-
-                      {/* Fallback Notice for desktop or unsupported environments */}
-                      {showQrUpiFallback && (
-                        <div
-                          id="modal-qr-upi-fallback-notice"
-                          data-testid="modal-qr-upi-fallback-notice"
-                          className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs text-center max-w-sm animate-in fade-in"
-                        >
-                          <p className="font-medium">
-                            Open your UPI app and complete the payment, then upload your payment screenshot.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Direct UPI App Payment Display */}
-            {paymentMethod === 'upi_app' && (() => {
-              const modalDirectUpiUri = buildCustomerPaymentUpiUri(
-                paymentSettings.upiId || 'freshcart@upi',
-                paymentSettings.payeeName || 'FreshCart Grocery Store',
-                total,
-                modalTxnRef
-              );
-
-              return (
-                <div
-                  id="checkout-direct-upi-section"
-                  className="p-4 rounded-2xl bg-white/35 backdrop-blur-md border border-white/50 space-y-3 text-center"
-                >
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-bold text-[#565e74] uppercase tracking-wider block">
-                      {t('payDirectUpi') || 'DIRECT UPI APP PAYMENT'}
-                    </span>
-                    <p className="text-[12px] text-[#565e74]">
-                      Launch Google Pay, PhonePe, Paytm, or BHIM to pay directly.
-                    </p>
-                  </div>
-
-                  <a
-                    id="modal-direct-upi-app-link"
-                    href={modalDirectUpiUri}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleLaunchUpiDeepLink(modalDirectUpiUri);
-                    }}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#006b2c] text-white text-[13px] font-bold hover:bg-[#00873a] transition-all shadow-md cursor-pointer"
-                  >
-                    <Smartphone className="w-4 h-4" />
-                    <span>{t('payNow') || 'PAY NOW'}</span>
-                  </a>
-                </div>
-              );
-            })()}
 
             {/* Order Items Review */}
             <div className="bg-white/25 backdrop-blur-xs p-3 rounded-xl border border-white/45 space-y-1.5">
@@ -958,8 +466,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            {/* Order Handover OTP Card (Only for non-COD orders with active OTP; bypassed for Cash on Delivery) */}
-            {orderHandoverOtp && paymentMethod !== 'cash' && (
+            {/* Order Handover OTP Card */}
+            {orderHandoverOtp && (
               <div
                 id="order-handover-otp-section"
                 className="p-4 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2 shadow-xs animate-in fade-in duration-200"

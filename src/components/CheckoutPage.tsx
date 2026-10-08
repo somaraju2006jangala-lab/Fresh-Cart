@@ -1,22 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule, PaymentSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { CartItem, CustomerOrder, Coupon, DeliveryChargeRule } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/currency';
 import { useLanguage } from '../context/LanguageContext';
 import { DEFAULT_DELIVERY_RULES, getApplicableDeliveryChargeRule } from '../services/settingsService';
-import {
-  getStoredPaymentSettings,
-  fetchServerPaymentSettings,
-  onPaymentSettingsChange,
-} from '../services/paymentSettingsService';
-import {
-  generateQrDataUrl,
-  buildCustomerPaymentUpiUri,
-  decodeUpiPayload,
-  verifyQrPayloadDecodable,
-  generateUniquePaymentReference,
-  openUPIPayment,
-} from '../utils/qrCodeGenerator';
 import {
   CheckCircle,
   Banknote,
@@ -24,19 +11,12 @@ import {
   Clock,
   ShieldCheck,
   CreditCard,
-  QrCode,
-  Smartphone,
-  Check,
   ArrowLeft,
   ArrowRight,
   ShoppingBag,
   Truck,
-  RotateCw,
 } from 'lucide-react';
-import { generateOrderOtp, resendOrderOtp } from '../services/otpClientService';
 import { Footer } from './Footer';
-import { PaymentProofUpload } from './PaymentProofUpload';
-import { PaymentProofData } from '../types';
 
 interface CheckoutPageProps {
   items: CartItem[];
@@ -80,285 +60,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     currentUser?.address || '742 Evergreen Terrace, Apt 4B'
   );
   const [deliveryNote, setDeliveryNote] = useState('Leave with doorman in thermal tote');
-  // External UPI app/webview embedding guard:
-  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
-  const isEmbeddedIframe = typeof window !== 'undefined' && window.self !== window.top;
-
-  const getInitialOrderId = () => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash || '';
-      const qIdx = hash.indexOf('?');
-      if (qIdx !== -1) {
-        const sp = new URLSearchParams(hash.substring(qIdx + 1));
-        const val = sp.get('orderId') || sp.get('order_id');
-        if (val) return val.startsWith('#') ? val : `#${val}`;
-      }
-      const search = window.location.search || '';
-      if (search) {
-        const sp = new URLSearchParams(search);
-        const val = sp.get('orderId') || sp.get('order_id');
-        if (val) return val.startsWith('#') ? val : `#${val}`;
-      }
-      try {
-        const saved = sessionStorage.getItem('freshcart_active_checkout_order_id');
-        if (saved) return saved.startsWith('#') ? saved : `#${saved}`;
-      } catch {}
-    }
-    return `#FC-${Math.floor(1000 + Math.random() * 9000)}`;
-  };
-
-  const getInitialPaymentMethod = (): 'cash' | 'upi_qr' | 'upi_app' => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash || '';
-      const qIdx = hash.indexOf('?');
-      if (qIdx !== -1) {
-        const sp = new URLSearchParams(hash.substring(qIdx + 1));
-        const m = sp.get('paymentMethod') || sp.get('method');
-        if (m === 'cash' || m === 'upi_qr' || m === 'upi_app') return m;
-        if (sp.get('returnFrom') === 'upi_app') return 'upi_app';
-      }
-      try {
-        const savedMethod = sessionStorage.getItem('freshcart_active_checkout_method');
-        if (savedMethod === 'cash' || savedMethod === 'upi_qr' || savedMethod === 'upi_app') {
-          return savedMethod;
-        }
-      } catch {}
-    }
-    return 'upi_qr';
-  };
-
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi_qr' | 'upi_app'>(getInitialPaymentMethod);
-  const [draftOrderId] = useState<string>(getInitialOrderId);
-  const [submittedProof, setSubmittedProof] = useState<PaymentProofData | null>(null);
-  const [orderNumber, setOrderNumber] = useState(() => {
-    return getInitialOrderId().replace('#FC-', '');
-  });
+  const [paymentMethod] = useState<'cash'>('cash');
+  const [orderNumber, setOrderNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showItemsList, setShowItemsList] = useState(false);
-
-  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(getStoredPaymentSettings());
-
-  // Order Handover OTP States
-  const [orderHandoverOtp, setOrderHandoverOtp] = useState<string | null>(null);
-  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
-  const [isOtpExpired, setIsOtpExpired] = useState<boolean>(false);
-  const [isResendingOtp, setIsResendingOtp] = useState<boolean>(false);
-  const [placedOrderId, setPlacedOrderId] = useState<string>(() => {
-    return getInitialOrderId();
-  });
-
-  // Synchronize draft order context & retrieve payment proof if returning
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      sessionStorage.setItem('freshcart_active_checkout_order_id', draftOrderId);
-      sessionStorage.setItem('freshcart_active_checkout_method', paymentMethod);
-    } catch {}
-
-    const cleanId = draftOrderId.replace(/^#/, '');
-    fetch(`/api/payment-proofs/${encodeURIComponent(cleanId)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.success && data?.proof) {
-          setSubmittedProof(data.proof);
-        }
-      })
-      .catch(() => {});
-  }, [draftOrderId, paymentMethod]);
-
-  // Synchronize payment settings
-  useEffect(() => {
-    fetchServerPaymentSettings().then((s) => {
-      if (s) setPaymentSettings(s);
-    });
-    return onPaymentSettingsChange((s) => {
-      setPaymentSettings(s);
-    });
-  }, []);
 
   useEffect(() => {
     if (currentUser?.address) {
       setAddress(currentUser.address);
     }
   }, [currentUser]);
-
-  // Check OTP 10-minute expiry
-  useEffect(() => {
-    if (!otpExpiresAt || !orderHandoverOtp) return;
-
-    const checkExpiry = () => {
-      if (Date.now() > otpExpiresAt) {
-        setIsOtpExpired(true);
-      }
-    };
-
-    checkExpiry();
-    const interval = setInterval(checkExpiry, 1000);
-    return () => clearInterval(interval);
-  }, [otpExpiresAt, orderHandoverOtp]);
-
-  // QR Code UPI Deep Link & Multi-Gesture (Double-Tap, Double-Click, Long-Press) State
-  const [isQrLaunchingUpi, setIsQrLaunchingUpi] = useState(false);
-  const [showQrUpiFallback, setShowQrUpiFallback] = useState(false);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const longPressTriggeredRef = useRef<boolean>(false);
-  const pointerStartTimeRef = useRef<number>(0);
-  const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const hasMovedSignificantlyRef = useRef<boolean>(false);
-
-  const lastTapTimeRef = useRef<number>(0);
-  const lastMouseClickTimeRef = useRef<number>(0);
-  const lastLaunchTimeRef = useRef<number>(0);
-
-  // Payment Verification & Status Feedback State
-  const [paymentStatusFeedback, setPaymentStatusFeedback] = useState<{
-    type: 'checking' | 'processing' | 'verified' | 'failed' | 'pending';
-    message: string;
-    subMessage?: string;
-  } | null>(null);
-
-  const activePaymentTxnRef = useRef<{ orderId: string; transactionId: string } | null>(null);
-  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isPollingRef = useRef<boolean>(false);
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
-      if (pollingTimerRef.current) {
-        clearTimeout(pollingTimerRef.current);
-      }
-    };
-  }, []);
-
-  const checkPaymentStatusOnce = async (orderId: string, transactionId: string): Promise<boolean> => {
-    try {
-      setPaymentStatusFeedback((prev) => ({
-        type: prev?.type === 'processing' ? 'processing' : 'checking',
-        message: prev?.type === 'processing' ? 'Payment is being verified...' : 'Checking payment status...',
-        subMessage: 'Verifying real transaction with payment backend...',
-      }));
-
-      const cleanId = orderId.replace(/^#/, '');
-      const res = await fetch(
-        `/api/payments/status/${encodeURIComponent(cleanId)}?transactionId=${encodeURIComponent(transactionId)}`
-      );
-      if (!res.ok) return false;
-      const data = await res.json();
-
-      if (data?.verified && data?.paymentStatus === 'PAID') {
-        setPaymentStatusFeedback({
-          type: 'verified',
-          message: 'Payment successful',
-          subMessage: 'Your transaction was confirmed and order placed!',
-        });
-        isPollingRef.current = false;
-        if (pollingTimerRef.current) {
-          clearTimeout(pollingTimerRef.current);
-          pollingTimerRef.current = null;
-        }
-        onClearCart();
-        setStep('success');
-        return true;
-      }
-
-      if (data?.paymentStatus === 'PAYMENT_PROCESSING') {
-        setPaymentStatusFeedback({
-          type: 'processing',
-          message: 'Payment is being verified...',
-          subMessage: 'Awaiting confirmation from bank or UPI app...',
-        });
-        return false;
-      }
-
-      if (data?.paymentStatus === 'FAILED') {
-        setPaymentStatusFeedback({
-          type: 'failed',
-          message: 'Payment failed',
-          subMessage: data.error || 'Transaction was declined or failed in UPI app.',
-        });
-        isPollingRef.current = false;
-        return true;
-      }
-
-      if (data?.paymentStatus === 'REJECTED') {
-        setPaymentStatusFeedback({
-          type: 'failed',
-          message: 'Payment rejected',
-          subMessage: data.error || 'Payment amount mismatch or rejected by system.',
-        });
-        isPollingRef.current = false;
-        return true;
-      }
-
-      return false;
-    } catch {
-      return false;
-    }
-  };
-
-  const startBoundedStatusPolling = (orderId: string, transactionId: string) => {
-    if (pollingTimerRef.current) {
-      clearTimeout(pollingTimerRef.current);
-      pollingTimerRef.current = null;
-    }
-    isPollingRef.current = true;
-    activePaymentTxnRef.current = { orderId, transactionId };
-
-    // Sequence of bounded checks: 0ms (immediate), 2s, 4s, 6s (total ~12s max)
-    const delays = [0, 2000, 4000, 6000];
-    let stepIndex = 0;
-
-    const executeStep = async () => {
-      if (!isPollingRef.current) return;
-      const isTerminal = await checkPaymentStatusOnce(orderId, transactionId);
-      if (isTerminal) return;
-
-      stepIndex++;
-      if (stepIndex < delays.length && isPollingRef.current) {
-        pollingTimerRef.current = setTimeout(executeStep, delays[stepIndex]);
-      } else if (isPollingRef.current) {
-        // Polling finished without automatic gateway confirmation
-        isPollingRef.current = false;
-        setPaymentStatusFeedback({
-          type: 'pending',
-          message: 'Payment verification pending',
-          subMessage: 'Please upload your payment screenshot below so our admin team can verify your payment.',
-        });
-      }
-    };
-
-    executeStep();
-  };
-
-  // Visibility and window focus listeners for returning customers
-  useEffect(() => {
-    const handleReturn = () => {
-      if (document.visibilityState === 'visible' && activePaymentTxnRef.current && step !== 'success') {
-        startBoundedStatusPolling(activePaymentTxnRef.current.orderId, activePaymentTxnRef.current.transactionId);
-      }
-    };
-
-    const handleFocus = () => {
-      if (activePaymentTxnRef.current && step !== 'success') {
-        startBoundedStatusPolling(activePaymentTxnRef.current.orderId, activePaymentTxnRef.current.transactionId);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleReturn);
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleReturn);
-      window.removeEventListener('focus', handleFocus);
-      if (pollingTimerRef.current) {
-        clearTimeout(pollingTimerRef.current);
-      }
-    };
-  }, [step]);
-
 
   const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce(
@@ -389,372 +100,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const total = Math.max(0, Math.round((subtotal - discount + deliveryChargesAmount) * 100) / 100);
 
-  const checkoutTxnRef = useMemo(() => {
-    const activeOrderId = (placedOrderId || draftOrderId || '').replace(/^#/, '');
-    const storageKey = `freshcart_txn_ref_${activeOrderId || 'active'}`;
-    if (typeof window !== 'undefined') {
-      try {
-        const savedRef = sessionStorage.getItem(storageKey) || sessionStorage.getItem('freshcart_active_checkout_payment_ref');
-        if (savedRef) return savedRef;
-      } catch {}
-    }
-    const cleanId = activeOrderId.replace(/[^a-zA-Z0-9]/g, '');
-    const newRef = cleanId ? `FC-${cleanId}` : generateUniquePaymentReference();
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem(storageKey, newRef);
-        sessionStorage.setItem('freshcart_active_checkout_payment_ref', newRef);
-      } catch {}
-    }
-    return newRef;
-  }, [placedOrderId, draftOrderId]);
-
-  /**
-   * Single Source of Truth for Launching UPI Payment Intents:
-   * Used identically by:
-   * - 📱 "Pay Directly via UPI App" button
-   * - QR Code double-tap
-   * - QR Code long-press
-   * - QR Code desktop double-click
-   */
-  const handleLaunchUpiDeepLink = async (optionalUri?: string) => {
-    // 1. Verify valid payable amount and UPI ID
-    if (total <= 0) {
-      console.warn('[FreshCart UPI Launch] Prevented launch: Order amount must be greater than 0.');
-      return;
-    }
-    const cleanUpiId = (paymentSettings.upiId || 'freshcart@upi').trim();
-    if (!cleanUpiId) {
-      console.warn('[FreshCart UPI Launch] Prevented launch: Admin UPI ID is missing.');
-      return;
-    }
-
-    const now = Date.now();
-    // Guard against duplicate launches within 1500ms
-    if (now - lastLaunchTimeRef.current < 1500) {
-      return;
-    }
-    lastLaunchTimeRef.current = now;
-
-    // 2. Build the standard UPI payment URI from the single generator
-    let upiUriToLaunch = optionalUri || buildCustomerPaymentUpiUri(
-      cleanUpiId,
-      paymentSettings.payeeName || 'FreshCart Grocery Store',
-      total,
-      checkoutTxnRef
-    );
-
-    const orderIdToUse = placedOrderId || draftOrderId;
-
-    // For Direct UPI, request server-generated UPI intent from backend/provider
-    if (paymentMethod === 'upi_app' && !optionalUri) {
-      try {
-        const intentRes = await fetch('/api/payments/create-intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: orderIdToUse,
-            amount: total,
-            customerId: currentUser?.id || 'guest_user',
-            customerPhone: currentUser?.phone || undefined,
-            targetApp: 'phonepe',
-          }),
-        });
-        if (intentRes.ok) {
-          const intentData = await intentRes.json();
-          if (intentData.success && intentData.intentUri) {
-            upiUriToLaunch = intentData.intentUri;
-          }
-        }
-      } catch {
-        // Fallback to standard URI
-      }
-    }
-
-    // 3. Pre-save order context in sessionStorage and customer history/MySQL backend
-    try {
-      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
-      sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);
-      sessionStorage.setItem('freshcart_active_checkout_method', paymentMethod);
-    } catch {}
-
-    setPlacedOrderId(orderIdToUse);
-    setOrderNumber(orderIdToUse.replace('#FC-', ''));
-
-    const customerPhone = currentUser?.phone?.trim() || '';
-    const pendingOrder: CustomerOrder = {
-      id: orderIdToUse,
-      customerId: currentUser?.id || 'guest_user',
-      customerName: currentUser?.name || 'Guest Customer',
-      customerEmail: currentUser?.email,
-      customerPhone: customerPhone || undefined,
-      deliveryAddress: address,
-      deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
-      estimatedDeliveryTime: 'Awaiting payment verification',
-      items: [...items],
-      subtotal,
-      discount,
-      total,
-      couponCode: appliedCoupon || undefined,
-      status: 'PAYMENT VERIFICATION PENDING',
-      createdAt: new Date().toISOString(),
-      paymentMethod: paymentMethod === 'upi_app' ? 'Direct UPI App Payment' : 'UPI / QR Payment',
-      paymentStatus: 'PENDING',
-      paymentVerificationStatus: submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED',
-      paymentProof: submittedProof || undefined,
-    };
-    addOrder(pendingOrder);
-
-    // Sync to MySQL backend asynchronously
-    fetch('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
-      },
-      body: JSON.stringify({
-        ...pendingOrder,
-        paymentId: checkoutTxnRef,
-      }),
-    }).catch(() => {});
-
-    // 4. Safe development-only debug logging
-    if (typeof window !== 'undefined') {
-      console.log('[FreshCart UPI Payment Launch]', {
-        paymentMethod,
-        orderNumber: orderIdToUse.replace('#', ''),
-        amount: total.toFixed(2),
-        hasUpiId: Boolean(cleanUpiId),
-        uriScheme: upiUriToLaunch.substring(0, 10),
-        uriParams: upiUriToLaunch.replace(/^upi:\/\/pay\?/, '').split('&').map((p) => p.split('=')[0]).join(', '),
-      });
-    }
-
-    setIsQrLaunchingUpi(true);
-    setTimeout(() => setIsQrLaunchingUpi(false), 2500);
-
-    // 5. Synchronously launch the UPI deep link directly in the user gesture
-    const upiUri = upiUriToLaunch;
-    openUPIPayment(upiUri);
-    setShowQrUpiFallback(true);
-
-    // 6. Start bounded payment status polling with payment backend
-    startBoundedStatusPolling(orderIdToUse, checkoutTxnRef);
-  };
-
-  /**
-   * QR Double-Tap Payment Trigger:
-   * Uses the existing QR payment architecture rather than forcing a direct UPI deep-link intent.
-   * This allows PhonePe, Google Pay, Paytm, and BHIM to process the payment as a normal QR payment
-   * without triggering PhonePe's security/risk decline for web-initiated direct intents.
-   */
-  const handleQrDoubleTapPayment = async () => {
-    if (total <= 0) {
-      console.warn('[FreshCart QR Payment] Prevented: Order amount must be greater than 0.');
-      return;
-    }
-    const cleanUpiId = (paymentSettings.upiId || 'freshcart@upi').trim();
-    if (!cleanUpiId) {
-      console.warn('[FreshCart QR Payment] Prevented: Admin UPI ID is missing.');
-      return;
-    }
-
-    const now = Date.now();
-    // Guard against duplicate triggers within 1500ms (triggers only once)
-    if (now - lastLaunchTimeRef.current < 1500) {
-      return;
-    }
-    lastLaunchTimeRef.current = now;
-
-    const orderIdToUse = placedOrderId || draftOrderId;
-
-    // Pre-save order context in sessionStorage and backend
-    try {
-      sessionStorage.setItem('freshcart_active_checkout_order_id', orderIdToUse);
-      sessionStorage.setItem('freshcart_active_checkout_payment_ref', checkoutTxnRef);
-      sessionStorage.setItem('freshcart_active_checkout_method', 'upi_qr');
-    } catch {}
-
-    setPlacedOrderId(orderIdToUse);
-    setOrderNumber(orderIdToUse.replace('#FC-', ''));
-
-    const customerPhone = currentUser?.phone?.trim() || '';
-    const pendingOrder: CustomerOrder = {
-      id: orderIdToUse,
-      customerId: currentUser?.id || 'guest_user',
-      customerName: currentUser?.name || 'Guest Customer',
-      customerEmail: currentUser?.email,
-      customerPhone: customerPhone || undefined,
-      deliveryAddress: address,
-      deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
-      estimatedDeliveryTime: 'Awaiting payment verification',
-      items: [...items],
-      subtotal,
-      discount,
-      total,
-      couponCode: appliedCoupon || undefined,
-      status: 'PAYMENT VERIFICATION PENDING',
-      createdAt: new Date().toISOString(),
-      paymentMethod: 'UPI / QR Payment',
-      paymentStatus: 'PENDING',
-      paymentVerificationStatus: submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED',
-      paymentProof: submittedProof || undefined,
-    };
-    addOrder(pendingOrder);
-
-    // Sync to MySQL backend asynchronously
-    fetch('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
-      },
-      body: JSON.stringify({
-        ...pendingOrder,
-        paymentId: checkoutTxnRef,
-      }),
-    }).catch(() => {});
-
-    // Safe development-only debug logging
-    if (typeof window !== 'undefined') {
-      console.log('[FreshCart QR Payment Double-Tap]', {
-        orderId: orderIdToUse,
-        amount: total.toFixed(2),
-        paymentMethod: 'UPI / QR Payment',
-        mode: 'QR_PAYMENT_FLOW',
-      });
-    }
-
-    // Trigger visual feedback on QR container
-    setIsQrLaunchingUpi(true);
-    setTimeout(() => setIsQrLaunchingUpi(false), 2000);
-
-    // Activate existing QR payment fallback & guidance notice
-    setShowQrUpiFallback(true);
-
-    // Start bounded payment status verification polling with backend
-    startBoundedStatusPolling(orderIdToUse, checkoutTxnRef);
-  };
-
-  const launchExistingUpiIntent = handleLaunchUpiDeepLink;
-
-  // 1. Long-press on mobile/touch devices: ~700ms (within 600–800ms)
-  const handleQrPointerDown = (e: React.PointerEvent, _upiUri?: string) => {
-    pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
-    pointerStartTimeRef.current = Date.now();
-    hasMovedSignificantlyRef.current = false;
-    longPressTriggeredRef.current = false;
-
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const isTouch = e.pointerType === 'touch';
-    if (isTouch) {
-      longPressTimerRef.current = setTimeout(() => {
-        if (!hasMovedSignificantlyRef.current) {
-          longPressTriggeredRef.current = true;
-          try {
-            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-              navigator.vibrate(40);
-            }
-          } catch {}
-        }
-      }, 700);
-    }
-  };
-
-  // If user moves finger > 25px (page scroll), cancel long-press
-  const handleQrPointerMove = (e: React.PointerEvent) => {
-    if (!pointerStartPosRef.current) return;
-    const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
-    const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
-    if (dx > 25 || dy > 25) {
-      hasMovedSignificantlyRef.current = true;
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-    }
-  };
-
-  // 2. Double-tap on mobile/touch, double-click on desktop, & long-press release handler
-  const handleQrPointerUp = (e: React.PointerEvent, _upiUri?: string) => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-
-    const holdDuration = Date.now() - pointerStartTimeRef.current;
-    const isTouch = e.pointerType === 'touch';
-
-    // If finger dragged significantly (scrolling), cancel tap/click gesture
-    if (hasMovedSignificantlyRef.current) {
-      pointerStartPosRef.current = null;
-      return;
-    }
-
-    const now = Date.now();
-
-    if (isTouch) {
-      // 1. Touch device long-press handling: hold duration >= 650ms (or timer marked ready)
-      if (longPressTriggeredRef.current || holdDuration >= 650) {
-        longPressTriggeredRef.current = false;
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        handleQrDoubleTapPayment();
-        return;
-      }
-
-      // 2. Mobile / Touch double-tap detection
-      const timeSinceLastTap = now - lastTapTimeRef.current;
-      if (timeSinceLastTap > 0 && timeSinceLastTap < 380) {
-        // Double-tap detected! Trigger existing QR payment experience only once
-        lastTapTimeRef.current = 0;
-        pointerStartPosRef.current = null;
-        handleQrDoubleTapPayment();
-      } else {
-        // Single tap -> record timestamp, do nothing
-        lastTapTimeRef.current = now;
-      }
-    } else {
-      // Desktop mouse pointer double-click detection
-      const timeSinceLastClick = now - lastMouseClickTimeRef.current;
-      if (timeSinceLastClick > 0 && timeSinceLastClick < 400) {
-        // Double-click detected! Trigger existing QR payment experience only once
-        lastMouseClickTimeRef.current = 0;
-        handleQrDoubleTapPayment();
-      } else {
-        // Single click -> record timestamp, do nothing
-        lastMouseClickTimeRef.current = now;
-      }
-    }
-
-    pointerStartPosRef.current = null;
-  };
-
-  const handleQrPointerCancel = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressTriggeredRef.current = false;
-    pointerStartPosRef.current = null;
-    hasMovedSignificantlyRef.current = false;
-  };
-
-  // Native DOM Double-click on desktop
-  const handleQrDoubleClick = (e: React.MouseEvent, _upiUri?: string) => {
-    e.preventDefault();
-    handleQrDoubleTapPayment();
-  };
-
-  const handleDirectUpiClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    handleLaunchUpiDeepLink();
-  };
-
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
@@ -762,20 +107,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsSubmitting(true);
     setTimeout(async () => {
       setIsSubmitting(false);
-      const isUpi = paymentMethod === 'upi_qr' || paymentMethod === 'upi_app';
-      const isCod = paymentMethod === 'cash';
-      const generatedOrder = placedOrderId || draftOrderId;
-      const orderNum = generatedOrder.replace('#FC-', '');
-      setOrderNumber(orderNum);
+      const orderNum = Math.floor(1000 + Math.random() * 9000);
+      const generatedOrder = `#FC-${orderNum}`;
+      setOrderNumber(String(orderNum));
 
       const customerPhone = currentUser?.phone?.trim() || '';
-
-      const paymentMethodLabel =
-        paymentMethod === 'upi_qr'
-          ? 'UPI / QR Payment'
-          : paymentMethod === 'upi_app'
-          ? 'Direct UPI App Payment'
-          : 'Cash on Delivery';
 
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
@@ -786,43 +122,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerPhone: customerPhone || undefined,
         deliveryAddress: address,
         deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
-        estimatedDeliveryTime: isUpi ? 'Awaiting payment verification' : (isCod ? 'Express Cold-Chain Delivery' : 'Picking in progress'),
+        estimatedDeliveryTime: 'Express Cold-Chain Delivery',
         items: [...items],
         subtotal,
         discount,
         total,
         couponCode: appliedCoupon || undefined,
-        status: isUpi ? 'PAYMENT VERIFICATION PENDING' : (isCod ? 'CONFIRMED' : 'Picking'),
+        status: 'CONFIRMED',
         createdAt: new Date().toISOString(),
-        paymentMethod: paymentMethodLabel,
-        paymentStatus: isUpi ? 'PENDING VERIFICATION' : 'PENDING',
-        paymentVerificationStatus: isUpi ? (submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED') : undefined,
-        paymentProof: submittedProof || undefined,
+        paymentMethod: 'Cash on Delivery',
+        paymentStatus: 'PENDING',
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend Order Handover OTP generation ONLY for online orders (completely bypassed for Cash on Delivery)
-      if (!isCod) {
-        try {
-          const otpRes = await generateOrderOtp(
-            generatedOrder,
-            newCustomerOrder.customerId || 'guest_user',
-            customerPhone || ''
-          );
+      // Save to MySQL backend
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
+        },
+        body: JSON.stringify(newCustomerOrder),
+      }).catch(() => {});
 
-          if (otpRes.success && otpRes.otp) {
-            setOrderHandoverOtp(otpRes.otp);
-            setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
-            setIsOtpExpired(false);
-          }
-        } catch {
-          // ignore
-        }
-      } else {
-        setOrderHandoverOtp(null);
-      }
-
-      setPlacedOrderId(generatedOrder);
       onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');
       onClearCart();
@@ -830,39 +152,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }, 800);
   };
 
-  const handleCustomerResendOtp = async () => {
-    if (!placedOrderId || isResendingOtp) return;
-    setIsResendingOtp(true);
-    try {
-      const customerPhone = currentUser?.phone?.trim() || '';
-      const res = await resendOrderOtp(
-        placedOrderId,
-        currentUser?.id || 'guest_user',
-        customerPhone
-      );
-      if (res.success && res.otp) {
-        setOrderHandoverOtp(res.otp);
-        setOtpExpiresAt(res.expiresAt || (Date.now() + 10 * 60 * 1000));
-        setIsOtpExpired(false);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsResendingOtp(false);
-    }
-  };
-
-  // External UPI app/webview embedding guard:
-  // FreshCart payment UI, QR code, and checkout controls must NOT be displayed inside an external embedded webview or iframe.
-  if (isEmbeddedIframe) {
-    return null;
-  }
-
   return (
     <div id="checkout-page-container" className="w-full flex flex-col min-h-screen">
       <div className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-4.5">
 
-        {/* Step: Order Confirmed Screen (Semi-Solid Opaque) */}
+        {/* Step: Order Confirmed Screen */}
         {step === 'success' ? (
           <div className="checkout-panel rounded-3xl p-6 sm:p-10 max-w-2xl mx-auto my-6 text-center space-y-6">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
@@ -877,45 +171,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 Your order <span className="font-bold text-white">#FC-{orderNumber}</span> has been placed successfully.
               </p>
             </div>
-
-            {/* Handover OTP Verification Box (Only for online orders with active OTP; completely bypassed for Cash on Delivery) */}
-            {paymentMethod !== 'cash' && orderHandoverOtp && (
-              <div className="checkout-subpanel rounded-2xl p-5 sm:p-6 text-center space-y-3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Delivery Handover OTP</span>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-400 font-mono">
-                    {orderHandoverOtp || '----'}
-                  </span>
-                  <p className="text-xs text-slate-300 max-w-sm mx-auto pt-1">
-                    Share this 4-digit code with your delivery runner at your doorstep to receive your items.
-                  </p>
-                </div>
-
-                {isOtpExpired ? (
-                  <div className="space-y-2 pt-1">
-                    <p className="text-xs text-amber-400 font-medium">OTP has expired</p>
-                    <button
-                      type="button"
-                      onClick={handleCustomerResendOtp}
-                      disabled={isResendingOtp}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-white/10 transition-colors cursor-pointer"
-                    >
-                      <RotateCw className={`w-3.5 h-3.5 ${isResendingOtp ? 'animate-spin' : ''}`} />
-                      <span>Resend OTP</span>
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Valid for 10 minutes</span>
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* Delivery Details Recap */}
             <div className="checkout-subpanel rounded-2xl p-4 text-left text-xs text-slate-300 space-y-2">
@@ -933,26 +188,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <CreditCard className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span>Payment Details</span>
               </div>
-              <p className="pl-6 text-slate-400">
-                {paymentMethod === 'cash' ? 'Cash on Delivery (Pending Doorstep Collection)' : 'UPI / QR Payment (Pending Merchant Verification)'}
-              </p>
+              <p className="pl-6 text-slate-400">Cash on Delivery (Pending Doorstep Collection)</p>
             </div>
-
-            {/* Payment Screenshot Verification for UPI Orders */}
-            {paymentMethod !== 'cash' && (
-              <div className="pt-2">
-                <PaymentProofUpload
-                  orderId={placedOrderId || draftOrderId}
-                  customerId={currentUser?.id || 'guest_user'}
-                  customerToken={currentUser?.token}
-                  initialProof={submittedProof}
-                  currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
-                  onProofSubmitted={(proof) => {
-                    setSubmittedProof(proof);
-                  }}
-                />
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -974,7 +211,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </div>
           </div>
         ) : (
-          /* Step: Details - Full-width dedicated checkout vertical sequence matching reference design */
+          /* Step: Details */
           <>
             {/* 1. CHECKOUT HEADER */}
             <div className="checkout-panel rounded-2xl p-4 sm:p-5 flex items-center gap-4">
@@ -1040,7 +277,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
             </div>
 
-            {/* 3. SELECT PAYMENT METHOD & PAYMENT DETAILS */}
+            {/* 3. SELECT PAYMENT METHOD */}
             <div className="checkout-panel rounded-2xl p-5 sm:p-6 space-y-4 sm:space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1055,360 +292,41 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </span>
               </div>
 
-              {/* Payment Methods Selection: 3 Separate Options */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
-                {/* Option 1: Cash on Delivery */}
-                <button
-                  type="button"
+              {/* Cash on Delivery Option */}
+              <div className="max-w-md">
+                <div
                   id="checkout-payment-cash-opt"
                   data-testid="checkout-payment-cash-opt"
-                  onClick={() => setPaymentMethod('cash')}
-                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
-                    paymentMethod === 'cash'
-                      ? 'checkout-card-selected'
-                      : 'checkout-card'
-                  }`}
+                  className="p-4 sm:p-4.5 rounded-xl text-left transition-all checkout-card-selected flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
-                          paymentMethod === 'cash'
-                            ? 'bg-[#00d2aa] text-[#030d1a]'
-                            : 'border-2 border-slate-500 bg-transparent'
-                        }`}
-                      >
-                        {paymentMethod === 'cash' ? (
-                          <div className="w-2 h-2 rounded-full bg-[#030d1a]" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-transparent" />
-                        )}
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center bg-[#00d2aa] text-[#030d1a]">
+                        <div className="w-2 h-2 rounded-full bg-[#030d1a]" />
                       </div>
                       <span className="text-sm sm:text-base font-bold text-white">Cash on Delivery</span>
                     </div>
                     <Banknote className="w-5 h-5 text-cyan-400 shrink-0" />
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs text-slate-400">Pay cash or runner UPI QR upon doorstep delivery</p>
+                    <p className="text-xs text-slate-400">Pay cash upon doorstep delivery</p>
                   </div>
-                </button>
-
-                {/* Option 2: UPI / QR Payment */}
-                <button
-                  type="button"
-                  id="checkout-payment-upi-qr-opt"
-                  data-testid="checkout-payment-upi-qr-opt"
-                  onClick={() => setPaymentMethod('upi_qr')}
-                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
-                    paymentMethod === 'upi_qr'
-                      ? 'checkout-card-selected'
-                      : 'checkout-card'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
-                          paymentMethod === 'upi_qr'
-                            ? 'bg-[#00d2aa] text-[#030d1a]'
-                            : 'border-2 border-slate-500 bg-transparent'
-                        }`}
-                      >
-                        {paymentMethod === 'upi_qr' ? (
-                          <div className="w-2 h-2 rounded-full bg-[#030d1a]" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-transparent" />
-                        )}
-                      </div>
-                      <span className="text-sm sm:text-base font-bold text-white">UPI / QR Payment</span>
-                    </div>
-                    <QrCode className="w-5 h-5 text-cyan-400 shrink-0" />
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-xs text-slate-400">Scan QR code using any UPI banking app</p>
-                  </div>
-                </button>
-
-                {/* Option 3: 📱 Pay Directly via UPI App */}
-                <button
-                  type="button"
-                  id="checkout-payment-upi-app-opt"
-                  data-testid="checkout-payment-upi-app-opt"
-                  onClick={() => setPaymentMethod('upi_app')}
-                  className={`p-4 sm:p-4.5 rounded-xl text-left transition-all cursor-pointer flex flex-col justify-between min-h-[96px] ${
-                    paymentMethod === 'upi_app'
-                      ? 'checkout-card-selected'
-                      : 'checkout-card'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
-                          paymentMethod === 'upi_app'
-                            ? 'bg-[#00d2aa] text-[#030d1a]'
-                            : 'border-2 border-slate-500 bg-transparent'
-                        }`}
-                      >
-                        {paymentMethod === 'upi_app' ? (
-                          <div className="w-2 h-2 rounded-full bg-[#030d1a]" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-transparent" />
-                        )}
-                      </div>
-                      <span className="text-sm sm:text-base font-bold text-white">📱 Pay Directly via UPI App</span>
-                    </div>
-                    <Smartphone className="w-5 h-5 text-cyan-400 shrink-0" />
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-xs text-slate-400">Pay directly with installed UPI apps (GPay, PhonePe, Paytm)</p>
-                  </div>
-                </button>
+                </div>
               </div>
 
               {/* Cash on Delivery Details */}
-              {paymentMethod === 'cash' && (
-                <div
-                  id="checkout-cash-details-panel"
-                  className="checkout-subpanel rounded-xl sm:rounded-2xl p-5 mt-4 sm:mt-5 text-xs text-slate-300 space-y-1 text-center"
-                >
-                  <p className="font-semibold text-white">Doorstep Payment Selected</p>
-                  <p className="text-slate-400">
-                    You can pay via Cash or ask the delivery runner for their on-the-spot UPI QR code upon handover.
-                  </p>
-                </div>
-              )}
-
-              {/* UPI / QR Details Area - Single Working QR Code inside Payment Methods */}
-              {paymentMethod === 'upi_qr' && (() => {
-                const formattedTotal = Number(total).toFixed(2);
-                const checkoutUpiUri = buildCustomerPaymentUpiUri(
-                  paymentSettings.upiId || 'freshcart@upi',
-                  paymentSettings.payeeName || 'FreshCart Grocery Store',
-                  total,
-                  checkoutTxnRef
-                );
-                const upiValidation = decodeUpiPayload(checkoutUpiUri);
-                const qrScan = verifyQrPayloadDecodable(checkoutUpiUri);
-                const checkoutQrUrl = upiValidation.isValid ? generateQrDataUrl(checkoutUpiUri, { size: 180 }) : '';
-
-                return (
-                  <div
-                    id="checkout-upi-qr-details-panel"
-                    className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4"
-                  >
-                    {/* Amount to Pay */}
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        Amount to Pay
-                      </p>
-                      <p id="checkout-qr-amount-display" data-testid="checkout-qr-amount-display" className="text-xl sm:text-2xl font-extrabold text-[#00e699] font-display tabular-nums">
-                        {formatINR(total)}
-                      </p>
-                    </div>
-
-                    {/* Customer Cart Amount-Specific QR Code - Only QR Code in Customer Flow */}
-                    {upiValidation.isValid ? (
-                      <div className="flex flex-col items-center space-y-3">
-                        {/* Interactive Clickable QR Code Container */}
-                        <div
-                          id="checkout-payment-qr-container"
-                          data-testid="checkout-payment-qr-container"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`UPI Payment QR Code. Double-tap, double-click, or long-press to open UPI app, or scan to pay ${formatINR(total)}`}
-                          data-upi-uri={checkoutUpiUri}
-                          onPointerDown={(e) => handleQrPointerDown(e, checkoutUpiUri)}
-                          onPointerMove={handleQrPointerMove}
-                          onPointerUp={(e) => handleQrPointerUp(e, checkoutUpiUri)}
-                          onPointerCancel={handleQrPointerCancel}
-                          onDoubleClick={(e) => handleQrDoubleClick(e, checkoutUpiUri)}
-                          onClick={() => {}}
-                          onContextMenu={(e) => e.preventDefault()}
-                          style={{ touchAction: 'pan-y', WebkitTouchCallout: 'none', userSelect: 'none' }}
-                          className="bg-white p-2.5 rounded-xl shrink-0 shadow-md border-2 border-white/90 hover:border-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer active:scale-98 select-none group relative"
-                          title="Double-click, double-tap, or long-press to open UPI app (or scan with camera)"
-                        >
-                          <img
-                            id="checkout-payment-qr-img"
-                            data-testid="checkout-payment-qr-img"
-                            src={checkoutQrUrl}
-                            data-upi-uri={checkoutUpiUri}
-                            data-upi-amount={formattedTotal}
-                            data-upi-id={paymentSettings.upiId || 'freshcart@upi'}
-                            data-upi-pa={upiValidation.decoded?.pa}
-                            data-upi-pn={upiValidation.decoded?.pn}
-                            data-upi-am={upiValidation.decoded?.am}
-                            data-upi-cu={upiValidation.decoded?.cu}
-                            data-upi-tr={upiValidation.decoded?.tr}
-                            data-qr-decodable={qrScan?.decodable ? "true" : "false"}
-                            alt={`UPI Payment QR Code for ${formatINR(total)}`}
-                            className="w-36 h-36 sm:w-40 sm:h-40 object-contain pointer-events-none select-none"
-                            draggable={false}
-                            onDragStart={(e) => e.preventDefault()}
-                          />
-                        </div>
-
-                        <p id="checkout-qr-scan-instruction" data-testid="checkout-qr-scan-instruction" className="text-xs sm:text-sm font-semibold text-white">
-                          Scan this QR to pay {formatINR(total)}
-                        </p>
-
-                        {/* Fallback Notice for desktop or unsupported environments */}
-                        {showQrUpiFallback && (
-                          <div
-                            id="qr-upi-fallback-notice"
-                            data-testid="qr-upi-fallback-notice"
-                            className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs text-center max-w-sm animate-in fade-in"
-                          >
-                            <p className="font-medium">
-                              Open your UPI app and complete the payment, then upload your payment screenshot.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Real Payment Status Feedback Banner */}
-                        {paymentStatusFeedback && (
-                          <div
-                            id="checkout-payment-status-feedback-qr"
-                            data-testid="checkout-payment-status-feedback"
-                            className={`p-3.5 rounded-xl border text-xs sm:text-sm text-center max-w-sm w-full transition-all space-y-1 ${
-                              paymentStatusFeedback.type === 'verified'
-                                ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200'
-                                : paymentStatusFeedback.type === 'processing'
-                                ? 'bg-amber-950/50 border-amber-500/50 text-amber-200 animate-pulse'
-                                : paymentStatusFeedback.type === 'checking'
-                                ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 animate-pulse'
-                                : paymentStatusFeedback.type === 'failed'
-                                ? 'bg-rose-950/50 border-rose-500/50 text-rose-200'
-                                : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
-                            }`}
-                          >
-                            <p className="font-bold flex items-center justify-center gap-1.5">
-                              {paymentStatusFeedback.type === 'checking' && <RotateCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
-                              {paymentStatusFeedback.type === 'processing' && <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-400" />}
-                              {paymentStatusFeedback.type === 'verified' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                              <span>{paymentStatusFeedback.message}</span>
-                            </p>
-                            {paymentStatusFeedback.subMessage && (
-                              <p className="text-[11px] opacity-80 leading-normal">{paymentStatusFeedback.subMessage}</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs">
-                        <p className="font-bold">Cannot generate payment QR:</p>
-                        <p className="mt-0.5">{upiValidation.error || 'Invalid payment parameters'}</p>
-                      </div>
-                    )}
-
-                    {/* Clear option: Upload Payment Screenshot after completing payment */}
-                    <div className="w-full pt-2">
-                      <PaymentProofUpload
-                        orderId={draftOrderId}
-                        customerId={currentUser?.id || 'guest_user'}
-                        customerToken={currentUser?.token}
-                        initialProof={submittedProof}
-                        currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
-                        onProofSubmitted={(proof) => {
-                          setSubmittedProof(proof);
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 📱 Pay Directly via UPI App Details Area */}
-              {paymentMethod === 'upi_app' && (() => {
-                const checkoutUpiUri = buildCustomerPaymentUpiUri(
-                  paymentSettings.upiId || 'freshcart@upi',
-                  paymentSettings.payeeName || 'FreshCart Grocery Store',
-                  total,
-                  checkoutTxnRef
-                );
-
-                return (
-                  <div
-                    id="checkout-upi-app-details-panel"
-                    className="checkout-subpanel rounded-xl sm:rounded-2xl p-6 mt-4 sm:mt-5 flex flex-col items-center text-center space-y-4"
-                  >
-                    {/* Amount to Pay */}
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        Amount to Pay
-                      </p>
-                      <p id="checkout-upi-app-amount-display" className="text-xl sm:text-2xl font-extrabold text-[#00e699] font-display tabular-nums">
-                        {formatINR(total)}
-                      </p>
-                    </div>
-
-                    <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
-                      Tap the button below to launch your installed UPI payment app (Google Pay, PhonePe, Paytm, BHIM) and complete the payment directly.
-                    </p>
-
-                    <div className="pt-1">
-                      <a
-                        id="checkout-direct-upi-app-link"
-                        data-testid="checkout-direct-upi-app-link"
-                        href={checkoutUpiUri}
-                        onClick={handleDirectUpiClick}
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-sm font-bold shadow-lg shadow-cyan-900/30 transition-all active:scale-95 cursor-pointer"
-                      >
-                        <Smartphone className="w-4 h-4" />
-                        <span>Pay {formatINR(total)} via UPI App</span>
-                      </a>
-                    </div>
-
-                    {/* Real Payment Status Feedback Banner */}
-                    {paymentStatusFeedback && (
-                      <div
-                        id="checkout-payment-status-feedback-app"
-                        data-testid="checkout-payment-status-feedback"
-                        className={`p-3.5 rounded-xl border text-xs sm:text-sm text-center max-w-sm w-full transition-all space-y-1 ${
-                          paymentStatusFeedback.type === 'verified'
-                            ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200'
-                            : paymentStatusFeedback.type === 'processing'
-                            ? 'bg-amber-950/50 border-amber-500/50 text-amber-200 animate-pulse'
-                            : paymentStatusFeedback.type === 'checking'
-                            ? 'bg-cyan-950/50 border-cyan-500/50 text-cyan-200 animate-pulse'
-                            : paymentStatusFeedback.type === 'failed'
-                            ? 'bg-rose-950/50 border-rose-500/50 text-rose-200'
-                            : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
-                        }`}
-                      >
-                        <p className="font-bold flex items-center justify-center gap-1.5">
-                          {paymentStatusFeedback.type === 'checking' && <RotateCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />}
-                          {paymentStatusFeedback.type === 'processing' && <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-400" />}
-                          {paymentStatusFeedback.type === 'verified' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                          <span>{paymentStatusFeedback.message}</span>
-                        </p>
-                        {paymentStatusFeedback.subMessage && (
-                          <p className="text-[11px] opacity-80 leading-normal">{paymentStatusFeedback.subMessage}</p>
-                        )}
-                      </div>
-                    )}
-
-
-                    {/* Clear option: Upload Payment Screenshot after completing payment */}
-                    <div className="w-full pt-2">
-                      <PaymentProofUpload
-                        orderId={draftOrderId}
-                        customerId={currentUser?.id || 'guest_user'}
-                        customerToken={currentUser?.token}
-                        initialProof={submittedProof}
-                        currentVerificationStatus={submittedProof ? 'PENDING_VERIFICATION' : 'NOT_UPLOADED'}
-                        onProofSubmitted={(proof) => {
-                          setSubmittedProof(proof);
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
+              <div
+                id="checkout-cash-details-panel"
+                className="checkout-subpanel rounded-xl sm:rounded-2xl p-4 sm:p-5 text-xs text-slate-300 space-y-1 text-center max-w-md"
+              >
+                <p className="font-semibold text-white">Doorstep Payment Selected</p>
+                <p className="text-slate-400">
+                  Please keep exact cash ready upon delivery handover.
+                </p>
+              </div>
             </div>
 
-            {/* 4. ORDER SUMMARY & PLACE ORDER (Full-Width Section BELOW Payment - Centered Alignment) */}
+            {/* 4. ORDER SUMMARY & PLACE ORDER */}
             <div className="checkout-panel rounded-2xl p-6 sm:p-8">
               <div className="w-full max-w-md mx-auto space-y-5 text-center">
 
@@ -1420,7 +338,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </h2>
                 </div>
 
-                {/* Optional Cart Items Peek (Centered trigger, left-aligned item rows) */}
+                {/* Optional Cart Items Peek */}
                 {items.length > 0 && (
                   <div className="text-xs text-slate-400">
                     <button
@@ -1460,7 +378,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 )}
 
-                {/* Financial Breakdown (Centered container, visually aligned rows) */}
+                {/* Financial Breakdown */}
                 <div className="space-y-3 pt-1">
                   {/* Subtotal */}
                   <div className="flex justify-between items-center text-sm text-slate-300">
@@ -1486,7 +404,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </div>
                   )}
 
-                  {/* Final Total (Centered & visually emphasized) */}
+                  {/* Final Total */}
                   <div className="flex justify-between items-baseline pt-3 border-t border-[#0c2b4a]">
                     <span className="text-base sm:text-lg font-bold text-white">
                       Final Total
@@ -1497,7 +415,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 </div>
 
-                {/* Place Order Button (Centered with reasonable width) */}
+                {/* Place Order Button */}
                 <div className="pt-2 flex justify-center">
                   <button
                     type="button"

@@ -121,9 +121,6 @@ export const hi: typeof en = {
   payApplePay: '⚡ एक्सप्रेस भुगतान',
   payCard: 'क्रेडिट / डेबिट कार्ड',
   payCod: 'कैश ऑन डिलीवरी (नकद)',
-  payDirectUpi: 'सीधा यूपीआई ऐप भुगतान',
-  payWithUpiApp: 'यूपीआई ऐप से भुगतान करें →',
-  payNow: 'अभी भुगतान करें',
   orderSummary: 'ऑर्डर सारांश ({count} वस्तुएं)',
   placeOrder: 'ऑर्डर दें और भुगतान करें {total}',
   processingOrder: 'पुष्टि और प्रेषण हो रहा है...',
@@ -379,7 +376,6 @@ export const hi: typeof en = {
 
   // Settings & Delivery Charges
   tabSettings: 'डिलीवरी शुल्क',
-  adminPaymentSettings: 'भुगतान सेटिंग्स',
   taxAndPackingSettingTitle: 'डिलीवरी शुल्क',
   taxAndPackingSettingDesc: 'ग्राहक आदेशों पर लागू डिलीवरी शुल्क निर्धारित करें।',
   taxAndPackingRateLabel: 'डिलीवरी शुल्क (₹)',

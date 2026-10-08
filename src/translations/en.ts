@@ -119,9 +119,6 @@ export const en = {
   payApplePay: '⚡ Express Pay',
   payCard: 'Credit / Debit Card',
   payCod: 'Cash on Delivery',
-  payDirectUpi: 'Direct UPI App Payment',
-  payWithUpiApp: 'Pay with UPI App →',
-  payNow: 'PAY NOW',
   orderSummary: 'Order Summary ({count} items)',
   placeOrder: 'Place Order & Pay {total}',
   processingOrder: 'Confirming & Dispatching...',
@@ -377,7 +374,6 @@ export const en = {
 
   // Settings & Delivery Charges
   tabSettings: 'Delivery Charges',
-  adminPaymentSettings: 'Payment Settings',
   taxAndPackingSettingTitle: 'Delivery Charges',
   taxAndPackingSettingDesc: 'Configure the delivery charges applied to customer orders.',
   taxAndPackingRateLabel: 'Delivery Charges (₹)',

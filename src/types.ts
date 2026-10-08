@@ -66,42 +66,8 @@ export interface Order {
   otpVerifiedAt?: string;
   handoverReleased?: boolean;
   paymentMethod?: string;
-  paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'PENDING VERIFICATION' | 'PAID' | 'REJECTED' | 'PENDING' | string;
-  paymentVerificationStatus?: PaymentVerificationStatus;
-  paymentProof?: PaymentProofData;
+  paymentStatus?: string;
 }
-
-export type PaymentVerificationStatus =
-  | 'NOT_UPLOADED'
-  | 'UPLOADED'
-  | 'PENDING_VERIFICATION'
-  | 'VERIFIED'
-  | 'REJECTED';
-
-export interface PaymentProofData {
-  id: string;
-  orderId: string;
-  customerId: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  paymentId?: string;
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  filePath?: string;
-  fileUrl?: string;
-  fileData?: string;
-  verificationStatus: PaymentVerificationStatus;
-  uploadedAt: string;
-  verifiedRejectedAt?: string;
-  verifiedRejectedBy?: string;
-  adminNotes?: string;
-  orderAmount?: number;
-  paymentMethod?: string;
-  orderDate?: string;
-}
-
 
 export interface CustomerAddress {
   id: string;
@@ -131,6 +97,7 @@ export interface Customer {
 export interface CustomerOrder extends Order {
   customerId?: string;
   estimatedDeliveryTime?: string;
+  paymentMethod?: string;
 }
 
 export interface Coupon {
@@ -154,13 +121,3 @@ export interface DeliveryChargeRule {
   minOrderAmount: number;
   deliveryCharge: number; // 0 indicates FREE delivery
 }
-
-export interface PaymentSettings {
-  upiId: string;
-  payeeName: string;
-  qrCodeUrl?: string;
-  upiPaymentEnabled: boolean;
-  directUpiAppEnabled: boolean;
-  updatedAt?: string;
-}
-
