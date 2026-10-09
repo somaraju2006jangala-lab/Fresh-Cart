@@ -173,23 +173,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       };
       addOrder(newCustomerOrder);
 
-      // Trigger backend Order Handover OTP generation for the new order
-      try {
-        const otpRes = await generateOrderOtp(
-          generatedOrder,
-          newCustomerOrder.customerId || 'guest_user',
-          customerPhone || ''
-        );
-
-        if (otpRes.success && otpRes.otp) {
-          setOrderHandoverOtp(otpRes.otp);
-          setOtpExpiresAt(otpRes.expiresAt || (Date.now() + 10 * 60 * 1000));
-          setIsOtpExpired(false);
-        }
-      } catch {
-        // ignore
-      }
-
       setPlacedOrderId(generatedOrder);
       onOrderPlaced?.(items, newCustomerOrder);
       setStep('success');

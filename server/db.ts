@@ -610,7 +610,10 @@ export async function initializeDatabase(): Promise<void> {
       status VARCHAR(64) NOT NULL DEFAULT 'Picking',
       payment_id VARCHAR(64) NULL,
       payment_method VARCHAR(32) NOT NULL DEFAULT 'COD',
-      payment_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+      payment_status VARCHAR(64) NOT NULL DEFAULT 'PENDING',
+      screenshot_url VARCHAR(512) NULL,
+      verified_at TIMESTAMP NULL,
+      verified_by VARCHAR(100) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_orders_order_id (order_id),
@@ -687,14 +690,26 @@ export async function initializeDatabase(): Promise<void> {
       payment_id VARCHAR(64) NOT NULL UNIQUE,
       order_id VARCHAR(64) NOT NULL,
       customer_id VARCHAR(64) NOT NULL,
-      payment_method ENUM('COD', 'RAZORPAY') NOT NULL DEFAULT 'COD',
-      payment_status ENUM('PENDING', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'PENDING',
+      payment_method VARCHAR(32) NOT NULL DEFAULT 'COD',
+      payment_status VARCHAR(64) NOT NULL DEFAULT 'PENDING',
       amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+      transaction_ref VARCHAR(128) NULL,
+      upi_id VARCHAR(256) NULL,
+      upi_merchant_name VARCHAR(256) NULL,
+      screenshot_path VARCHAR(512) NULL,
+      screenshot_mime VARCHAR(64) NULL,
+      screenshot_size INT NULL,
+      screenshot_uploaded_at TIMESTAMP NULL,
       razorpay_order_id VARCHAR(100) NULL,
       razorpay_payment_id VARCHAR(100) NULL,
       razorpay_signature VARCHAR(255) NULL,
       paid_at TIMESTAMP NULL,
+      verified_at TIMESTAMP NULL,
+      verified_by VARCHAR(100) NULL,
+      verification_notes TEXT NULL,
+      otp_sent TINYINT(1) NOT NULL DEFAULT 0,
+      otp_sent_at TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_payments_payment_id (payment_id),
@@ -756,12 +771,26 @@ export async function initializeDatabase(): Promise<void> {
     // Ignore if column already exists
   }
 
+  // Ensure orders table columns exist
+  try {
+    await currentPool.query('ALTER TABLE orders MODIFY COLUMN payment_status VARCHAR(64) NOT NULL DEFAULT "PENDING"');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE orders ADD COLUMN screenshot_url VARCHAR(512) NULL AFTER payment_status');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE orders ADD COLUMN verified_at TIMESTAMP NULL AFTER screenshot_url');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE orders ADD COLUMN verified_by VARCHAR(100) NULL AFTER verified_at');
+  } catch {}
+
   // Ensure payments table supports UPI payment method and transaction details
   try {
     await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(32) NOT NULL DEFAULT "COD"');
   } catch {}
   try {
-    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(32) NOT NULL DEFAULT "PENDING"');
+    await currentPool.query('ALTER TABLE payments MODIFY COLUMN payment_status VARCHAR(64) NOT NULL DEFAULT "PENDING"');
   } catch {}
   try {
     await currentPool.query('ALTER TABLE payments ADD COLUMN transaction_ref VARCHAR(128) NULL AFTER currency');
@@ -771,6 +800,33 @@ export async function initializeDatabase(): Promise<void> {
   } catch {}
   try {
     await currentPool.query('ALTER TABLE payments ADD COLUMN upi_merchant_name VARCHAR(256) NULL AFTER upi_id');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN screenshot_path VARCHAR(512) NULL AFTER upi_merchant_name');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN screenshot_mime VARCHAR(64) NULL AFTER screenshot_path');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN screenshot_size INT NULL AFTER screenshot_mime');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN screenshot_uploaded_at TIMESTAMP NULL AFTER screenshot_size');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN verified_at TIMESTAMP NULL AFTER paid_at');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN verified_by VARCHAR(100) NULL AFTER verified_at');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN verification_notes TEXT NULL AFTER verified_by');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN otp_sent TINYINT(1) NOT NULL DEFAULT 0 AFTER verification_notes');
+  } catch {}
+  try {
+    await currentPool.query('ALTER TABLE payments ADD COLUMN otp_sent_at TIMESTAMP NULL AFTER otp_sent');
   } catch {}
 
   // Seed default data if tables are empty
@@ -1815,7 +1871,7 @@ export async function upsertOrderInDb(orderData: any): Promise<boolean> {
         orderId,
         customerId,
         paymentMethod === 'UPI' ? 'UPI' : (paymentMethod === 'RAZORPAY' ? 'RAZORPAY' : 'COD'),
-        paymentStatus === 'PAID' ? 'PAID' : (paymentStatus === 'PAYMENT_ATTEMPTED' ? 'PAYMENT_ATTEMPTED' : 'PENDING'),
+        paymentStatus || 'PENDING',
         total,
       ]
     );
@@ -1846,6 +1902,7 @@ export async function findOrderInDb(orderId: string): Promise<any | null> {
               delivery_time_slot as deliveryTimeSlot, subtotal, discount, total,
               coupon_code as couponCode, status, payment_id as paymentId,
               payment_method as paymentMethod, payment_status as paymentStatus,
+              screenshot_url as screenshotUrl, verified_at as verifiedAt, verified_by as verifiedBy,
               created_at as createdAt
        FROM orders
        WHERE order_id IN (?, ?)
@@ -1897,6 +1954,7 @@ export async function findOrdersForCustomerInDb(customerId?: string): Promise<an
              delivery_time_slot as deliveryTimeSlot, subtotal, discount, total,
              coupon_code as couponCode, status, payment_id as paymentId,
              payment_method as paymentMethod, payment_status as paymentStatus,
+             screenshot_url as screenshotUrl, verified_at as verifiedAt, verified_by as verifiedBy,
              created_at as createdAt
       FROM orders
     `;
@@ -2519,4 +2577,310 @@ export async function createUpiPaymentAttemptInDb(paymentData: {
     return false;
   }
 }
+
+export interface SaveScreenshotResult {
+  success: boolean;
+  alreadySubmitted?: boolean;
+  alreadyPaid?: boolean;
+  error?: string;
+}
+
+/**
+ * Saves payment screenshot information in MySQL and updates order and payment status to PENDING_VERIFICATION.
+ * Enforces one-upload policy per order:
+ * - If order is already PAID: rejects upload.
+ * - If order is already PENDING_VERIFICATION or has existing active proof (and is not REJECTED): rejects duplicate upload.
+ * - If order was REJECTED by admin: allows replacement upload.
+ * - Handles concurrency using FOR UPDATE row locks.
+ */
+export async function savePaymentScreenshotInDb(data: {
+  orderId: string;
+  customerId: string;
+  screenshotPath: string;
+  mimeType: string;
+  fileSize: number;
+}): Promise<SaveScreenshotResult> {
+  const pool = getPool();
+  const altId = data.orderId.startsWith('#') ? data.orderId.slice(1) : `#${data.orderId}`;
+  const screenshotUrl = `/api/payments/screenshot/${encodeURIComponent(data.orderId)}`;
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Lock and check existing order record
+    const [orderRows] = await connection.query<RowDataPacket[]>(
+      `SELECT payment_status, screenshot_url FROM orders WHERE order_id IN (?, ?) FOR UPDATE`,
+      [data.orderId, altId]
+    );
+
+    // 2. Lock and check existing payment record
+    const [existing] = await connection.query<RowDataPacket[]>(
+      `SELECT payment_id, payment_status, screenshot_path FROM payments WHERE order_id IN (?, ?) FOR UPDATE`,
+      [data.orderId, altId]
+    );
+
+    const currentOrderStatus = orderRows[0]?.payment_status;
+    const currentPaymentStatus = existing[0]?.payment_status;
+    const currentOrderScreenshot = orderRows[0]?.screenshot_url;
+    const currentPaymentScreenshot = existing[0]?.screenshot_path;
+
+    // Rule: If already PAID in MySQL, permanently disable upload
+    if (currentOrderStatus === 'PAID' || currentPaymentStatus === 'PAID') {
+      await connection.rollback();
+      return {
+        success: false,
+        alreadyPaid: true,
+        error: 'Payment for this order has already been confirmed as PAID. No additional proof required.',
+      };
+    }
+
+    // Rule: If already PENDING_VERIFICATION or active screenshot exists, only permit if REJECTED
+    const isPending = currentOrderStatus === 'PENDING_VERIFICATION' || currentPaymentStatus === 'PENDING_VERIFICATION';
+    const hasProof = Boolean(currentOrderScreenshot || currentPaymentScreenshot);
+    const isRejected = currentOrderStatus === 'REJECTED' || currentPaymentStatus === 'REJECTED';
+
+    if (isPending || (hasProof && !isRejected)) {
+      await connection.rollback();
+      return {
+        success: false,
+        alreadySubmitted: true,
+        error: 'Payment proof has already been submitted for this order. Please wait for admin verification.',
+      };
+    }
+
+    // 3. Update orders table
+    await connection.query(
+      `UPDATE orders
+       SET payment_status = 'PENDING_VERIFICATION',
+           screenshot_url = ?
+       WHERE order_id IN (?, ?)`,
+      [screenshotUrl, data.orderId, altId]
+    );
+
+    // 4. Update payments table if existing, or create if not yet existing
+    if (existing.length > 0) {
+      await connection.query(
+        `UPDATE payments
+         SET payment_status = 'PENDING_VERIFICATION',
+             screenshot_path = ?,
+             screenshot_mime = ?,
+             screenshot_size = ?,
+             screenshot_uploaded_at = NOW()
+         WHERE order_id IN (?, ?)`,
+        [data.screenshotPath, data.mimeType, data.fileSize, data.orderId, altId]
+      );
+    } else {
+      const paymentId = `PAY-${data.orderId.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
+      await connection.query(
+        `INSERT INTO payments (
+           payment_id, order_id, customer_id, payment_method, payment_status,
+           screenshot_path, screenshot_mime, screenshot_size, screenshot_uploaded_at
+         )
+         VALUES (?, ?, ?, 'UPI', 'PENDING_VERIFICATION', ?, ?, ?, NOW())`,
+        [paymentId, data.orderId, data.customerId || 'guest', data.screenshotPath, data.mimeType, data.fileSize]
+      );
+    }
+
+    await connection.commit();
+    return { success: true };
+  } catch (err: any) {
+    await connection.rollback();
+    console.error('[MySQL] Error saving payment screenshot in DB:', err?.message);
+    return { success: false, error: err?.message || 'Database update failed.' };
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * Retrieves the payment record for an order, including screenshot details, audit history, and OTP sent status.
+ */
+export async function getPaymentRecordByOrderId(orderId: string): Promise<any | null> {
+  if (!orderId) return null;
+  const pool = getPool();
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT p.id, p.payment_id as paymentId, p.order_id as orderId, p.customer_id as customerId,
+              p.payment_method as paymentMethod, p.payment_status as paymentStatus,
+              p.amount, p.currency, p.transaction_ref as transactionRef,
+              p.upi_id as upiId, p.upi_merchant_name as upiMerchantName,
+              p.screenshot_path as screenshotPath, p.screenshot_mime as screenshotMime,
+              p.screenshot_size as screenshotSize, p.screenshot_uploaded_at as screenshotUploadedAt,
+              p.paid_at as paidAt, p.verified_at as verifiedAt, p.verified_by as verifiedBy,
+              p.verification_notes as verificationNotes, p.otp_sent as otpSent, p.otp_sent_at as otpSentAt,
+              p.created_at as createdAt,
+              o.customer_name as customerName, o.mobile as customerPhone, o.email as customerEmail,
+              o.total as orderTotal, o.status as orderStatus
+       FROM payments p
+       LEFT JOIN orders o ON (o.order_id = p.order_id OR o.order_id = ?)
+       WHERE p.order_id IN (?, ?)
+       LIMIT 1`,
+      [altId, orderId, altId]
+    );
+
+    if (rows.length === 0) return null;
+    return rows[0];
+  } catch (err: any) {
+    console.error('[MySQL] Error fetching payment record:', err?.message);
+    return null;
+  }
+}
+
+/**
+ * Fetches all UPI orders/payments for Admin Payment Verification queue.
+ */
+export async function getAllUpiPaymentsForVerification(): Promise<any[]> {
+  const pool = getPool();
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT o.order_id as orderId, o.customer_id as customerId, o.customer_name as customerName,
+              o.email as customerEmail, o.mobile as customerPhone, o.total, o.status as orderStatus,
+              o.payment_method as paymentMethod, o.payment_status as paymentStatus,
+              o.screenshot_url as screenshotUrl, o.verified_at as verifiedAt, o.verified_by as verifiedBy,
+              o.created_at as createdAt,
+              p.payment_id as paymentId, p.transaction_ref as transactionRef, p.upi_id as upiId,
+              p.screenshot_path as screenshotPath, p.screenshot_uploaded_at as screenshotUploadedAt,
+              p.verification_notes as verificationNotes, p.otp_sent as otpSent
+       FROM orders o
+       LEFT JOIN payments p ON (p.order_id = o.order_id)
+       WHERE o.payment_method LIKE '%UPI%' OR p.payment_method = 'UPI' OR o.payment_status = 'PENDING_VERIFICATION' OR p.screenshot_path IS NOT NULL
+       ORDER BY
+         CASE
+           WHEN o.payment_status = 'PENDING_VERIFICATION' THEN 1
+           WHEN o.payment_status = 'REJECTED' THEN 2
+           WHEN o.payment_status = 'PAYMENT_ATTEMPTED' THEN 3
+           WHEN o.payment_status = 'PAID' THEN 4
+           ELSE 5
+         END,
+         o.created_at DESC`
+    );
+    return rows;
+  } catch (err: any) {
+    console.error('[MySQL] Error fetching UPI payments for verification:', err?.message);
+    return [];
+  }
+}
+
+/**
+ * Admin payment verification in MySQL:
+ * - APPROVE: sets status to PAID, preserves audit records, clears active screenshot reference, signals file deletion.
+ * - REJECT: sets status to REJECTED, preserves screenshot for review and customer retry.
+ */
+export async function verifyUpiPaymentInDb(params: {
+  orderId: string;
+  adminUsername: string;
+  action: 'APPROVE' | 'REJECT';
+  notes?: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  alreadyPaid?: boolean;
+  screenshotPathToDelete?: string;
+}> {
+  const pool = getPool();
+  const altId = params.orderId.startsWith('#') ? params.orderId.slice(1) : `#${params.orderId}`;
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Check current state in payments table
+    const [existing] = await connection.query<RowDataPacket[]>(
+      `SELECT p.payment_status as paymentStatus, p.screenshot_path as screenshotPath, p.otp_sent as otpSent
+       FROM payments p
+       WHERE p.order_id IN (?, ?)
+       LIMIT 1`,
+      [params.orderId, altId]
+    );
+
+    const currentStatus = existing[0]?.paymentStatus;
+    if (params.action === 'APPROVE' && currentStatus === 'PAID') {
+      await connection.rollback();
+      return { success: true, alreadyPaid: true };
+    }
+
+    const screenshotPathToDelete = existing[0]?.screenshotPath || undefined;
+
+    if (params.action === 'APPROVE') {
+      // Mark as PAID, record verification audit, clear screenshot reference from active file reference
+      await connection.query(
+        `UPDATE payments
+         SET payment_status = 'PAID',
+             paid_at = NOW(),
+             verified_at = NOW(),
+             verified_by = ?,
+             screenshot_path = NULL,
+             screenshot_mime = NULL,
+             screenshot_size = NULL
+         WHERE order_id IN (?, ?)`,
+        [params.adminUsername, params.orderId, altId]
+      );
+
+      await connection.query(
+        `UPDATE orders
+         SET payment_status = 'PAID',
+             screenshot_url = NULL,
+             verified_at = NOW(),
+             verified_by = ?
+         WHERE order_id IN (?, ?)`,
+        [params.adminUsername, params.orderId, altId]
+      );
+    } else {
+      // Mark as REJECTED, retain screenshot for admin review and customer retry
+      const notes = params.notes || 'Payment proof rejected by admin';
+      await connection.query(
+        `UPDATE payments
+         SET payment_status = 'REJECTED',
+             verified_at = NOW(),
+             verified_by = ?,
+             verification_notes = ?
+         WHERE order_id IN (?, ?)`,
+        [params.adminUsername, notes, params.orderId, altId]
+      );
+
+      await connection.query(
+        `UPDATE orders
+         SET payment_status = 'REJECTED',
+             verified_at = NOW(),
+             verified_by = ?
+         WHERE order_id IN (?, ?)`,
+        [params.adminUsername, params.orderId, altId]
+      );
+    }
+
+    await connection.commit();
+    return {
+      success: true,
+      screenshotPathToDelete: params.action === 'APPROVE' ? screenshotPathToDelete : undefined,
+    };
+  } catch (err: any) {
+    await connection.rollback();
+    console.error('[MySQL] Error verifying payment in DB:', err?.message);
+    return { success: false, error: err?.message || 'Database update failed.' };
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * Marks OTP as sent in MySQL payments record to prevent duplicate OTP sending.
+ */
+export async function markPaymentOtpSentInDb(orderId: string): Promise<boolean> {
+  const pool = getPool();
+  const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+  try {
+    await pool.query(
+      `UPDATE payments SET otp_sent = 1, otp_sent_at = NOW() WHERE order_id IN (?, ?)`,
+      [orderId, altId]
+    );
+    return true;
+  } catch (err: any) {
+    console.error('[MySQL] Error marking OTP sent in payments:', err?.message);
+    return false;
+  }
+}
+
 

@@ -963,22 +963,65 @@ export function updateOrderStatus(
  */
 export function updateOrderPaymentStatus(
   orderId: string,
-  paymentStatus: 'Pending' | 'Pending Verification' | 'Paid' | 'Failed' | string
+  paymentStatus: 'Pending' | 'Pending Verification' | 'PENDING_VERIFICATION' | 'Paid' | 'PAID' | 'Failed' | 'REJECTED' | string,
+  meta?: { screenshotUrl?: string; verifiedAt?: string; verifiedBy?: string; verificationNotes?: string }
 ): void {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
     const orders: CustomerOrder[] = raw ? JSON.parse(raw) : INITIAL_DEMO_ORDERS;
+    const isPaid = paymentStatus.toUpperCase() === 'PAID';
+    const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
     const updated = orders.map((o) =>
-      o.id === orderId
+      o.id === orderId || o.id === altId
         ? {
             ...o,
             paymentStatus,
+            screenshotUrl: isPaid ? undefined : (meta?.screenshotUrl !== undefined ? meta.screenshotUrl : o.screenshotUrl),
+            verifiedAt: meta?.verifiedAt || o.verifiedAt,
+            verifiedBy: meta?.verifiedBy || o.verifiedBy,
+            verificationNotes: meta?.verificationNotes || o.verificationNotes,
           }
         : o
     );
     localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to update order payment status:', err);
+  }
+}
+
+/**
+ * Synchronizes orders in local storage with authoritative state from backend MySQL database.
+ */
+export function syncBackendOrders(backendOrders: any[]): void {
+  if (!Array.isArray(backendOrders) || backendOrders.length === 0) return;
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOMER_ORDERS_KEY);
+    let orders: CustomerOrder[] = raw ? JSON.parse(raw) : [...INITIAL_DEMO_ORDERS];
+    let changed = false;
+
+    backendOrders.forEach((bo) => {
+      const boAltId = bo.id?.startsWith('#') ? bo.id.slice(1) : `#${bo.id}`;
+      const matchIndex = orders.findIndex((o) => o.id === bo.id || o.id === boAltId);
+      if (matchIndex >= 0) {
+        const existing = orders[matchIndex];
+        orders[matchIndex] = {
+          ...existing,
+          paymentStatus: bo.paymentStatus || existing.paymentStatus,
+          screenshotUrl: bo.screenshotUrl !== undefined ? bo.screenshotUrl : existing.screenshotUrl,
+          verifiedAt: bo.verifiedAt || existing.verifiedAt,
+          verifiedBy: bo.verifiedBy || existing.verifiedBy,
+          verificationNotes: bo.verificationNotes || existing.verificationNotes,
+          status: bo.status || existing.status,
+        };
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      localStorage.setItem(STORAGE_CUSTOMER_ORDERS_KEY, JSON.stringify(orders));
+    }
+  } catch (err) {
+    console.error('Failed to sync backend orders:', err);
   }
 }
 

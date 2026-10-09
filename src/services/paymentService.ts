@@ -168,3 +168,252 @@ export async function initiateUpiPayment(params: {
     };
   }
 }
+
+/**
+ * Uploads payment screenshot for a specific customer UPI order.
+ * Accepts JPG, JPEG, and PNG files up to 10 MB.
+ */
+export async function uploadPaymentScreenshot(
+  orderId: string,
+  file: File,
+  token?: string
+): Promise<{
+  success: boolean;
+  paymentStatus?: string;
+  screenshotUrl?: string;
+  message?: string;
+  alreadySubmitted?: boolean;
+  alreadyPaid?: boolean;
+  error?: string;
+}> {
+  // Validate file type: JPG, JPEG, PNG
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  const validExts = ['.jpg', '.jpeg', '.png'];
+
+  if (!validTypes.includes(file.type.toLowerCase()) && !validExts.includes(ext)) {
+    return {
+      success: false,
+      error: 'Please select a valid JPG, JPEG, or PNG image file.',
+    };
+  }
+
+  // Validate file size: 10 MB limit (10 * 1024 * 1024 = 10,485,760 bytes)
+  const MAX_SIZE = 10 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
+    return {
+      success: false,
+      error: 'File size exceeds the 10 MB limit. Please select a smaller screenshot.',
+    };
+  }
+
+  try {
+    // Read file as base64 Data URL
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read file from device.'));
+      reader.readAsDataURL(file);
+    });
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch('/api/payments/screenshot/upload', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        orderId,
+        screenshot: base64Data,
+        mimeType: file.type || (ext === '.png' ? 'image/png' : 'image/jpeg'),
+        fileName: file.name,
+      }),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (res.ok && data?.success) {
+      // Synchronize order state in localStorage
+      try {
+        const raw = localStorage.getItem('freshcart_customer_orders');
+        if (raw) {
+          const orders = JSON.parse(raw);
+          const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
+          const updated = orders.map((o: any) =>
+            o.id === orderId || o.id === altId
+              ? {
+                  ...o,
+                  paymentStatus: 'PENDING_VERIFICATION',
+                  screenshotUrl: data.screenshotUrl,
+                }
+              : o
+          );
+          localStorage.setItem('freshcart_customer_orders', JSON.stringify(updated));
+        }
+      } catch {}
+
+      return {
+        success: true,
+        paymentStatus: data.paymentStatus || 'PENDING_VERIFICATION',
+        screenshotUrl: data.screenshotUrl,
+        message: data.message || 'Payment proof submitted successfully. Please wait for admin verification.',
+      };
+    }
+
+    return {
+      success: false,
+      alreadySubmitted: Boolean(data?.alreadySubmitted),
+      alreadyPaid: Boolean(data?.alreadyPaid),
+      error: data?.error || 'Failed to upload screenshot. Please try again.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Network error while uploading payment screenshot.',
+    };
+  }
+}
+
+/**
+ * Represents an item in the payment verification queue.
+ */
+export interface PaymentVerificationItem {
+  id: string;
+  orderId: string;
+  amount: number;
+  paymentMethod: string;
+  paymentStatus: string;
+  screenshotPath?: string;
+  screenshotUrl?: string;
+  screenshotUploadedAt?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  verificationNotes?: string;
+  otpSent?: boolean;
+  otpSentAt?: string;
+  createdAt: string;
+  customerName?: string;
+  customerMobile?: string;
+  customerEmail?: string;
+  orderTotal?: number;
+}
+
+/**
+ * Admin: verifies an online UPI payment screenshot as either APPROVED (PAID) or REJECTED.
+ */
+export async function adminVerifyPayment(
+  orderId: string,
+  action: 'APPROVE' | 'REJECT',
+  notes?: string,
+  token?: string
+): Promise<{
+  success: boolean;
+  paymentStatus?: string;
+  otpSent?: boolean;
+  order?: any;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  verificationNotes?: string;
+  error?: string;
+}> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-admin-role': 'admin',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch('/api/admin/payments/verify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        orderId,
+        action,
+        notes,
+      }),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (res.ok && data?.success) {
+      const newStatus = action === 'APPROVE' ? 'PAID' : 'REJECTED';
+      // Synchronize to localStorage
+      try {
+        const raw = localStorage.getItem('freshcart_customer_orders');
+        if (raw) {
+          const orders = JSON.parse(raw);
+          const updated = orders.map((o: any) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  paymentStatus: newStatus,
+                  ...(action === 'APPROVE' ? { screenshotUrl: undefined } : {}),
+                  verifiedAt: data.verifiedAt,
+                  verifiedBy: data.verifiedBy,
+                  verificationNotes: data.verificationNotes,
+                }
+              : o
+          );
+          localStorage.setItem('freshcart_customer_orders', JSON.stringify(updated));
+        }
+      } catch {}
+
+      return {
+        success: true,
+        paymentStatus: data.paymentStatus || newStatus,
+        otpSent: !!data.otpSent,
+        order: data.order,
+        verifiedAt: data.verifiedAt,
+        verifiedBy: data.verifiedBy,
+        verificationNotes: data.verificationNotes,
+      };
+    }
+
+    return {
+      success: false,
+      error: data?.error || 'Failed to verify payment status.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Network error verifying payment.',
+    };
+  }
+}
+
+/**
+ * Admin: fetches queue of UPI payments and verification records.
+ */
+export async function fetchPaymentVerificationQueue(
+  token?: string
+): Promise<{ success: boolean; payments: PaymentVerificationItem[]; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'x-admin-role': 'admin',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch('/api/admin/payments/verification-queue', {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
+      return { success: true, payments: data.payments || [] };
+    }
+    return { success: false, payments: [], error: data?.error || 'Failed to fetch verification queue.' };
+  } catch (err: any) {
+    return { success: false, payments: [], error: err?.message || 'Network error fetching verification queue.' };
+  }
+}
+

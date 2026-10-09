@@ -37,12 +37,25 @@ import {
   Truck,
   CreditCard,
   QrCode,
+  Eye,
+  RefreshCw,
+  FileImage,
+  XCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { verifyOrderOtp, maskMobileNumber } from '../services/otpClientService';
-import { getCustomerPhoneForOrder } from '../services/authService';
+import { getCustomerPhoneForOrder, updateOrderPaymentStatus } from '../services/authService';
 import { formatIndianDisplayNumber, validateIndianMobileNumber } from '../services/registrationOtpService';
-import { fetchUpiSettings, saveUpiSettings, isValidUpiId, buildUpiUri } from '../services/paymentService';
+import {
+  fetchUpiSettings,
+  saveUpiSettings,
+  isValidUpiId,
+  buildUpiUri,
+  adminVerifyPayment,
+  fetchPaymentVerificationQueue,
+  PaymentVerificationItem,
+} from '../services/paymentService';
 
 export interface ParsedHistoryPeriod {
   type: 'all' | 'relative';
@@ -212,7 +225,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStockStatus, setFilterStockStatus] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'logs' | 'coupons' | 'orders' | 'settings' | 'payment-settings' | 'payment-verification'>('inventory');
 
   // Customizable Delivery Charges Rules State
   const [rules, setRules] = useState<DeliveryChargeRule[]>(() => {
@@ -581,6 +594,119 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setUpiSaveError(err?.message || 'Error saving UPI settings.');
     } finally {
       setIsSavingUpi(false);
+    }
+  };
+
+  // UPI Payment Verification State
+  const [verificationQueue, setVerificationQueue] = useState<PaymentVerificationItem[]>([]);
+  const [isLoadingQueue, setIsLoadingQueue] = useState(false);
+  const [queueFilter, setQueueFilter] = useState<'all' | 'pending' | 'paid' | 'rejected'>('pending');
+  const [viewingScreenshotItem, setViewingScreenshotItem] = useState<PaymentVerificationItem | null>(null);
+  const [rejectingItem, setRejectingItem] = useState<PaymentVerificationItem | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
+  const [isVerifyingAction, setIsVerifyingAction] = useState(false);
+  const [queueFeedback, setQueueFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const loadVerificationQueue = React.useCallback(async () => {
+    setIsLoadingQueue(true);
+    try {
+      const res = await fetchPaymentVerificationQueue();
+      if (res.success && res.payments) {
+        setVerificationQueue(res.payments);
+      }
+    } catch (err) {
+      console.error('Failed to load verification queue:', err);
+    } finally {
+      setIsLoadingQueue(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVerificationQueue();
+  }, [loadVerificationQueue]);
+
+  const pendingVerificationCount = verificationQueue.filter(
+    (item) => item.paymentStatus === 'PENDING_VERIFICATION' || (item.paymentStatus as string) === 'PENDING'
+  ).length;
+
+  const handleApprovePayment = async (item: PaymentVerificationItem) => {
+    setIsVerifyingAction(true);
+    setQueueFeedback(null);
+    try {
+      const res = await adminVerifyPayment(item.orderId, 'APPROVE');
+      if (res.success) {
+        setQueueFeedback({
+          type: 'success',
+          message: `Payment for Order #${item.orderId} verified successfully and confirmed as PAID in database. Delivery OTP dispatched to customer.`,
+        });
+        updateOrderPaymentStatus(item.orderId, 'PAID', {
+          verifiedAt: res.verifiedAt || new Date().toISOString(),
+          verifiedBy: res.verifiedBy || 'admin',
+        });
+        if (onUpdateOrderStatus) {
+          onUpdateOrderStatus(item.orderId, 'Picking');
+        }
+        if (viewingScreenshotItem?.orderId === item.orderId) {
+          setViewingScreenshotItem(null);
+        }
+        await loadVerificationQueue();
+      } else {
+        setQueueFeedback({
+          type: 'error',
+          message: res.error || 'Failed to verify payment.',
+        });
+      }
+    } catch (err: any) {
+      setQueueFeedback({
+        type: 'error',
+        message: err?.message || 'Error occurred while verifying payment.',
+      });
+    } finally {
+      setIsVerifyingAction(false);
+    }
+  };
+
+  const handleRejectPayment = async (item: PaymentVerificationItem, reason: string) => {
+    if (!reason.trim()) {
+      setQueueFeedback({
+        type: 'error',
+        message: 'Please provide a rejection reason.',
+      });
+      return;
+    }
+    setIsVerifyingAction(true);
+    setQueueFeedback(null);
+    try {
+      const res = await adminVerifyPayment(item.orderId, 'REJECT', reason.trim());
+      if (res.success) {
+        setQueueFeedback({
+          type: 'success',
+          message: `Payment for Order #${item.orderId} marked as REJECTED. Proof retained for audit. Customer may submit retry proof.`,
+        });
+        updateOrderPaymentStatus(item.orderId, 'REJECTED', {
+          verificationNotes: reason.trim(),
+          verifiedAt: res.verifiedAt || new Date().toISOString(),
+          verifiedBy: res.verifiedBy || 'admin',
+        });
+        setRejectingItem(null);
+        setRejectReasonInput('');
+        if (viewingScreenshotItem?.orderId === item.orderId) {
+          setViewingScreenshotItem(null);
+        }
+        await loadVerificationQueue();
+      } else {
+        setQueueFeedback({
+          type: 'error',
+          message: res.error || 'Failed to reject payment.',
+        });
+      }
+    } catch (err: any) {
+      setQueueFeedback({
+        type: 'error',
+        message: err?.message || 'Error occurred while rejecting payment.',
+      });
+    } finally {
+      setIsVerifyingAction(false);
     }
   };
 
@@ -1000,6 +1126,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <CreditCard className="w-4 h-4" />
             <span>UPI Settings</span>
+          </button>
+          <button
+            type="button"
+            id="admin-tab-payment-verification"
+            onClick={() => {
+              setActiveTab('payment-verification');
+              loadVerificationQueue();
+            }}
+            className={`pb-3 text-[13px] font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'payment-verification'
+                ? 'border-[#006b2c] text-[#006b2c]'
+                : 'border-transparent text-[#64748b] hover:text-[#0b1c30]'
+            }`}
+          >
+            <CheckCircle className="w-4 h-4" />
+            <span>Payment Verification</span>
+            {pendingVerificationCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white animate-pulse">
+                {pendingVerificationCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -2055,8 +2202,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </button>
 
-                          {/* Small "OTP" button to open separate OTP Verification page */}
-                          {order.status === 'Picking' && (
+                          {/* Small "OTP" button to open separate OTP Verification page (Excluded for COD; only for PAID online orders) */}
+                          {order.status === 'Picking' &&
+                            !order.paymentMethod?.toLowerCase().includes('cash') &&
+                            order.paymentMethod !== 'COD' &&
+                            (order.paymentStatus === 'PAID' || order.paymentStatus === 'Paid') && (
                             <button
                               type="button"
                               id={`order-otp-btn-${order.id}`}
@@ -2882,6 +3032,341 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Tab 7: UPI Payment Verification */}
+        {activeTab === 'payment-verification' && (
+          <div className="space-y-6">
+            {/* Header & Stats Card */}
+            <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl p-5 sm:p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                <div>
+                  <h3 className="text-[18px] font-bold text-white font-display flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-[#10b981]" />
+                    <span>Payment Verification</span>
+                  </h3>
+                  <p className="text-[12px] text-[#94a3b8] mt-0.5">
+                    Review and verify customer UPI payment screenshots. Verified orders are confirmed in MySQL, triggering delivery OTP dispatch.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="admin-refresh-verification-queue-btn"
+                  onClick={loadVerificationQueue}
+                  disabled={isLoadingQueue}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/15 text-white border border-white/15 flex items-center gap-2 cursor-pointer transition-colors shrink-0 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingQueue ? 'animate-spin text-emerald-400' : ''}`} />
+                  <span>Refresh Queue</span>
+                </button>
+              </div>
+
+              {/* Feedback Banner */}
+              {queueFeedback && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-3 animate-fadeIn backdrop-blur-md ${
+                    queueFeedback.type === 'success'
+                      ? 'bg-emerald-950/60 text-emerald-200 border border-emerald-500/30'
+                      : 'bg-rose-950/60 text-rose-200 border border-rose-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {queueFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span>{queueFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQueueFeedback(null)}
+                    className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Metrics / Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {(
+                  [
+                    { key: 'pending' as const, label: 'Pending Review', count: pendingVerificationCount, highlight: true },
+                    { key: 'all' as const, label: 'All Orders', count: verificationQueue.length, highlight: false },
+                    {
+                      key: 'paid' as const,
+                      label: 'Verified & Paid',
+                      count: verificationQueue.filter((i) => i.paymentStatus === 'PAID').length,
+                      highlight: false,
+                    },
+                    {
+                      key: 'rejected' as const,
+                      label: 'Rejected',
+                      count: verificationQueue.filter((i) => i.paymentStatus === 'REJECTED').length,
+                      highlight: false,
+                    },
+                  ]
+                ).map((filter) => {
+                  const isActive = queueFilter === filter.key;
+                  return (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setQueueFilter(filter.key)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                        isActive
+                          ? 'bg-[#006b2c] text-white shadow-xs'
+                          : 'bg-black/30 hover:bg-black/50 text-slate-300 border border-white/10'
+                      }`}
+                    >
+                      <span>{filter.label}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                          isActive
+                            ? 'bg-black/20 text-white'
+                            : filter.highlight && filter.count > 0
+                            ? 'bg-amber-500 text-white font-black'
+                            : 'bg-white/10 text-slate-300'
+                        }`}
+                      >
+                        {filter.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Queue Table / List */}
+            <div className="bg-black/35 backdrop-blur-xl rounded-xl border border-white/12 shadow-2xl overflow-hidden">
+              {(() => {
+                const filtered = verificationQueue.filter((item) => {
+                  if (queueFilter === 'pending') {
+                    return item.paymentStatus === 'PENDING_VERIFICATION' || (item.paymentStatus as string) === 'PENDING';
+                  }
+                  if (queueFilter === 'paid') return item.paymentStatus === 'PAID';
+                  if (queueFilter === 'rejected') return item.paymentStatus === 'REJECTED';
+                  return true;
+                });
+
+                if (isLoadingQueue && verificationQueue.length === 0) {
+                  return (
+                    <div className="py-16 text-center text-slate-400 space-y-2">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-400" />
+                      <p className="text-xs">Loading payment verification queue...</p>
+                    </div>
+                  );
+                }
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-16 text-center text-slate-400 space-y-3">
+                      <CreditCard className="w-10 h-10 mx-auto text-slate-600" />
+                      <p className="text-sm font-semibold text-slate-300">
+                        {queueFilter === 'pending'
+                          ? 'No pending payments awaiting verification'
+                          : 'No orders found matching the selected filter'}
+                      </p>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Online UPI orders with uploaded customer payment screenshots will appear here for review and verification.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-white/10 bg-black/40 text-slate-400 font-semibold tracking-wider uppercase text-[11px]">
+                          <th className="py-3.5 px-4">Order ID</th>
+                          <th className="py-3.5 px-4">Customer Details</th>
+                          <th className="py-3.5 px-4">Amount</th>
+                          <th className="py-3.5 px-4">Payment Method</th>
+                          <th className="py-3.5 px-4">Status</th>
+                          <th className="py-3.5 px-4">Payment Proof</th>
+                          <th className="py-3.5 px-4">Uploaded / Audit</th>
+                          <th className="py-3.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-slate-200">
+                        {filtered.map((item) => {
+                          const isPending =
+                            item.paymentStatus === 'PENDING_VERIFICATION' ||
+                            (item.paymentStatus as string) === 'PENDING';
+                          const isPaid = item.paymentStatus === 'PAID';
+                          const isRejected = item.paymentStatus === 'REJECTED';
+                          const hasProof = !!(item.screenshotUrl || item.screenshotPath);
+                          const adminImgSrc = `${item.screenshotUrl || `/api/payments/screenshot/${item.orderId}`}?admin=true`;
+
+                          return (
+                            <tr key={item.id || item.orderId} className="hover:bg-white/[0.03] transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-white whitespace-nowrap">
+                                #{item.orderId}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="font-semibold text-white">{item.customerName || 'Customer'}</div>
+                                <div className="text-[11px] text-slate-400">
+                                  {item.customerMobile || item.customerEmail || 'N/A'}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 font-bold text-emerald-400 text-sm whitespace-nowrap">
+                                {formatINR(item.amount || item.orderTotal || 0)}
+                              </td>
+                              <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[11px]">
+                                  <CreditCard className="w-3 h-3 text-emerald-400" />
+                                  <span>{item.paymentMethod || 'UPI QR'}</span>
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {isPending ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                    <span>Pending Verification</span>
+                                  </span>
+                                ) : isPaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span>PAID</span>
+                                  </span>
+                                ) : isRejected ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                    <X className="w-3 h-3 text-rose-400" />
+                                    <span>REJECTED</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                                    <span>{item.paymentStatus}</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                {hasProof ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingScreenshotItem(item)}
+                                      title="Open screenshot preview"
+                                      className="relative w-10 h-10 rounded-lg overflow-hidden border border-white/20 hover:border-emerald-400 transition-colors cursor-pointer group shrink-0 bg-black/40"
+                                    >
+                                      <img
+                                        src={adminImgSrc}
+                                        alt="Proof Thumbnail"
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                        <Eye className="w-4 h-4 text-white" />
+                                      </div>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingScreenshotItem(item)}
+                                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>View Proof</span>
+                                    </button>
+                                  </div>
+                                ) : isPaid ? (
+                                  <span className="text-[11px] text-slate-400 italic flex items-center gap-1">
+                                    <Lock className="w-3 h-3 text-slate-500" />
+                                    <span>Purged upon verification</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-500 italic">
+                                    Awaiting upload
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-slate-400 text-[11px]">
+                                {item.screenshotUploadedAt && (
+                                  <div>
+                                    <span className="text-slate-500">Uploaded: </span>
+                                    <span>{formatOrderDateTime(item.screenshotUploadedAt)}</span>
+                                  </div>
+                                )}
+                                {item.verifiedAt && (
+                                  <div>
+                                    <span className="text-slate-500">Verified: </span>
+                                    <span>
+                                      {formatOrderDateTime(item.verifiedAt)} by {item.verifiedBy || 'Admin'}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.verificationNotes && (
+                                  <div className="text-rose-300 font-semibold truncate max-w-[180px]" title={item.verificationNotes}>
+                                    Note: {item.verificationNotes}
+                                  </div>
+                                )}
+                                {item.otpSent && (
+                                  <div className="text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                                    <ShieldCheck className="w-3 h-3" />
+                                    <span>OTP Dispatched</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-2">
+                                  {hasProof && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingScreenshotItem(item)}
+                                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white border border-white/15 flex items-center gap-1.5 cursor-pointer transition-colors"
+                                      title="Open screenshot proof"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span>View</span>
+                                    </button>
+                                  )}
+                                  {!isPaid && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleApprovePayment(item)}
+                                        disabled={isVerifyingAction}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#006b2c] hover:bg-[#00873a] text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                                        title="Confirm payment received and mark as PAID"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Approve (Mark Paid)</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRejectingItem(item);
+                                          setRejectReasonInput('');
+                                        }}
+                                        disabled={isVerifyingAction}
+                                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-500/40 flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                                        title="Reject payment proof and request re-upload"
+                                      >
+                                        <X className="w-3.5 h-3.5 text-rose-400" />
+                                        <span>Reject</span>
+                                      </button>
+                                    </>
+                                  )}
+                                  {isPaid && (
+                                    <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-1">
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Verified</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add New Product Modal */}
@@ -3130,6 +3615,200 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         }}
       />
 
+      {/* View Screenshot Modal */}
+      {viewingScreenshotItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#0b1c30] rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-white/15 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-black/40">
+              <div>
+                <h3 className="text-[17px] font-bold text-white font-display flex items-center gap-2">
+                  <FileImage className="w-5 h-5 text-emerald-400" />
+                  <span>Payment Screenshot Proof</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Order #{viewingScreenshotItem.orderId} • {formatINR(viewingScreenshotItem.amount || viewingScreenshotItem.orderTotal || 0)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingScreenshotItem(null)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Customer summary */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-white/5 rounded-xl border border-white/10 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Customer</span>
+                  <span className="font-bold text-white">{viewingScreenshotItem.customerName || 'Customer'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Mobile</span>
+                  <span className="font-semibold text-slate-200">{viewingScreenshotItem.customerMobile || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Status</span>
+                  <span className="font-bold text-amber-400">{viewingScreenshotItem.paymentStatus}</span>
+                </div>
+              </div>
+
+              {/* High-res Image preview */}
+              <div className="p-2 bg-black/60 rounded-xl border border-white/10 flex items-center justify-center min-h-[260px]">
+                <img
+                  src={`${viewingScreenshotItem.screenshotUrl || `/api/payments/screenshot/${viewingScreenshotItem.orderId}`}?admin=true`}
+                  alt={`Payment Screenshot for Order #${viewingScreenshotItem.orderId}`}
+                  className="max-h-[55vh] max-w-full rounded-lg object-contain shadow-lg"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
+                    if (parent && !parent.querySelector('.img-error-placeholder')) {
+                      const div = document.createElement('div');
+                      div.className = 'img-error-placeholder py-12 text-center text-slate-400 text-xs';
+                      div.innerText = 'Screenshot could not be loaded or has been purged.';
+                      parent.appendChild(div);
+                    }
+                  }}
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-400 text-center">
+                Admins can view this screenshot multiple times while retained. Closing does not delete or alter the file.
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 bg-black/40 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setViewingScreenshotItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/10 hover:bg-white/15 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-2">
+                {viewingScreenshotItem.paymentStatus !== 'PAID' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRejectingItem(viewingScreenshotItem);
+                        setRejectReasonInput('');
+                      }}
+                      disabled={isVerifyingAction}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/40 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      Reject Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApprovePayment(viewingScreenshotItem)}
+                      disabled={isVerifyingAction}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#006b2c] hover:bg-[#00873a] shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Approve & Mark as Paid</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Payment Proof Modal */}
+      {rejectingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#0b1c30] rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-white/15 p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-950/60 border border-rose-500/40 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-white font-display">
+                  Reject Payment Proof
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Order #{rejectingItem.orderId} • {formatINR(rejectingItem.amount || rejectingItem.orderTotal || 0)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              The screenshot will be retained for admin review. The customer will be notified and allowed to submit a new screenshot proof.
+            </p>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-300">
+                Reason for Rejection <span className="text-rose-400">*</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[
+                  'Amount mismatch',
+                  'Invalid UTR / Transaction ID',
+                  'Blurry / unreadable image',
+                  'Incorrect merchant UPI handle',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setRejectReasonInput(preset)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white/5 hover:bg-white/15 text-slate-300 border border-white/10 cursor-pointer transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={rejectReasonInput}
+                onChange={(e) => setRejectReasonInput(e.target.value)}
+                placeholder="Explain why this proof is being rejected..."
+                rows={3}
+                className="w-full px-3 py-2 rounded-xl text-xs bg-black/40 border border-white/15 text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-400 resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectingItem(null);
+                  setRejectReasonInput('');
+                }}
+                disabled={isVerifyingAction}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRejectPayment(rejectingItem, rejectReasonInput)}
+                disabled={isVerifyingAction || !rejectReasonInput.trim()}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isVerifyingAction ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="w-3.5 h-3.5" />
+                    <span>Confirm Rejection</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

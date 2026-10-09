@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { CartItem, Product, CustomerAddress } from '../types';
+import { CartItem, Product, CustomerAddress, CustomerOrder } from '../types';
 import { formatINR } from '../utils/currency';
 import {
   User,
@@ -27,8 +27,12 @@ import {
   Calendar,
   Zap,
   AlertTriangle,
+  Upload,
+  Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { getCustomerOrderOtp, resendOrderOtp } from '../services/otpClientService';
+import { uploadPaymentScreenshot } from '../services/paymentService';
 
 interface CustomerDashboardProps {
   cart: CartItem[];
@@ -98,12 +102,111 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   >({});
   const [resendingOtp, setResendingOtp] = useState<Record<string, boolean>>({});
 
-  // Fetch active OTP from backend for Picking orders
+  // UPI Payment Screenshot Upload State for Customer Orders
+  const [uploadingScreenshot, setUploadingScreenshot] = useState<Record<string, boolean>>({});
+  const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  const [uploadSuccess, setUploadSuccess] = useState<Record<string, string | null>>({});
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
+  const [selectedPreviews, setSelectedPreviews] = useState<Record<string, string | null>>({});
+
+  const handleFileSelect = (orderId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type: accept JPG, JPEG, PNG
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    const validExts = ['.jpg', '.jpeg', '.png'];
+
+    if (!validTypes.includes(file.type.toLowerCase()) && !validExts.includes(ext)) {
+      setUploadError((prev) => ({
+        ...prev,
+        [orderId]: 'Please select a valid JPG, JPEG, or PNG image file.',
+      }));
+      setUploadSuccess((prev) => ({ ...prev, [orderId]: null }));
+      e.target.value = '';
+      return;
+    }
+
+    // Check file size: max 10 MB (10 * 1024 * 1024 bytes)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setUploadError((prev) => ({
+        ...prev,
+        [orderId]: 'File size exceeds the 10 MB limit. Please select a smaller screenshot.',
+      }));
+      setUploadSuccess((prev) => ({ ...prev, [orderId]: null }));
+      e.target.value = '';
+      return;
+    }
+
+    // Valid file
+    setUploadError((prev) => ({ ...prev, [orderId]: null }));
+    setUploadSuccess((prev) => ({ ...prev, [orderId]: null }));
+    setSelectedFiles((prev) => ({ ...prev, [orderId]: file }));
+    const previewUrl = URL.createObjectURL(file);
+    setSelectedPreviews((prev) => ({ ...prev, [orderId]: previewUrl }));
+  };
+
+  const handleClearSelectedFile = (orderId: string) => {
+    setSelectedFiles((prev) => ({ ...prev, [orderId]: null }));
+    if (selectedPreviews[orderId]) {
+      URL.revokeObjectURL(selectedPreviews[orderId]!);
+    }
+    setSelectedPreviews((prev) => ({ ...prev, [orderId]: null }));
+    setUploadError((prev) => ({ ...prev, [orderId]: null }));
+  };
+
+  const handleSubmitScreenshot = async (order: CustomerOrder) => {
+    const file = selectedFiles[order.id];
+    if (!file || uploadingScreenshot[order.id]) return;
+
+    setUploadingScreenshot((prev) => ({ ...prev, [order.id]: true }));
+    setUploadError((prev) => ({ ...prev, [order.id]: null }));
+    setUploadSuccess((prev) => ({ ...prev, [order.id]: null }));
+
+    try {
+      const res = await uploadPaymentScreenshot(order.id, file, currentUser?.token);
+      if (res.success) {
+        setUploadSuccess((prev) => ({
+          ...prev,
+          [order.id]: 'Payment proof submitted successfully. Please wait for admin verification.',
+        }));
+        setSelectedFiles((prev) => ({ ...prev, [order.id]: null }));
+        setSelectedPreviews((prev) => ({ ...prev, [order.id]: null }));
+        refreshOrders();
+      } else {
+        setUploadError((prev) => ({
+          ...prev,
+          [order.id]: res.error || 'Failed to upload screenshot. Please try again.',
+        }));
+        if (res.alreadySubmitted || res.alreadyPaid) {
+          refreshOrders();
+        }
+      }
+    } catch {
+      setUploadError((prev) => ({
+        ...prev,
+        [order.id]: 'Network error while uploading screenshot. Please try again.',
+      }));
+    } finally {
+      setUploadingScreenshot((prev) => ({ ...prev, [order.id]: false }));
+    }
+  };
+
+  // Fetch active OTP from backend for Picking orders (only for verified PAID online orders, NOT for COD)
   useEffect(() => {
     if (!currentUser?.id) return;
 
     activeOrders.forEach((order) => {
-      if (order.status === 'Picking' && !customerOrderOtps[order.id]) {
+      const isCod =
+        order.paymentMethod?.toLowerCase().includes('cash') ||
+        order.paymentMethod === 'COD' ||
+        order.paymentMethod === 'Cash on Delivery';
+      const isPaid = order.paymentStatus?.toUpperCase() === 'PAID';
+
+      // COD must NEVER generate/fetch OTP. Online UPI orders only fetch OTP once admin confirms PAID!
+      if (!isCod && isPaid && order.status === 'Picking' && !customerOrderOtps[order.id]) {
         // Mark loading state
         setCustomerOrderOtps((prev) => ({
           ...prev,
@@ -535,13 +638,37 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     {/* Order Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#e5eeff]">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[16px] font-bold text-[#0b1c30] font-display">
                             Order {order.id.startsWith('#') ? order.id : `#${order.id}`}
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold animate-pulse">
                             ● {getStatusLabel(order.status)}
                           </span>
+                          {order.paymentMethod?.toLowerCase().includes('upi') && (
+                            <span
+                              id={`order-payment-status-badge-${order.id.replace('#', '')}`}
+                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                order.paymentStatus?.toUpperCase() === 'PAID'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                  : order.paymentStatus === 'PENDING_VERIFICATION'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-300'
+                                  : order.paymentStatus === 'REJECTED'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-300'
+                                  : 'bg-blue-50 text-blue-700 border-blue-300'
+                              }`}
+                            >
+                              Payment: {
+                                order.paymentStatus === 'PENDING_VERIFICATION'
+                                  ? 'Pending Verification'
+                                  : order.paymentStatus === 'REJECTED'
+                                  ? 'Rejected'
+                                  : order.paymentStatus === 'PAID'
+                                  ? 'Paid'
+                                  : (order.paymentStatus || 'Payment Attempted')
+                              }
+                            </span>
+                          )}
                         </div>
                         <div className="text-[12px] text-[#565e74] mt-0.5 flex items-center gap-3">
                           <span>Placed: {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -560,8 +687,235 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Order Handover OTP Section for Picking Status */}
-                    {order.status === 'Picking' && (
+                    {/* Upload Payment Screenshot section for online UPI orders when proof is required */}
+                    {(() => {
+                      const isUpi =
+                        order.paymentMethod === 'UPI' ||
+                        order.paymentMethod?.toLowerCase().includes('upi');
+                      const isPaid = order.paymentStatus?.toUpperCase() === 'PAID';
+
+                      // Show upload section ONLY for relevant online UPI orders when proof is required (i.e. NOT paid)
+                      if (!isUpi || isPaid) return null;
+
+                      const isPendingVerification = order.paymentStatus === 'PENDING_VERIFICATION';
+                      const isRejected = order.paymentStatus === 'REJECTED';
+                      const isUploading = !!uploadingScreenshot[order.id];
+                      const fileSelected = selectedFiles[order.id];
+                      const previewUrl = selectedPreviews[order.id];
+                      const errorMsg = uploadError[order.id];
+                      const successMsg = uploadSuccess[order.id];
+
+                      return (
+                        <div
+                          id={`upload-payment-screenshot-section-${order.id.replace('#', '')}`}
+                          className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 border border-slate-200/90 shadow-2xs space-y-3.5 transition-all"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-600/10 text-[#006b2c] flex items-center justify-center">
+                                <Upload className="w-4 h-4 text-[#006b2c]" />
+                              </div>
+                              <div>
+                                <h4 className="text-[13px] font-bold text-[#0b1c30]">
+                                  Upload Payment Screenshot
+                                </h4>
+                                <p className="text-[11px] text-[#565e74]">
+                                  UPI payment verification proof for order {order.id.startsWith('#') ? order.id : `#${order.id}`}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div>
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                  isPendingVerification
+                                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                    : isRejected
+                                    ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    isPendingVerification
+                                      ? 'bg-amber-500'
+                                      : isRejected
+                                      ? 'bg-rose-500'
+                                      : 'bg-emerald-500'
+                                  }`}
+                                />
+                                {isPendingVerification
+                                  ? 'Pending Verification'
+                                  : isRejected
+                                  ? 'Verification Rejected — Retry Available'
+                                  : 'Proof Required'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* If status is REJECTED: Show warning & reason, and encourage retry */}
+                          {isRejected && (
+                            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[12px] flex items-start gap-2.5">
+                              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                              <div className="space-y-1">
+                                <p className="font-bold text-rose-900">Payment Proof Rejected by Admin</p>
+                                <p className="text-rose-700">
+                                  {order.verificationNotes || 'Your previous screenshot could not be verified. Please select and upload a valid screenshot of your successful UPI payment to retry verification.'}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* If status is PENDING_VERIFICATION: Display uploaded screenshot proof preview and lock upload controls */}
+                          {isPendingVerification && (
+                            <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-[12px] space-y-3">
+                              <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Proof Uploaded — Awaiting Admin Verification</span>
+                              </div>
+                              <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>Payment proof submitted successfully. Please wait for admin verification.</span>
+                              </div>
+                              <p className="text-amber-800/90 text-[11px]">
+                                Your screenshot is under review by our admin team. Only one upload is permitted per order. Once confirmed in MySQL, your Order Handover OTP will be issued automatically.
+                              </p>
+                              {order.screenshotUrl && (
+                                <div className="pt-1 flex flex-col items-center">
+                                  <div className="text-[11px] font-semibold text-slate-600 mb-1.5 self-start flex items-center gap-1.5">
+                                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Current Uploaded Proof:</span>
+                                  </div>
+                                  <img
+                                    src={`${order.screenshotUrl}${currentUser?.token ? `?token=${encodeURIComponent(currentUser.token)}` : ''}`}
+                                    alt="Current Uploaded Payment Proof"
+                                    className="max-h-48 max-w-full rounded-xl border border-slate-300 shadow-xs object-contain bg-white p-1"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Screenshot Selection and Upload Form: Shown ONLY when NOT pending verification (e.g. if rejected or awaiting first upload) */}
+                          {!isPendingVerification && (
+                            <div className="space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <label
+                                    htmlFor={`screenshot-input-${order.id.replace('#', '')}`}
+                                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/30 text-slate-700 text-[12px] font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    <ImageIcon className="w-4 h-4 text-[#006b2c]" />
+                                    <span>
+                                      {fileSelected
+                                        ? 'Change File'
+                                        : isRejected
+                                        ? 'Select Replacement Screenshot'
+                                        : 'Select Screenshot'}
+                                    </span>
+                                  </label>
+                                  <input
+                                    type="file"
+                                    id={`screenshot-input-${order.id.replace('#', '')}`}
+                                    accept="image/jpeg,image/png,image/jpg"
+                                    onChange={(e) => handleFileSelect(order.id, e)}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                  />
+                                  <span className="text-[11px] text-[#565e74]">
+                                    JPG, JPEG, or PNG up to 10 MB
+                                  </span>
+                                </div>
+
+                                {fileSelected && (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearSelectedFile(order.id)}
+                                      disabled={isUploading}
+                                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      id={`upload-screenshot-btn-${order.id.replace('#', '')}`}
+                                      onClick={() => handleSubmitScreenshot(order)}
+                                      disabled={isUploading}
+                                      className="px-4 py-1.5 rounded-xl bg-[#006b2c] hover:bg-[#005221] text-white text-[12px] font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                                    >
+                                      {isUploading ? (
+                                        <>
+                                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                          <span>Uploading...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Upload className="w-3.5 h-3.5" />
+                                          <span>
+                                            {isRejected ? 'Upload Replacement Proof' : 'Upload Screenshot'}
+                                          </span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Selected File Details & Preview */}
+                              {fileSelected && previewUrl && (
+                                <div className="p-3 rounded-xl bg-white border border-slate-200 flex flex-col sm:flex-row items-center gap-3">
+                                  <img
+                                    src={previewUrl}
+                                    alt="Selected Preview"
+                                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover border border-slate-200 shadow-2xs shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0 text-center sm:text-left">
+                                    <div className="text-[12px] font-bold text-slate-800 truncate">
+                                      {fileSelected.name}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-0.5">
+                                      Size: {(fileSelected.size / (1024 * 1024)).toFixed(2)} MB · {fileSelected.type || 'image'}
+                                    </div>
+                                    <div className="text-[11px] text-emerald-700 font-semibold mt-1">
+                                      Ready to upload. Click &ldquo;{isRejected ? 'Upload Replacement Proof' : 'Upload Screenshot'}&rdquo; to submit.
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Feedback messages */}
+                          {errorMsg && (
+                            <div
+                              id={`upload-error-${order.id.replace('#', '')}`}
+                              className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[12px] flex items-center gap-2 animate-in fade-in"
+                            >
+                              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                              <span className="font-semibold">{errorMsg}</span>
+                            </div>
+                          )}
+
+                          {successMsg && (
+                            <div
+                              id={`upload-success-${order.id.replace('#', '')}`}
+                              className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[12px] flex items-center gap-2 animate-in fade-in"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="font-semibold">{successMsg}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Order Handover OTP Section for Picking Status (Only for confirmed PAID online orders, NOT for COD) */}
+                    {order.status === 'Picking' &&
+                      !order.paymentMethod?.toLowerCase().includes('cash') &&
+                      order.paymentMethod !== 'COD' &&
+                      order.paymentMethod !== 'Cash on Delivery' &&
+                      order.paymentStatus?.toUpperCase() === 'PAID' && (
                       <div
                         id={`order-handover-otp-${order.id.replace('#', '')}`}
                         className="p-4 sm:p-5 rounded-2xl bg-[#f0fdf4] border-2 border-[#86efac] text-center space-y-2.5 shadow-xs animate-in fade-in duration-200"

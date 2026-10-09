@@ -13,6 +13,7 @@ import {
   requestPasswordReset,
   initializeAuthStore,
   RegisterPayload,
+  syncBackendOrders,
 } from '../services/authService';
 
 interface AuthContextType {
@@ -41,7 +42,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshOrders = useCallback(() => {
     const customerOrders = getCustomerOrders(currentUser?.id);
     setOrders(customerOrders);
-  }, [currentUser?.id]);
+
+    if (currentUser?.id || currentUser?.token) {
+      fetch('/api/orders', {
+        headers: {
+          ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && Array.isArray(data.orders)) {
+            syncBackendOrders(data.orders);
+            const synced = getCustomerOrders(currentUser?.id);
+            setOrders(synced);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser?.id, currentUser?.token]);
 
   useEffect(() => {
     const init = async () => {
@@ -51,6 +69,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (user) {
           setCurrentUser(user);
           setOrders(getCustomerOrders(user.id));
+          fetch('/api/orders', {
+            headers: user.token ? { Authorization: `Bearer ${user.token}` } : {},
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data?.success && Array.isArray(data.orders)) {
+                syncBackendOrders(data.orders);
+                setOrders(getCustomerOrders(user.id));
+              }
+            })
+            .catch(() => {});
         }
       } catch (err) {
         console.error('Error during Auth initialization:', err);

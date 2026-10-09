@@ -67,6 +67,10 @@ export interface Order {
   handoverReleased?: boolean;
   paymentMethod?: string;
   paymentStatus?: string;
+  screenshotUrl?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  verificationNotes?: string;
 }
 
 export interface CustomerAddress {

@@ -10,7 +10,9 @@ import {
   buildUpiUri,
   initiateUpiPayment,
   isValidUpiId,
+  uploadPaymentScreenshot,
 } from '../services/paymentService';
+import { updateOrderPaymentStatus } from '../services/authService';
 import {
   CheckCircle,
   Banknote,
@@ -26,6 +28,11 @@ import {
   Smartphone,
   AlertCircle,
   ExternalLink,
+  Upload,
+  X,
+  Check,
+  AlertTriangle,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Footer } from './Footer';
 
@@ -97,6 +104,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [paymentAttemptCreated, setPaymentAttemptCreated] = useState(false);
   const [upiActionTriggered, setUpiActionTriggered] = useState(false);
   const [upiError, setUpiError] = useState<string | null>(null);
+
+  // 4. UPI Payment Screenshot Upload State
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [isUploadingScreenshot, setIsUploadingScreenshot] = useState<boolean>(false);
+  const [screenshotUploadStatus, setScreenshotUploadStatus] = useState<
+    'idle' | 'selected' | 'uploading' | 'success' | 'error'
+  >('idle');
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const [screenshotSuccess, setScreenshotSuccess] = useState<string | null>(null);
+  const [uploadedScreenshotUrl, setUploadedScreenshotUrl] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const successFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (currentUser?.address) {
@@ -288,6 +308,145 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   };
 
+  // Handlers for payment screenshot proof
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setScreenshotError(null);
+    setScreenshotSuccess(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 1. Format check: JPG, JPEG, PNG
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const validExts = ['.jpg', '.jpeg', '.png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+
+    if (!validTypes.includes(file.type.toLowerCase()) && !validExts.includes(ext)) {
+      setScreenshotError('Invalid file format. Please select a JPG, JPEG, or PNG image.');
+      setScreenshotUploadStatus('error');
+      return;
+    }
+
+    // 2. Size check: 10 MB limit (10 * 1024 * 1024 bytes)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setScreenshotError('File size exceeds 10 MB limit. Please select a smaller screenshot.');
+      setScreenshotUploadStatus('error');
+      return;
+    }
+
+    setScreenshotFile(file);
+    setScreenshotUploadStatus('selected');
+
+    // Generate local preview
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScreenshotPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearSelectedScreenshot = () => {
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setScreenshotError(null);
+    setScreenshotSuccess(null);
+    setScreenshotUploadStatus('idle');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (successFileInputRef.current) {
+      successFileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadScreenshot = async () => {
+    if (!screenshotFile) {
+      setScreenshotError('Please select a payment screenshot first.');
+      return;
+    }
+
+    setIsUploadingScreenshot(true);
+    setScreenshotUploadStatus('uploading');
+    setScreenshotError(null);
+    setScreenshotSuccess(null);
+
+    try {
+      // Ensure payment attempt and draft order exist in database
+      if (rawUpiId) {
+        await initiateUpiPayment({
+          orderId: rawOrderId,
+          customerId: currentUser?.id || 'guest_user',
+          amount: total,
+          upiId: rawUpiId,
+          merchantName: effectiveMerchantName,
+          transactionRef: transactionRef,
+        });
+      }
+
+      const customerPhone = currentUser?.phone?.trim() || '';
+      const draftOrder: CustomerOrder = {
+        id: formattedOrderId,
+        customerId: currentUser?.id || 'guest_user',
+        customerName: currentUser?.name || 'Guest Customer',
+        customerEmail: currentUser?.email,
+        customerPhone: customerPhone || undefined,
+        deliveryAddress: address,
+        deliveryTimeSlot: 'Express Cold-Chain Delivery, 24–30 Minutes',
+        estimatedDeliveryTime: 'Express Cold-Chain Delivery',
+        items: [...items],
+        subtotal,
+        discount,
+        total,
+        couponCode: appliedCoupon || undefined,
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+        paymentMethod: 'UPI',
+        paymentStatus: 'PENDING_VERIFICATION',
+      };
+
+      await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {}),
+        },
+        body: JSON.stringify(draftOrder),
+      }).catch(() => {});
+
+      // Upload screenshot to backend
+      const res = await uploadPaymentScreenshot(
+        rawOrderId,
+        screenshotFile,
+        currentUser?.token
+      );
+
+      if (res.success && res.screenshotUrl) {
+        setUploadedScreenshotUrl(res.screenshotUrl);
+        setScreenshotUploadStatus('success');
+        setScreenshotSuccess('Payment proof submitted successfully. Please wait for admin verification.');
+        updateOrderPaymentStatus(formattedOrderId, 'PENDING_VERIFICATION', {
+          screenshotUrl: res.screenshotUrl,
+        });
+        updateOrderPaymentStatus(rawOrderId, 'PENDING_VERIFICATION', {
+          screenshotUrl: res.screenshotUrl,
+        });
+      } else {
+        setScreenshotUploadStatus('error');
+        setScreenshotError(res.error || 'Failed to upload screenshot. Please try again.');
+        if (res.alreadySubmitted) {
+          setUploadedScreenshotUrl(`/api/payments/screenshot/${encodeURIComponent(rawOrderId)}`);
+          setScreenshotUploadStatus('success');
+          setScreenshotSuccess('Payment proof submitted successfully. Please wait for admin verification.');
+        }
+      }
+    } catch (err: any) {
+      setScreenshotUploadStatus('error');
+      setScreenshotError(err.message || 'Network error while uploading screenshot. Please try again.');
+    } finally {
+      setIsUploadingScreenshot(false);
+    }
+  };
+
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
@@ -304,7 +463,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       const customerPhone = currentUser?.phone?.trim() || '';
       const isUpiOrder = paymentMethod === 'upi';
       const orderPaymentMethod = isUpiOrder ? 'UPI' : 'Cash on Delivery';
-      const orderPaymentStatus = isUpiOrder ? 'PAYMENT_ATTEMPTED' : 'PENDING';
+      // If proof was uploaded successfully, set PENDING_VERIFICATION; else PAYMENT_ATTEMPTED
+      const orderPaymentStatus = isUpiOrder
+        ? (uploadedScreenshotUrl ? 'PENDING_VERIFICATION' : 'PAYMENT_ATTEMPTED')
+        : 'Pending';
 
       // Save order to customer account history
       const newCustomerOrder: CustomerOrder = {
@@ -325,6 +487,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         createdAt: new Date().toISOString(),
         paymentMethod: orderPaymentMethod,
         paymentStatus: orderPaymentStatus,
+        screenshotUrl: uploadedScreenshotUrl || undefined,
       };
       addOrder(newCustomerOrder);
 
@@ -384,13 +547,132 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <span>Payment Details</span>
               </div>
               {paymentMethod === 'upi' ? (
-                <div className="pl-6 space-y-1">
-                  <p className="text-amber-400 font-semibold">
-                    UPI Payment (Payment Attempted — Reference: {transactionRef})
-                  </p>
-                  <p className="text-slate-400">
-                    Complete the payment in your UPI app. Payment confirmation is not available automatically.
-                  </p>
+                <div className="pl-6 space-y-3">
+                  {uploadedScreenshotUrl ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <p className="text-amber-400 font-semibold text-xs sm:text-sm">
+                          UPI Payment (Status: PENDING_VERIFICATION)
+                        </p>
+                        <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                          Pending Admin Approval
+                        </span>
+                      </div>
+                      <div className="p-3 bg-emerald-950/50 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>Payment proof submitted successfully. Please wait for admin verification.</span>
+                      </div>
+                      <p className="text-slate-400 text-xs">
+                        An administrator will verify the transaction before confirming the order as Paid. Delivery OTP will be dispatched upon admin approval.
+                      </p>
+                      {screenshotPreview && (
+                        <div className="flex items-center gap-2.5 p-2 bg-black/40 rounded-lg border border-white/10 mt-2">
+                          <img
+                            src={screenshotPreview}
+                            alt="Uploaded Proof"
+                            className="w-12 h-12 object-cover rounded border border-white/20 shrink-0"
+                          />
+                          <div className="text-[11px] text-slate-300">
+                            <p className="font-semibold text-emerald-400">✓ Proof Uploaded (Only One Upload Per Order)</p>
+                            <p className="text-slate-400">Ref: {transactionRef}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <p className="text-amber-400 font-semibold text-xs sm:text-sm">
+                          UPI Payment (Payment Attempted — Reference: {transactionRef})
+                        </p>
+                        <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                          Proof Required
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-xs">
+                        Please upload your UPI payment screenshot to initiate admin verification.
+                      </p>
+
+                      {/* Embedded upload widget on order received screen */}
+                      <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-3">
+                        <input
+                          ref={successFileInputRef}
+                          type="file"
+                          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                          className="hidden"
+                          onChange={handleFileSelect}
+                        />
+
+                        {screenshotFile ? (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2 p-2 bg-black/40 rounded-lg border border-white/10">
+                              {screenshotPreview && (
+                                <img
+                                  src={screenshotPreview}
+                                  alt="Selected proof"
+                                  className="w-12 h-12 object-cover rounded border border-white/20 shrink-0"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0 text-xs">
+                                <p className="font-semibold text-white truncate">{screenshotFile.name}</p>
+                                <p className="text-[11px] text-slate-400">
+                                  {(screenshotFile.size / (1024 * 1024)).toFixed(2)} MB
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleClearSelectedScreenshot}
+                                className="p-1 text-slate-400 hover:text-rose-400"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isUploadingScreenshot}
+                              onClick={handleUploadScreenshot}
+                              className="w-full py-2 px-3 rounded-lg checkout-neon-btn text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              {isUploadingScreenshot ? (
+                                <>
+                                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  <span>Uploading Screenshot...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>Upload Payment Screenshot</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => successFileInputRef.current?.click()}
+                            className="w-full py-2.5 px-3 rounded-lg border border-dashed border-cyan-500/40 hover:border-cyan-400 bg-cyan-950/20 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all"
+                          >
+                            <Upload className="w-4 h-4 text-cyan-400" />
+                            <span>Select & Upload Payment Screenshot</span>
+                          </button>
+                        )}
+
+                        {screenshotError && (
+                          <p className="text-[11px] text-rose-400 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{screenshotError}</span>
+                          </p>
+                        )}
+                        {screenshotSuccess && (
+                          <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{screenshotSuccess}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="pl-6 text-slate-400">Cash on Delivery (Pending Doorstep Collection)</p>
@@ -718,6 +1000,197 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           {upiError}
                         </div>
                       )}
+
+                      {/* ----------------- UPLOAD PAYMENT SCREENSHOT SECTION ----------------- */}
+                      <div
+                        id="checkout-upload-screenshot-section"
+                        className="p-4 rounded-2xl bg-[#041426]/90 border border-cyan-500/30 space-y-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/30">
+                              <Upload className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                <span>Upload Payment Screenshot</span>
+                                <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full">
+                                  Proof of Payment
+                                </span>
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                Upload a screenshot of your successful UPI transfer after completing payment.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Hidden native file input */}
+                        <input
+                          ref={fileInputRef}
+                          id="checkout-screenshot-file-input"
+                          type="file"
+                          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                          className="hidden"
+                          onChange={handleFileSelect}
+                        />
+
+                        {/* Already Uploaded State */}
+                        {uploadedScreenshotUrl ? (
+                          <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-emerald-300 font-semibold text-xs">
+                                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                <span>Payment Proof Submitted</span>
+                              </div>
+                              <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                                Pending Verification
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-emerald-300/95 font-medium bg-emerald-950/60 border border-emerald-500/30 p-2.5 rounded-lg">
+                              Payment proof submitted successfully. Please wait for admin verification.
+                            </p>
+
+                            <div className="flex items-center gap-3 bg-black/40 p-2.5 rounded-lg border border-white/10">
+                              {screenshotPreview && (
+                                <img
+                                  src={screenshotPreview}
+                                  alt="Payment Screenshot Preview"
+                                  className="w-14 h-14 object-cover rounded-md border border-white/20"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0 text-xs">
+                                <p className="font-medium text-white truncate">
+                                  {screenshotFile ? screenshotFile.name : 'Payment Screenshot Proof'}
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                  {screenshotFile ? `${(screenshotFile.size / (1024 * 1024)).toFixed(2)} MB • ` : ''}
+                                  Status: PENDING_VERIFICATION
+                                </p>
+                                <p className="text-[11px] text-emerald-400 font-medium mt-0.5">
+                                  ✓ Upload complete — Only one upload allowed per order
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : screenshotFile ? (
+                          /* File Selected, ready to upload */
+                          <div className="space-y-3">
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-white/10 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {screenshotPreview && (
+                                  <img
+                                    src={screenshotPreview}
+                                    alt="Selected preview"
+                                    className="w-14 h-14 object-cover rounded-lg border border-white/10 shrink-0"
+                                  />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-white truncate max-w-[200px] sm:max-w-xs">
+                                    {screenshotFile.name}
+                                  </p>
+                                  <p className="text-[11px] text-slate-400">
+                                    {(screenshotFile.size / (1024 * 1024)).toFixed(2)} MB • {screenshotFile.type || 'image'}
+                                  </p>
+                                  <p className="text-[10px] text-amber-400 font-medium">Ready to upload</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleClearSelectedScreenshot}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/5 transition-all cursor-pointer"
+                                title="Remove file"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Upload Button */}
+                            <button
+                              type="button"
+                              id="checkout-upload-screenshot-btn"
+                              disabled={isUploadingScreenshot}
+                              onClick={handleUploadScreenshot}
+                              className="w-full py-2.5 px-4 rounded-xl checkout-neon-btn text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                              {isUploadingScreenshot ? (
+                                <>
+                                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  <span>Uploading Screenshot...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4" />
+                                  <span>Confirm & Upload Screenshot</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          /* Drop zone / File selector trigger */
+                          <div
+                            id="checkout-screenshot-dropzone"
+                            onClick={() => fileInputRef.current?.click()}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const files = e.dataTransfer.files;
+                              if (files && files.length > 0) {
+                                const dummyEvent = {
+                                  target: { files: files },
+                                } as unknown as React.ChangeEvent<HTMLInputElement>;
+                                handleFileSelect(dummyEvent);
+                              }
+                            }}
+                            className="border-2 border-dashed border-cyan-500/30 hover:border-cyan-400/60 rounded-xl p-5 text-center cursor-pointer transition-all bg-cyan-950/20 hover:bg-cyan-950/30 group"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform">
+                              <Upload className="w-5 h-5 text-cyan-400" />
+                            </div>
+                            <p className="text-xs font-semibold text-white">
+                              Click or drag screenshot here to upload
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Supports JPG, JPEG, PNG (max 10 MB)
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Error Notification */}
+                        {screenshotError && (
+                          <div
+                            id="checkout-screenshot-error"
+                            className="p-3 bg-rose-950/50 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-2"
+                          >
+                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                            <span>{screenshotError}</span>
+                          </div>
+                        )}
+
+                        {/* Success Notification */}
+                        {screenshotSuccess && !screenshotError && (
+                          <div
+                            id="checkout-screenshot-success"
+                            className="p-3 bg-emerald-950/50 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-center gap-2"
+                          >
+                            <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                            <span>{screenshotSuccess}</span>
+                          </div>
+                        )}
+
+                        <div className="text-[11px] text-slate-400 flex items-start gap-1.5 leading-relaxed bg-black/20 p-2.5 rounded-lg border border-white/5">
+                          <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>Note:</strong> Uploading proof sets status to <em>Pending Verification</em>.
+                            An admin will inspect the transaction proof before marking the order as Paid and dispatching your OTP.
+                          </span>
+                        </div>
+                      </div>
 
                       {/* Transaction Reference Footer */}
                       <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-400">
