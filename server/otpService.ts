@@ -124,10 +124,6 @@ export function registerKnownOrder(order: {
     status: order.status || 'Picking',
   };
   KNOWN_CUSTOMER_ORDERS[altId] = KNOWN_CUSTOMER_ORDERS[order.id];
-
-  if (isMySqlConnected()) {
-    upsertOrderInDb(order).catch(() => { });
-  }
 }
 
 /**

@@ -115,7 +115,7 @@ async function runTestSuite() {
 
   const customerId = `cust_test_${Date.now()}`;
   const customerEmail = `test_${Date.now()}@example.com`;
-  const customerPhone = '9876543210';
+  const customerPhone = `98765${Math.floor(100000 + Math.random() * 900000)}`;
   const customerName = 'Priya Sharma';
 
   await upsertCustomerInDb({

@@ -106,11 +106,11 @@ export interface ParsedMySqlConfig {
 export function getMySqlConfig(): ParsedMySqlConfig {
   const connectionUrl = (process.env.MYSQL_URL || process.env.DATABASE_URL || '').trim();
 
-  let host = (process.env.MYSQL_HOST || '').trim();
-  let port = Number(process.env.MYSQL_PORT) || 3306;
-  let user = (process.env.MYSQL_USER || '').trim();
-  let password = process.env.MYSQL_PASSWORD || '';
-  let database = (process.env.MYSQL_DATABASE || '').trim();
+  let host = (process.env.MYSQL_HOST || process.env.DB_HOST || '').trim();
+  let port = Number(process.env.MYSQL_PORT || process.env.DB_PORT) || 3306;
+  let user = (process.env.MYSQL_USER || process.env.DB_USER || process.env.DB_USERNAME || '').trim();
+  let password = process.env.MYSQL_PASSWORD || process.env.DB_PASSWORD || '';
+  let database = (process.env.MYSQL_DATABASE || process.env.DB_DATABASE || process.env.DB_NAME || '').trim();
   let sslFromUrl: boolean | undefined = undefined;
 
   // Support single connection string URLs like mysql://user:password@host:port/database
@@ -180,7 +180,7 @@ export function getMySqlConfig(): ParsedMySqlConfig {
   const connectionLimit = Number(process.env.MYSQL_CONNECTION_LIMIT) || (isProd ? 5 : 10);
   const maxIdle = Number(process.env.MYSQL_MAX_IDLE) || (isProd ? 5 : 10);
   const idleTimeout = Number(process.env.MYSQL_IDLE_TIMEOUT) || 60000;
-  const connectTimeout = Number(process.env.MYSQL_CONNECT_TIMEOUT) || 10000;
+  const connectTimeout = Number(process.env.MYSQL_CONNECT_TIMEOUT) || 20000;
 
   return {
     host,
@@ -294,7 +294,10 @@ export function getSafeMySqlDiagnosticInfo(): {
     process.env.MYSQL_URL ||
     process.env.DATABASE_URL ||
     process.env.MYSQL_HOST ||
-    process.env.MYSQL_USER
+    process.env.DB_HOST ||
+    process.env.MYSQL_USER ||
+    process.env.DB_USER ||
+    process.env.DB_USERNAME
   );
 
   return {
@@ -2717,6 +2720,7 @@ export async function getPaymentRecordByOrderId(orderId: string): Promise<any | 
        FROM payments p
        LEFT JOIN orders o ON (o.order_id = p.order_id OR o.order_id = ?)
        WHERE p.order_id IN (?, ?)
+       ORDER BY p.id DESC
        LIMIT 1`,
       [altId, orderId, altId]
     );
@@ -2812,6 +2816,8 @@ export async function verifyUpiPaymentInDb(params: {
              paid_at = NOW(),
              verified_at = NOW(),
              verified_by = ?,
+             otp_sent = 1,
+             otp_sent_at = NOW(),
              screenshot_path = NULL,
              screenshot_mime = NULL,
              screenshot_size = NULL
@@ -2871,16 +2877,23 @@ export async function verifyUpiPaymentInDb(params: {
 export async function markPaymentOtpSentInDb(orderId: string): Promise<boolean> {
   const pool = getPool();
   const altId = orderId.startsWith('#') ? orderId.slice(1) : `#${orderId}`;
-  try {
-    await pool.query(
-      `UPDATE payments SET otp_sent = 1, otp_sent_at = NOW() WHERE order_id IN (?, ?)`,
-      [orderId, altId]
-    );
-    return true;
-  } catch (err: any) {
-    console.error('[MySQL] Error marking OTP sent in payments:', err?.message);
-    return false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await pool.query(
+        `UPDATE payments SET otp_sent = 1, otp_sent_at = NOW() WHERE order_id IN (?, ?)`,
+        [orderId, altId]
+      );
+      return true;
+    } catch (err: any) {
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      console.error('[MySQL] Error marking OTP sent in payments:', err?.message);
+      return false;
+    }
   }
+  return false;
 }
 
 
